@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('administrator','editor','writer','seo_manager') NOT NULL DEFAULT 'writer',
     active TINYINT(1) NOT NULL DEFAULT 1,
+    last_login_at DATETIME NULL,
+    failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
+    last_failed_login_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
