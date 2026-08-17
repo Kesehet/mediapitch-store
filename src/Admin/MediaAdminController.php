@@ -22,11 +22,13 @@ final class MediaAdminController
         if (!Auth::check()) $this->redirect('/admin/login');
 
         if ($path === '/admin/media' && $method === 'GET') {
+            $query=trim((string)($_GET['q']??''));
             $categories=Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
             View::render('admin/media', [
                 'pageTitle'=>'Media',
                 'adminUser'=>Auth::user(),
-                'items'=>$this->repo->all(),
+                'items'=>$this->repo->all(100,$query),
+                'query'=>$query,
                 'categories'=>$categories,
                 'success'=>$this->flash('success'),
                 'error'=>$this->flash('error'),
@@ -41,6 +43,20 @@ final class MediaAdminController
             try {
                 $this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
                 $this->setFlash('success','Image uploaded.');
+            } catch (Throwable $e) {
+                $this->setFlash('error',$e->getMessage());
+            }
+            $this->redirect('/admin/media');
+        }
+
+        if ($path === '/admin/media/delete' && $method === 'POST') {
+            if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
+            $this->requireCsrf();
+            try {
+                $item=$this->repo->deleteIfUnused((int)($_POST['id']??0));
+                $this->deletePhysicalFile((string)$item['file_path']);
+                if(!empty($item['thumbnail_path'])) $this->deletePhysicalFile((string)$item['thumbnail_path']);
+                $this->setFlash('success','Media item deleted.');
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
             }
@@ -126,6 +142,14 @@ final class MediaAdminController
             'height'=>(int)$imageInfo[1],
             'alt_text'=>$altText !== '' ? $altText : null,
         ]);
+    }
+
+    private function deletePhysicalFile(string $relativePath): void
+    {
+        $relativePath='/' . ltrim($relativePath,'/');
+        if(!str_starts_with($relativePath,'/uploads/')) return;
+        $absolute=dirname(__DIR__,2) . '/public' . $relativePath;
+        if(is_file($absolute)) @unlink($absolute);
     }
 
     private function createThumbnail(string $sourcePath,string $relativeDir,string $mime,int $width,int $height): array
