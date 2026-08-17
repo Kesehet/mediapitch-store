@@ -8,6 +8,8 @@ $relatedProducts=$relatedProducts??[];
 $relatedGuides=$relatedGuides??[];
 $name = $product['display_title'] ?: $product['title'];
 $specifications = $product['specifications'] ?? [];
+$displayPrice = public_product_price($product);
+$amazonManagedPrice = in_array((string)($product['source'] ?? ''), ['amazon_api','hybrid'], true);
 $specValue = static function (array $spec): string {
     return match ($spec['data_type']) {
         'number' => $spec['value_number'] !== null ? rtrim(rtrim((string)$spec['value_number'], '0'), '.') : '',
@@ -53,7 +55,7 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
             <?php if (!empty($product['best_for_label'])): ?><span class="badge"><?= e($product['best_for_label']) ?></span><?php endif; ?>
             <?php if ($product['custom_score'] !== null): ?><div class="detail-score"><strong><?= e((string) $product['custom_score']) ?>/10</strong><span>MediaPitch score</span></div><?php endif; ?>
             <?php if (!empty($product['short_description'])): ?><p class="lead"><?= e($product['short_description']) ?></p><?php endif; ?>
-            <?php if (!empty($product['price'])): ?><p class="price">₹<?= e(number_format((float) $product['price'], 0)) ?> <small>last recorded price</small></p><?php endif; ?>
+            <?php if ($displayPrice !== null): ?><p class="price">₹<?= e(number_format($displayPrice, 0)) ?> <small>last recorded price</small></p><?php elseif($amazonManagedPrice && !empty($product['affiliate_url'])):?><p class="muted">Current Amazon price is available on Amazon.</p><?php endif; ?>
             <?php if (!empty($product['affiliate_url'])): ?><a class="button" href="/go/<?= (int) $product['id'] ?>?from=product">Check Price on Amazon</a><?php endif; ?>
             <p class="affiliate-note">We may earn a commission from qualifying purchases. Amazon controls final price, stock, shipping and returns.</p>
         </div>
@@ -90,7 +92,7 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
 
 <?php if($relatedProducts):?>
 <section class="section"><div class="container"><div class="section-head"><div><span class="eyebrow">Keep comparing</span><h2>Related products</h2></div><?php if(!empty($product['category_slug'])):?><a href="<?= e(url('category/'.$product['category_slug'])) ?>">View category</a><?php endif;?></div><div class="product-grid">
-<?php foreach($relatedProducts as $item): $itemName=$item['display_title']?:$item['title'];?><article class="product-card"><a class="product-image" href="<?= e(url('product/'.$item['slug'])) ?>"><?php if(!empty($item['main_image_url'])):?><img src="<?= e($item['main_image_url']) ?>" alt="<?= e($itemName) ?>" loading="lazy"><?php else:?><span class="image-placeholder">Product image</span><?php endif;?></a><div class="card-body"><?php if(!empty($item['best_for_label'])):?><span class="badge"><?= e($item['best_for_label']) ?></span><?php endif;?><h3><a href="<?= e(url('product/'.$item['slug'])) ?>"><?= e($itemName) ?></a></h3><?php if(!empty($item['brand_name'])):?><p class="muted"><?= e($item['brand_name']) ?></p><?php endif;?><?php if($item['custom_score']!==null):?><div class="score">MediaPitch score <strong><?= e((string)$item['custom_score']) ?>/10</strong></div><?php endif;?><?php if($item['price']!==null):?><p class="price"><?= e(($item['currency']??'INR').' '.number_format((float)$item['price'],0)) ?></p><?php endif;?></div></article><?php endforeach;?>
+<?php foreach($relatedProducts as $item): $itemName=$item['display_title']?:$item['title']; $itemPrice=public_product_price($item);?><article class="product-card"><a class="product-image" href="<?= e(url('product/'.$item['slug'])) ?>"><?php if(!empty($item['main_image_url'])):?><img src="<?= e($item['main_image_url']) ?>" alt="<?= e($itemName) ?>" loading="lazy"><?php else:?><span class="image-placeholder">Product image</span><?php endif;?></a><div class="card-body"><?php if(!empty($item['best_for_label'])):?><span class="badge"><?= e($item['best_for_label']) ?></span><?php endif;?><h3><a href="<?= e(url('product/'.$item['slug'])) ?>"><?= e($itemName) ?></a></h3><?php if(!empty($item['brand_name'])):?><p class="muted"><?= e($item['brand_name']) ?></p><?php endif;?><?php if($item['custom_score']!==null):?><div class="score">MediaPitch score <strong><?= e((string)$item['custom_score']) ?>/10</strong></div><?php endif;?><?php if($itemPrice!==null):?><p class="price"><?= e(($item['currency']??'INR').' '.number_format($itemPrice,0)) ?></p><?php endif;?></div></article><?php endforeach;?>
 </div></div></section>
 <?php endif;?>
 
