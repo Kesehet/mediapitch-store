@@ -34,6 +34,7 @@ use MediaPitch\Repositories\RelatedContentRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Services\AffiliateClickFilter;
 use MediaPitch\Services\PasswordReset;
 use MediaPitch\Services\ProductCsv;
 
@@ -177,7 +178,10 @@ try {
     if ($method === 'GET' && preg_match('#^/go/(\d+)$#',$path,$matches)) {
         $product=$catalog->productById((int)$matches[1]);if(!$product || empty($product['affiliate_url'])){http_response_code(404);View::render('404',['pageTitle'=>'Link unavailable','metaDescription'=>'']);exit;}
         $contentId=isset($_GET['content'])?(int)$_GET['content']:null;$rank=isset($_GET['rank'])?(int)$_GET['rank']:null;
-        $catalog->recordAffiliateClick((int)$product['id'],$contentId?:null,$rank?:null,isset($_GET['from'])?substr((string)$_GET['from'],0,100):null,isset($_SERVER['HTTP_REFERER'])?substr((string)$_SERVER['HTTP_REFERER'],0,2000):null,isset($_SERVER['HTTP_USER_AGENT'])?substr((string)$_SERVER['HTTP_USER_AGENT'],0,1000):null,isset($_GET['campaign'])?substr((string)$_GET['campaign'],0,255):null);
+        $userAgent=isset($_SERVER['HTTP_USER_AGENT'])?substr((string)$_SERVER['HTTP_USER_AGENT'],0,1000):null;
+        if((new AffiliateClickFilter())->shouldTrack($userAgent)){
+            $catalog->recordAffiliateClick((int)$product['id'],$contentId?:null,$rank?:null,isset($_GET['from'])?substr((string)$_GET['from'],0,100):null,isset($_SERVER['HTTP_REFERER'])?substr((string)$_SERVER['HTTP_REFERER'],0,2000):null,$userAgent,isset($_GET['campaign'])?substr((string)$_GET['campaign'],0,255):null);
+        }
         header('Location: '.$product['affiliate_url'],true,302);header('Referrer-Policy: no-referrer-when-downgrade');exit;
     }
 
