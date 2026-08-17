@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded',()=>{
-  document.querySelectorAll('textarea[name="body"]').forEach(textarea=>{
+  document.querySelectorAll('textarea[name="body"],textarea[name="full_description"]').forEach(textarea=>{
     if(textarea.dataset.richEditor==='1')return;
     textarea.dataset.richEditor='1';
     const wrap=document.createElement('div');wrap.className='mp-editor';textarea.parentNode.insertBefore(wrap,textarea);wrap.appendChild(textarea);
@@ -27,9 +27,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       finally{internal.disabled=false;}
     });toolbar.appendChild(internal);
 
-    const product=document.createElement('button');product.type='button';product.textContent='Product';product.title='Insert a product by CMS ID';product.addEventListener('click',()=>{const id=prompt('Product ID to embed');if(!id)return;if(!/^\d+$/.test(id.trim())){alert('Enter a numeric product ID.');return;}const start=textarea.selectionStart,end=textarea.selectionEnd;textarea.setRangeText('[product:'+id.trim()+']',start,end,'end');textarea.focus();});toolbar.appendChild(product);
+    if(textarea.name==='body'){
+      const product=document.createElement('button');product.type='button';product.textContent='Product';product.title='Insert a product by CMS ID';product.addEventListener('click',()=>{const id=prompt('Product ID to embed');if(!id)return;if(!/^\d+$/.test(id.trim())){alert('Enter a numeric product ID.');return;}const start=textarea.selectionStart,end=textarea.selectionEnd;textarea.setRangeText('[product:'+id.trim()+']',start,end,'end');textarea.focus();});toolbar.appendChild(product);
+    }
     wrap.insertBefore(toolbar,textarea);
-    const help=document.createElement('small');help.className='mp-editor-help';help.textContent='Formatting is sanitized before public output. Internal link searches existing MediaPitch pages; Product inserts a safe [product:ID] card.';wrap.appendChild(help);
+    const help=document.createElement('small');help.className='mp-editor-help';help.textContent=textarea.name==='body'?'Formatting is sanitized before public output. Internal link searches existing MediaPitch pages; Product inserts a safe [product:ID] card.':'Formatting and internal links are sanitized before the product description is displayed publicly.';wrap.appendChild(help);
   });
   if(document.getElementById('guide-form')){const script=document.createElement('script');script.src='/assets/guide-structure.js';document.head.appendChild(script);}
   if(document.querySelector('input[name="seo_title"],textarea[name="meta_description"]')){const script=document.createElement('script');script.src='/assets/admin-seo-preview.js';document.head.appendChild(script);}
