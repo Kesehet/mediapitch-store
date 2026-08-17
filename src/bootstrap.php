@@ -68,6 +68,26 @@ load_env(dirname(__DIR__) . '/.env');
 date_default_timezone_set('UTC');
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    $secure = (bool) env('SESSION_SECURE_COOKIE', true);
+    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+        $secure = strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https';
+    } elseif (isset($_SERVER['HTTPS'])) {
+        $secure = $_SERVER['HTTPS'] !== '' && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+    }
+
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    session_name((string) env('SESSION_NAME', 'mediapitch_session'));
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'domain' => '',
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
