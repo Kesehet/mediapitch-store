@@ -39,6 +39,7 @@ $ogImage = $ogImage
     <link rel="stylesheet" href="/assets/app.css">
     <link rel="stylesheet" href="/assets/catalog.css">
     <link rel="stylesheet" href="/assets/accessibility.css">
+    <link rel="stylesheet" href="/assets/embeds.css">
     <script src="/assets/search.js" defer></script>
     <script src="/assets/navigation.js" defer></script>
 </head>
