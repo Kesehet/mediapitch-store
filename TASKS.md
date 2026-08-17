@@ -1,379 +1,225 @@
-# MediaPitch Store — Project Task Tracker
+# MediaPitch Store | Project Task Tracker
 
-This file is the project source of truth. Update it as work lands on `main`.
+This file is the source of truth for work landing on `main`.
 
-## Status legend
+## Status
 - [x] Done
-- [ ] Remaining
 - [~] In progress
-- [!] Blocked / needs production or external input
+- [ ] Remaining
+- [!] Needs production/external verification
 
 ## Current snapshot
 - Production branch: `main`
+- Legacy `agent/*` branches: fast-forwarded to current `main`
 - Production URL: `https://store.mediapitch.in/`
-- Development mode: rapid iteration directly on `main`
 - Production `/health`: DB connection confirmed OK
-- Database deploy flow: base schema → migrations → non-destructive defaults
+- PHP syntax GitHub Action: confirmed passing on recent commits
+- Deployment: Composer hook is resilient; MariaDB migrations are retry-safe and no longer wrap DDL in PDO transactions
+- DB deploy: base schema -> migrations -> non-destructive seed defaults
 - Bootstrap admin: created only when user count is zero
-- Amazon API: optional; manual CMS remains fully usable without it
-- GitHub Actions PHP syntax workflow: confirmed running successfully on recent `main` commits
+- Public page titles use `|` separators
 
 ---
 
-# 1. Foundation & deployment
-- [x] PHP application structure
-- [x] MariaDB/PDO layer
-- [x] Environment loader and `.env.example`
-- [x] `.env` ignored
-- [x] Autoloader and view renderer
-- [x] Public front controller
-- [x] Root `index.php` compatibility entrypoint
-- [x] Apache rewrite rules in `public/`
-- [x] Root `.htaccess` compatibility bridge
-- [x] `/health` endpoint
-- [x] 404/500 pages
-- [x] PHP 8.2 syntax workflow
-- [x] GitHub Actions workflow verified passing
-- [x] Landing-page DB fallback
-- [x] Redirect lookup fails open if DB is temporarily unavailable
-- [x] Migration runner and migration tracking
-- [x] Non-destructive default seed script
-- [x] Automatic DB deployment via Composer scripts
-- [x] Base schema bootstrap for empty DB
-- [x] Seed defaults only when missing
-- [x] Seed bootstrap admin only when user count is zero
-- [x] Production DB connectivity verified through `/health`
-- [x] URL helper falls back to current production host if `APP_URL` is localhost/missing
+# 1. Foundation, deployment & operations
+- [x] PHP 8.2 application structure, autoloading and PDO/MariaDB layer
+- [x] `.env` configuration and production-host URL fallback
+- [x] Root/public front-controller and Apache rewrite compatibility
+- [x] `/health`, 404, 500 and DB-fallback behavior
+- [x] GitHub Actions PHP syntax checks
+- [x] Schema bootstrap, migration runner and migration tracking
+- [x] Retry-safe MariaDB DDL migrations
+- [x] Non-destructive seed defaults
+- [x] Empty-user-table bootstrap administrator
+- [x] Resilient Composer DB deployment hook
 - [ ] `.editorconfig`
-- [ ] Coding-standard documentation
-- [ ] Version/release convention
-- [ ] Development environment documentation
+- [ ] Coding standards / release convention
+- [ ] Development setup documentation
 - [ ] Production deployment documentation
-- [ ] Verify full admin CRUD flow against production DB
-- [ ] DB backup/rollback/smoke-test documentation
-
----
+- [ ] DB backup / rollback / smoke-test documentation
+- [!] Re-run production deployment and verify Composer/DB output
+- [!] Full production admin CRUD smoke test
 
 # 2. Users, roles & security
-- [x] Users table and active flag
 - [x] Administrator / Editor / Writer / SEO Manager roles
-- [x] Session login/logout
-- [x] Password hashing
+- [x] Explicit role capability helpers
+- [x] Role-aware admin navigation
+- [x] Session authentication, password hashing and logout
 - [x] CSRF protection
-- [x] Role helpers
-- [x] CLI first-admin creation
-- [x] Bootstrap admin seed for empty user table
-- [x] User admin list/create/edit
-- [x] User activation/deactivation safeguards
-- [x] Prevent removal of last active administrator
-- [x] Logged-in user password-change screen
-- [x] Login rate limiting
-- [x] Persistent failed-login counters/timestamp
-- [x] Last-login timestamp
+- [x] Secure/HttpOnly/SameSite cookies
 - [x] Session rotation and idle timeout
-- [x] Secure/HttpOnly/SameSite production cookie settings
-- [x] Baseline CSP/security headers
-- [x] Rich-content XSS sanitizer for public HTML output
-- [ ] Password-reset / forgotten-password workflow
-- [ ] Full role permission matrix
-- [ ] Admin audit trail
-
----
+- [x] Login throttling and failed-login tracking
+- [x] Last-login tracking
+- [x] User create/edit/activate/deactivate safeguards
+- [x] Logged-in password change
+- [x] CSP and baseline response security headers
+- [x] Rich-content HTML sanitization
+- [x] Admin audit-log storage and administrator audit screen
+- [~] Complete audit coverage on every mutation path
+- [ ] Self-service forgotten-password/reset workflow
 
 # 3. Categories, brands & products
 ## Categories
-- [x] Category model, nesting, slug, description, image URL, SEO, sort order, active flag
-- [x] Admin list/create/edit
-- [x] Archive/restore
-- [x] Public `/category/{slug}`
-- [x] Category product / guide / article sections
-- [x] Category canonical metadata
-- [x] Category image assignment from Media Library
-- [x] Category product pagination
-- [x] Category brand / price / score / sort filters
-- [x] Category dynamic specification filters
-- [x] Nested breadcrumb hierarchy and BreadcrumbList schema
-- [x] Category slug auto-redirect
+- [x] Nested categories, SEO, images, sort order and archive/restore
+- [x] Category admin create/edit
+- [x] Public category pages
+- [x] Pagination, sorting and brand/price/score/spec filters
+- [x] Nested breadcrumbs + BreadcrumbList schema
+- [x] Automatic redirects on category slug changes
 
 ## Brands
-- [x] Brand model
-- [x] Admin list/create/edit
-- [x] Website/logo URL fields
-- [x] Product-brand relationship
-- [x] Website/logo URL validation
-- [x] Brand logo media picker
-- [ ] Archive/delete
+- [x] Brand create/edit
+- [x] Website/logo validation
+- [x] Media-library logo picker
+- [ ] Brand archive/restore
 - [ ] Public brand pages if useful
 
 ## Products
-- [x] Central reusable product model
-- [x] Manual / Amazon API / hybrid source
-- [x] ASIN, category, brand, title/display title, slug
-- [x] Main image URL and gallery storage field
-- [x] Descriptions, features, pros/cons
-- [x] Price/previous price/currency
-- [x] Amazon URL and affiliate URL
-- [x] MediaPitch score / best-for / editorial notes
-- [x] Manual override metadata / sync timestamp / active flag
-- [x] Admin list/create/edit
-- [x] Product preview
-- [x] Public `/product/{slug}`
-- [x] Product media-library picker
-- [x] Default MediaPitch/Fill Masjid seed data
-- [x] Product page escapes manual full-description text
-- [x] Slug auto-generation in UI and backend
-- [x] Friendly duplicate-slug validation
-- [x] ASIN normalization/validation and duplicate protection
-- [x] Archive/restore product action
-- [x] Duplicate-product action with copied specs and safe identity reset
-- [x] Gallery editor with media picker and public thumbnail switching
-- [x] Product schema includes gallery images
-- [x] Related products on product page
-- [x] Buying guides featuring product on product page
-- [ ] Change history / bulk actions / CSV import-export
-
----
+- [x] Manual / Amazon API / hybrid source model
+- [x] Product admin create/edit/preview
+- [x] Slug generation + duplicate-slug validation
+- [x] ASIN validation + duplicate prevention
+- [x] Archive/restore/duplicate actions
+- [x] Product media picker and gallery editor
+- [x] Flexible specifications
+- [x] Public product page, schema, gallery and related content
+- [x] Amazon-price freshness enforcement
+- [ ] Product change-history view
+- [ ] Bulk product actions
+- [ ] CSV import/export
 
 # 4. Flexible specifications
-- [x] Category-specific specification definitions
+- [x] Category-specific definitions
 - [x] Text / number / boolean / select types
-- [x] Units, select options, filterable/comparable flags, sort order
-- [x] Admin CRUD
-- [x] Dynamic product fields by category
-- [x] Type validation and persistence
-- [x] Public product specification table
-- [x] Comparison pages consume comparable specs
-- [x] Public category filtering using filterable specs
-- [x] Specification archive/restore with values preserved
-- [x] Archived specs removed from new product editing
-- [x] Archive disables filtering/comparison use
-- [x] Improved select-option cleanup/count/sort UX
-
----
+- [x] Units and select options
+- [x] Filterable/comparable flags
+- [x] Dynamic product editing and validation
+- [x] Public product spec table
+- [x] Category spec filters
+- [x] Comparison spec matrix
+- [x] Archive/restore while preserving values
 
 # 5. Storefront & navigation
-- [x] MediaPitch-oriented branding and responsive base layout
-- [x] Header/footer and affiliate disclosure
-- [x] Hero search
-- [x] Featured categories/products/guides/articles
-- [x] Homepage category/blog links
-- [x] Latest comparisons homepage section
-- [x] Homepage section controls in admin
-- [x] Site name/tagline/disclosure settings
-- [ ] Deals/featured-products merchandising section
+- [x] Responsive storefront foundation
+- [x] Header/footer/search/disclosure
+- [x] Homepage categories/products/guides/comparisons/articles
+- [x] Website settings and homepage section toggles
+- [x] Curated Featured and Deals product merchandising
 - [ ] Mobile navigation polish
 - [ ] Accessibility/keyboard/skip-link/focus-state review
-- [ ] Final visual QA against MediaPitch brand
-
----
+- [ ] Final visual QA against MediaPitch branding
 
 # 6. Buying guides
-- [x] Buying-guide content type and reusable product relationships
-- [x] Per-guide rank, score, best-for, recommendation and CTA
-- [x] Admin list/create/edit
-- [x] SEO fields and scheduling model
-- [x] Transactional product relationship save
-- [x] Public guide route and ranked product output
-- [x] Affiliate rank/context tracking
-- [x] Guide media picker
-- [x] Buying-guide Article schema
-- [x] Buying-guide breadcrumb UI/schema
-- [x] Searchable product picker in editor
-- [x] Drag-and-drop ranking with automatic rank renumbering
-- [x] Duplicate-product prevention UX
-- [x] Guide rank/score field-name persistence bug fixed
-- [x] Related guides/articles/comparisons/reviews
-- [ ] FAQ / “How we selected” / table of contents
-
----
+- [x] Guide CRUD, scheduling and SEO
+- [x] Reusable product relationships and ranking data
+- [x] Searchable product picker
+- [x] Drag-and-drop ranking + automatic renumbering
+- [x] Duplicate-product prevention
+- [x] Public ranked guide output, schema and breadcrumbs
+- [x] Related editorial content
+- [ ] FAQ editor/output
+- [ ] “How we selected” structured section
+- [ ] Table of contents
 
 # 7. Blog / editorial CMS
-- [x] Admin list/create/edit
-- [x] Category, image URL, excerpt/body
-- [x] Draft/scheduled/published states and publish date
-- [x] SEO title/meta/canonical/index controls
-- [x] Public `/blog` and `/blog/{slug}`
-- [x] Author/category/date display
-- [x] Blog media picker
-- [x] BlogPosting structured data
-- [x] Article breadcrumb UI/schema
-- [x] Sanitized rich-content public output
-- [x] Dynamic OG image output
+- [x] Blog CRUD, category, scheduling and SEO
+- [x] Media picker and safe public HTML
+- [x] Blog index/article route, schema, breadcrumbs and OG image
 - [x] Related editorial content
 - [ ] Rich-text/Markdown editing UX
 - [ ] Tags
 - [ ] Product embeds
 
----
-
 # 8. Comparisons & reviews
 ## Comparisons
-- [x] Admin list/create/edit
-- [x] Select/order 2+ products
-- [x] Duplicate-product protection
-- [x] Editorial verdict and scheduling/SEO fields
-- [x] Public `/compare/{slug}`
-- [x] Public `/comparisons` index
-- [x] Category-aware dynamic spec comparison matrix
-- [x] Brand/score/best-for/price rows
-- [x] Affiliate CTA context tracking
-- [x] Sanitized verdict output
-- [x] Improved mobile table UX with sticky feature column
-- [x] Related comparisons/articles/guides/reviews
-- [ ] Comparison structured data if appropriate
+- [x] Comparison CRUD and 2+ product selection
+- [x] Dynamic category-aware specification matrix
+- [x] Public index/detail pages
+- [x] Mobile comparison-table improvements
+- [x] Related editorial content
+- [ ] Decide/add comparison-specific structured data where appropriate
 
 ## Reviews
-- [x] Review content type
-- [x] Admin review list/editor
-- [x] Review-product relationship
-- [x] Rating/score UI
-- [x] Public `/review/{slug}` route
-- [x] Review media picker
-- [x] Review structured data
-- [x] Review breadcrumb UI/schema
-- [x] Sanitized review body output
+- [x] Review CRUD, product relationship and rating
+- [x] Public review route and Review schema
+- [x] Media picker, breadcrumbs and safe body rendering
 - [x] Related editorial content
-- [x] Link back to reviewed product
 - [ ] Additional related-product recommendations
 
----
-
 # 9. Search & filtering
-- [x] Search route and grouped UI
-- [x] Products with brand/category matching
-- [x] Categories
-- [x] Buying guides
-- [x] Comparisons
-- [x] Blog articles
-- [x] Reviews rendered in unified search UI
-- [x] Search-result pagination foundation
-- [x] Search suggestions JSON endpoint
-- [x] Header/search autocomplete UI
-- [x] Category product pagination
-- [x] Category sorting
-- [x] Brand / price / score filters on category pages
-- [x] Dynamic specification filters on category pages
-- [ ] Global category filter on search results
-- [ ] Search analytics
-
----
+- [x] Unified product/category/guide/comparison/review/blog search
+- [x] Product-result pagination
+- [x] Autocomplete suggestions API/UI
+- [x] Global category search filter
+- [x] Privacy-light search query analytics
+- [x] Top searches / zero-result / category search reporting in admin
 
 # 10. Affiliate links & analytics
-- [x] Central affiliate URL
-- [x] `/go/{product}` redirect
-- [x] Click tracking: product, content, rank, CTA, referrer, user agent, campaign
-- [x] Dashboard total clicks / top products
-- [x] Comparison CTA tracking
-- [x] Administrator affiliate analytics dashboard
-- [x] Date-range reports
+- [x] `/go/{product}` affiliate redirect
+- [x] Product/content/rank/CTA/referrer/user-agent/campaign click tracking
+- [x] Admin date-range affiliate reporting
 - [x] Product/content/CTA/rank/campaign breakdowns
-- [x] Daily click trend
-- [x] CSV export
-- [~] Amazon Associates/Creators API policy review
-- [x] One-hour freshness enforcement for API-derived Amazon prices on public surfaces
-- [ ] Bot/internal filtering
-- [ ] Privacy/data-retention review
-
----
+- [x] Daily click trend and CSV export
+- [x] One-hour freshness enforcement for Amazon API offer prices
+- [~] Complete Amazon Associates/Creators API compliance review
+- [ ] Bot/internal click filtering
+- [ ] Privacy/data-retention policy
 
 # 11. Media library
-- [x] Media DB migration
-- [x] Migration runner support
-- [x] Upload endpoint
-- [x] JPEG / PNG / WebP / GIF MIME validation
-- [x] 5 MB image-size limit
-- [x] Randomized storage filenames
-- [x] Image dimension capture
-- [x] Uploader attribution
-- [x] Media browser
-- [x] Alt-text capture
-- [x] Product/guide/blog/review/category media pickers
-- [x] Brand logo picker
-- [x] WebP thumbnail generation when available
-- [x] Graceful fallback without image-processing extensions
-- [x] Media search by filename/alt text
-- [x] Usage checks across products/categories/brands/content/galleries
-- [x] Safe delete only when unused
-- [x] Delete original + thumbnail files after DB removal
+- [x] Upload, MIME validation, size limits and randomized paths
+- [x] Dimension/uploader/alt-text metadata
+- [x] Media browser/search and reusable pickers
+- [x] WebP thumbnails when GD supports them
+- [x] Usage checks and safe deletion
 - [ ] Original-image optimization/compression policy
 - [ ] Storage abstraction for future S3/R2
 
----
-
 # 12. SEO
-- [x] SEO titles/meta descriptions
-- [x] Canonical/index support across product/category/guide/blog/comparison/review
-- [x] Open Graph and Twitter metadata
-- [x] Dynamic OG/Twitter images per supported public route
-- [x] Dynamic `/sitemap.xml`
-- [x] Sitemap includes products/categories/guides/blog/comparisons/reviews
-- [x] `robots.txt`
-- [x] Product structured data
-- [x] BlogPosting structured data
-- [x] Review structured data
-- [x] Buying-guide Article structured data
-- [x] Product/article/review/guide/category breadcrumb UI + schema
-- [x] Redirect admin UI
-- [x] Runtime redirect resolution
-- [x] Auto-redirect when product/blog/guide/comparison/review/category slugs change
-- [ ] Comparison structured data if appropriate
+- [x] SEO titles/meta/canonical/index controls
+- [x] `|` title separator
+- [x] Open Graph/Twitter metadata and dynamic images
+- [x] Sitemap and robots.txt
+- [x] Product/BlogPosting/Review/Buying-guide structured data
+- [x] Breadcrumb UI/schema
+- [x] Redirect manager and runtime redirects
+- [x] Automatic redirects on product/content/category slug changes
 - [ ] SEO preview in editors
 - [ ] Internal-link helper beyond automatic related-content sections
-
----
+- [ ] Comparison structured-data decision
 
 # 13. Amazon Creators API
-## Architecture & compliance
-- [x] Amazon provider boundary
-- [x] Manual workflow independent of API
-- [x] Source abstraction and sync fields
-- [x] Current Creators API authentication/documentation reviewed
-- [x] OAuth access-token reuse/caching until near expiry
-- [x] One-hour public price freshness enforcement for API-derived offers
-- [~] Complete Associates policy review for images, price freshness, caching/storage and disclosure
-
-## Settings
-- [x] Administrator-only Amazon settings page
-- [x] Marketplace / partner tag / credential ID / secret / version
-- [x] Enabled toggle / authentication test / last success/error
-- [x] Encrypted secret storage using `APP_KEY`
-- [x] Credentials excluded from public output
-
-## Import & sync
-- [x] Products → Import from Amazon
-- [x] Creators API SearchItems search/results screen
-- [x] GetItems re-fetch before import
-- [x] Map ASIN/title/image/features/offer price/currency/detail URL
-- [x] Store Amazon detail/affiliate URL returned by API
+- [x] Optional integration boundary; manual CMS remains independent
+- [x] Current OAuth/Creators API flow implemented
+- [x] Encrypted administrator-only credentials
+- [x] Authentication test and status fields
+- [x] OAuth token reuse until near expiry
+- [x] SearchItems / GetItems import flow
 - [x] New imports arrive inactive for editorial review
-- [x] Re-import existing ASINs rather than duplicating products
-- [x] Preserve MediaPitch editorial image/features for manual/hybrid records
-- [x] Refresh Amazon-owned title/price/link/sync fields on re-import
-- [ ] Background/bulk refresh workflow
-- [ ] API retry/backoff and richer health/last-sync UX
-- [ ] Field-level override controls in the product editor
-
----
-
-# 14. Settings & future work
-- [x] Website settings page
-- [x] Site name/tagline/global affiliate disclosure
-- [x] Homepage section controls
-- [x] Detailed click analytics dashboard/export
-- [x] Redirect manager
+- [x] Re-import by ASIN rather than duplication
+- [x] Preserve editorial/manual fields on refresh
+- [x] Refresh Amazon-owned title/price/link/sync fields
+- [x] One-hour public offer-price freshness rule
+- [~] Finish full Associates policy review
+- [ ] API retry/backoff
+- [ ] Bulk/background refresh workflow
+- [ ] Better API health / per-product last-sync UX
+- [ ] Field-level manual override controls
 - [ ] Multiple marketplaces
-- [ ] Newsletter/personalization/alerts
-- [ ] Other affiliate networks
-- [ ] AI product/guide/scoring/content-assistance features
+
+# 14. Lower-priority/future capabilities
+- [ ] Newsletter / personalization / alerts
+- [ ] Additional affiliate networks
+- [ ] AI-assisted product/guide/scoring/content workflows
 
 ---
 
-# Immediate next queue
-1. [ ] Add deals/featured-product merchandising controls
-2. [ ] Add global search category filter + search analytics
-3. [ ] Add admin audit trail and complete role permission matrix
-4. [ ] Finish Amazon policy review + retry/backoff/bulk refresh UX
-5. [ ] Add password reset workflow
-6. [ ] Add rich-text/Markdown editing UX and product embeds
-7. [ ] Add brand archive/public brand pages if useful
-8. [!] Verify full admin CRUD flow on production
+# Immediate execution queue
+1. [!] Redeploy and verify automatic migration/seed output on production
+2. [~] Complete admin audit coverage
+3. [ ] Self-service password reset
+4. [ ] Amazon retry/backoff + bulk refresh + sync UX
+5. [ ] Rich-text/Markdown editor + product embeds
+6. [ ] Brand archive/restore
+7. [ ] Mobile/accessibility/final visual polish
+8. [ ] Product CSV/bulk tooling
+9. [ ] Production/development/backup documentation
