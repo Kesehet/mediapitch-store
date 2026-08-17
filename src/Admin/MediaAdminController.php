@@ -88,17 +88,68 @@ final class MediaAdminController
             throw new \RuntimeException('Image could not be stored.');
         }
 
+        $thumbnailPath=null;
+        $optimized=false;
+        try {
+            [$thumbnailPath,$optimized]=$this->createThumbnail($destination,$relativeDir,$mime,(int)$imageInfo[0],(int)$imageInfo[1]);
+        } catch (Throwable $thumbnailError) {
+            error_log('MediaPitch thumbnail generation failed: ' . $thumbnailError->getMessage());
+        }
+
         $this->repo->create([
             'uploaded_by'=>(int)(Auth::user()['id'] ?? 0) ?: null,
             'original_name'=>substr((string)($file['name'] ?? 'image'),0,255),
             'file_name'=>$name,
             'file_path'=>$relativeDir . '/' . $name,
+            'thumbnail_path'=>$thumbnailPath,
+            'optimized'=>$optimized,
             'mime_type'=>$mime,
-            'file_size'=>$size,
+            'file_size'=>(int)(filesize($destination) ?: $size),
             'width'=>(int)$imageInfo[0],
             'height'=>(int)$imageInfo[1],
             'alt_text'=>$altText !== '' ? $altText : null,
         ]);
+    }
+
+    private function createThumbnail(string $sourcePath,string $relativeDir,string $mime,int $width,int $height): array
+    {
+        if (!extension_loaded('gd') || $width < 1 || $height < 1) return [null,false];
+
+        $loader=match($mime){
+            'image/jpeg'=>'imagecreatefromjpeg',
+            'image/png'=>'imagecreatefrompng',
+            'image/webp'=>'imagecreatefromwebp',
+            'image/gif'=>'imagecreatefromgif',
+            default=>null,
+        };
+        if ($loader===null || !function_exists($loader)) return [null,false];
+
+        $source=@$loader($sourcePath);
+        if ($source===false) return [null,false];
+
+        $maxWidth=480;
+        $scale=min(1,$maxWidth/$width);
+        $thumbWidth=max(1,(int)round($width*$scale));
+        $thumbHeight=max(1,(int)round($height*$scale));
+        $thumb=imagecreatetruecolor($thumbWidth,$thumbHeight);
+        if ($thumb===false) { imagedestroy($source); return [null,false]; }
+
+        if (in_array($mime,['image/png','image/webp','image/gif'],true)) {
+            imagealphablending($thumb,false);
+            imagesavealpha($thumb,true);
+            $transparent=imagecolorallocatealpha($thumb,0,0,0,127);
+            imagefilledrectangle($thumb,0,0,$thumbWidth,$thumbHeight,$transparent);
+        }
+        imagecopyresampled($thumb,$source,0,0,0,0,$thumbWidth,$thumbHeight,$width,$height);
+
+        $thumbName='thumb-' . pathinfo($sourcePath,PATHINFO_FILENAME) . '.webp';
+        $thumbAbsolute=dirname($sourcePath) . '/' . $thumbName;
+        $saved=function_exists('imagewebp') ? imagewebp($thumb,$thumbAbsolute,82) : false;
+        imagedestroy($thumb);
+        imagedestroy($source);
+
+        if (!$saved) return [null,false];
+        return [$relativeDir . '/' . $thumbName,true];
     }
 
     private function redirect(string $path): never { header('Location: ' . url($path)); exit; }
