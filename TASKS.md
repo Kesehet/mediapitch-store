@@ -93,7 +93,10 @@ This file is the source of truth for work landing on `main`.
 - [x] Inactive-draft imports
 - [x] Per-product sync status + field-level manual overrides
 - [x] One-hour offer-price freshness enforcement
-- [~] Finish full Associates/Creators API policy review
+- [x] Hourly/daily CLI refresh path + deployment cron documentation
+- [x] Fixed Amazon pricing/availability disclosure + price Details links
+- [x] Associates/Creators API implementation guardrails documented from current official Amazon requirements
+- [!] Configure/verify production Amazon refresh cron if Amazon integration is enabled
 - [ ] Multiple marketplaces (lower priority)
 
 ## Storefront
@@ -109,6 +112,6 @@ This file is the source of truth for work landing on `main`.
 ## Immediate execution queue
 1. [!] Verify latest production deployment/bootstrap recovery output
 2. [!] Run full production admin CRUD smoke test
-3. [ ] Final visual QA on live storefront/admin
-4. [~] Finish Amazon Associates/Creators API compliance review
+3. [!] Configure/verify hourly Amazon refresh cron if integration is enabled
+4. [ ] Final visual QA on live storefront/admin
 5. [ ] Multiple Amazon marketplaces (lower priority)
