@@ -10,6 +10,7 @@ $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/adm
   <nav>
     <a class="<?= $currentPath==='/admin'?'active':'' ?>" href="<?= e(url('admin')) ?>">Dashboard</a>
     <a class="<?= str_starts_with($currentPath,'/admin/products')?'active':'' ?>" href="<?= e(url('admin/products')) ?>">Products</a>
+    <a class="<?= str_starts_with($currentPath,'/admin/merchandising')?'active':'' ?>" href="<?= e(url('admin/merchandising')) ?>">Homepage Picks</a>
     <a class="<?= str_starts_with($currentPath,'/admin/categories')?'active':'' ?>" href="<?= e(url('admin/categories')) ?>">Categories</a>
     <a class="<?= str_starts_with($currentPath,'/admin/brands')?'active':'' ?>" href="<?= e(url('admin/brands')) ?>">Brands</a>
     <a class="<?= str_starts_with($currentPath,'/admin/specifications')?'active':'' ?>" href="<?= e(url('admin/specifications')) ?>">Specifications</a>
