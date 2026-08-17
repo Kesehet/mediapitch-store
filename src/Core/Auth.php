@@ -10,26 +10,23 @@ use RuntimeException;
 
 final class Auth
 {
+    private static ?array $userColumns = null;
+
     public static function attempt(string $email, string $password): bool
     {
-        $email = strtolower(trim($email));
-        $db = Database::connection();
-
-        $stmt = $db->prepare(
-            'SELECT id, name, email, password_hash, role, active FROM users WHERE email = :email LIMIT 1'
+        $email=strtolower(trim($email));
+        $stmt = Database::connection()->prepare(
+            'SELECT id, name, email, password_hash, role FROM users WHERE email = :email AND active = 1 LIMIT 1'
         );
         $stmt->execute(['email' => $email]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Emergency/bootstrap recovery is deliberately narrow. When the exact
-        // configured bootstrap email/password are submitted, synchronize that
-        // administrator into the database before normal authentication. This
-        // makes recovery work even on hosts where Composer cannot reach the DB
-        // during deployment. Blank BOOTSTRAP_ADMIN_PASSWORD after recovery to
-        // disable this path completely.
-        $recovered = self::recoverBootstrapAdministrator($email, $password, $user);
-        if ($recovered !== null) {
-            $user = $recovered;
+        // Temporary bootstrap recovery: when both submitted values exactly match
+        // the explicitly configured bootstrap credentials, repair/create that one
+        // administrator account and continue this same login request. Blank the
+        // env password after recovery to disable this path completely.
+        if((!$user || !password_verify($password,(string)$user['password_hash'])) && self::matchesBootstrapCredentials($email,$password)){
+            $user=self::recoverBootstrapAdministrator($email,$password);
             unset($_SESSION['_login_guard']);
         }
 
@@ -48,9 +45,9 @@ final class Auth
             }
         }
 
-        if (!$user || empty($user['active']) || !password_verify($password, (string) $user['password_hash'])) {
-            if ($user) {
-                $failed=$db->prepare(
+        if (!$user || !password_verify($password, (string) $user['password_hash'])) {
+            if ($user && self::hasUserColumn('failed_login_count') && self::hasUserColumn('last_failed_login_at')) {
+                $failed=Database::connection()->prepare(
                     'UPDATE users SET failed_login_count=failed_login_count+1,last_failed_login_at=UTC_TIMESTAMP() WHERE id=:id'
                 );
                 $failed->execute(['id'=>(int)$user['id']]);
@@ -59,9 +56,11 @@ final class Auth
             return false;
         }
 
-        $db->prepare(
-            'UPDATE users SET last_login_at=UTC_TIMESTAMP(),failed_login_count=0,last_failed_login_at=NULL WHERE id=:id'
-        )->execute(['id'=>(int)$user['id']]);
+        if(self::hasUserColumn('last_login_at') && self::hasUserColumn('failed_login_count')){
+            Database::connection()->prepare(
+                'UPDATE users SET last_login_at=UTC_TIMESTAMP(),failed_login_count=0 WHERE id=:id'
+            )->execute(['id'=>(int)$user['id']]);
+        }
 
         unset($_SESSION['_login_guard']);
         session_regenerate_id(true);
@@ -73,65 +72,6 @@ final class Auth
         ];
         $_SESSION['_auth_last_activity'] = time();
         return true;
-    }
-
-    /**
-     * Synchronize the explicitly configured bootstrap administrator only when
-     * the submitted credentials exactly match the bootstrap environment values.
-     * Returns the refreshed user row on recovery, otherwise null.
-     */
-    private static function recoverBootstrapAdministrator(string $email, string $password, ?array $currentUser): ?array
-    {
-        $bootstrapPassword=(string)env('BOOTSTRAP_ADMIN_PASSWORD','');
-        $bootstrapEmail=strtolower(trim((string)env('BOOTSTRAP_ADMIN_EMAIL','admin@mediapitch.in')));
-        $bootstrapName=trim((string)env('BOOTSTRAP_ADMIN_NAME','MediaPitch Admin')) ?: 'MediaPitch Admin';
-
-        if($bootstrapPassword==='' || strlen($bootstrapPassword)<8 || !filter_var($bootstrapEmail,FILTER_VALIDATE_EMAIL)) return null;
-        if(!hash_equals($bootstrapEmail,$email) || !hash_equals($bootstrapPassword,$password)) return null;
-
-        $db=Database::connection();
-        $user=$currentUser;
-
-        // If the configured email changed, reuse the historical bootstrap row
-        // when possible instead of silently creating a second administrator.
-        if(!$user && $bootstrapEmail!=='admin@mediapitch.in'){
-            $legacy=$db->prepare(
-                "SELECT id,name,email,password_hash,role,active FROM users
-                 WHERE email='admin@mediapitch.in' AND name='MediaPitch Admin' AND role='administrator' LIMIT 1"
-            );
-            $legacy->execute();
-            $user=$legacy->fetch(PDO::FETCH_ASSOC) ?: null;
-        }
-
-        $hash=password_hash($bootstrapPassword,PASSWORD_DEFAULT);
-        if($user){
-            $update=$db->prepare(
-                "UPDATE users SET name=:name,email=:email,password_hash=:password_hash,
-                 role='administrator',active=1,failed_login_count=0,last_failed_login_at=NULL
-                 WHERE id=:id"
-            );
-            $update->execute([
-                'name'=>$bootstrapName,
-                'email'=>$bootstrapEmail,
-                'password_hash'=>$hash,
-                'id'=>(int)$user['id'],
-            ]);
-            $id=(int)$user['id'];
-        }else{
-            $insert=$db->prepare(
-                "INSERT INTO users (name,email,password_hash,role,active,failed_login_count,last_failed_login_at)
-                 VALUES (:name,:email,:password_hash,'administrator',1,0,NULL)"
-            );
-            $insert->execute(['name'=>$bootstrapName,'email'=>$bootstrapEmail,'password_hash'=>$hash]);
-            $id=(int)$db->lastInsertId();
-        }
-
-        $stmt=$db->prepare(
-            'SELECT id,name,email,password_hash,role,active FROM users WHERE id=:id LIMIT 1'
-        );
-        $stmt->execute(['id'=>$id]);
-        $refreshed=$stmt->fetch(PDO::FETCH_ASSOC);
-        return $refreshed ?: null;
     }
 
     public static function changePassword(int $userId, string $currentPassword, string $newPassword, string $confirmation): void
@@ -270,5 +210,68 @@ final class Auth
     private static function passwordFingerprint(string $passwordHash): string
     {
         return hash('sha256',$passwordHash);
+    }
+
+    private static function matchesBootstrapCredentials(string $email,string $password): bool
+    {
+        $configuredEmail=strtolower(trim((string)env('BOOTSTRAP_ADMIN_EMAIL','admin@mediapitch.in')));
+        $configuredPassword=(string)env('BOOTSTRAP_ADMIN_PASSWORD','');
+        return $configuredPassword!=='' && strlen($configuredPassword)>=8 && hash_equals($configuredEmail,$email) && hash_equals($configuredPassword,$password);
+    }
+
+    /** @return array<string,mixed> */
+    private static function recoverBootstrapAdministrator(string $email,string $password): array
+    {
+        $db=Database::connection();
+        $name=trim((string)env('BOOTSTRAP_ADMIN_NAME','MediaPitch Admin')) ?: 'MediaPitch Admin';
+        $hash=password_hash($password,PASSWORD_DEFAULT);
+
+        $find=$db->prepare('SELECT id FROM users WHERE email=:email LIMIT 1');
+        $find->execute(['email'=>$email]);
+        $id=(int)($find->fetchColumn()?:0);
+        if(!$id && $email!=='admin@mediapitch.in'){
+            $legacy=$db->prepare("SELECT id FROM users WHERE email='admin@mediapitch.in' AND name='MediaPitch Admin' AND role='administrator' LIMIT 1");
+            $legacy->execute();$id=(int)($legacy->fetchColumn()?:0);
+        }
+
+        $securityColumns=self::hasUserColumn('failed_login_count') && self::hasUserColumn('last_failed_login_at');
+        if($id){
+            $sql="UPDATE users SET name=:name,email=:email,password_hash=:password_hash,role='administrator',active=1";
+            if($securityColumns)$sql.=',failed_login_count=0,last_failed_login_at=NULL';
+            $sql.=' WHERE id=:id';
+            $update=$db->prepare($sql);
+            $update->execute(['name'=>$name,'email'=>$email,'password_hash'=>$hash,'id'=>$id]);
+        }else{
+            if($securityColumns){
+                $insert=$db->prepare("INSERT INTO users (name,email,password_hash,role,active,failed_login_count,last_failed_login_at) VALUES (:name,:email,:password_hash,'administrator',1,0,NULL)");
+            }else{
+                $insert=$db->prepare("INSERT INTO users (name,email,password_hash,role,active) VALUES (:name,:email,:password_hash,'administrator',1)");
+            }
+            $insert->execute(['name'=>$name,'email'=>$email,'password_hash'=>$hash]);
+            $id=(int)$db->lastInsertId();
+        }
+
+        $stmt=$db->prepare('SELECT id,name,email,password_hash,role FROM users WHERE id=:id AND active=1 LIMIT 1');
+        $stmt->execute(['id'=>$id]);
+        $user=$stmt->fetch(PDO::FETCH_ASSOC);
+        if(!$user)throw new RuntimeException('Bootstrap administrator recovery failed.');
+        return $user;
+    }
+
+    private static function hasUserColumn(string $column): bool
+    {
+        if(self::$userColumns===null){
+            self::$userColumns=[];
+            try{
+                $rows=Database::connection()->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_ASSOC);
+                foreach($rows as $row){
+                    $name=(string)($row['Field']??'');
+                    if($name!=='')self::$userColumns[$name]=true;
+                }
+            }catch(\Throwable){
+                // If introspection fails, behave like the oldest supported schema.
+            }
+        }
+        return isset(self::$userColumns[$column]);
     }
 }
