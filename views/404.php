@@ -1,0 +1,1 @@
+<section class="section"><div class="container narrow empty-state"><span class="eyebrow">404</span><h1>We couldn’t find that page.</h1><p>The product or guide may have moved, or the link may be incorrect.</p><a class="button" href="/">Back to MediaPitch Store</a></div></section>
