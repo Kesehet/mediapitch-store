@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -36,6 +37,11 @@ final class MerchandisingAdminController
             $this->requireCsrf();
             try{
                 $this->repo->save($_POST);
+                Audit::record('merchandising.update','homepage',null,'Updated homepage featured/deal picks',[
+                    'featured_ids'=>array_values(array_map('intval',is_array($_POST['featured_ids']??null)?$_POST['featured_ids']:[])),
+                    'deal_ids'=>array_values(array_map('intval',is_array($_POST['deal_ids']??null)?$_POST['deal_ids']:[])),
+                    'deals_title'=>(string)($_POST['deals_title']??''),
+                ]);
                 $this->setFlash('success','Homepage merchandising saved.');
             }catch(Throwable $e){
                 $this->setFlash('error','Merchandising could not be saved: '.$e->getMessage());
