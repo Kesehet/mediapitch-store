@@ -1,0 +1,15 @@
+<?php use MediaPitch\Core\Csrf; $s=$settings??[]; ?>
+<div class="page-actions"><div><p>Configure optional Amazon Creators API access. The storefront and manual CMS continue working when this integration is disabled or unavailable.</p></div></div>
+<form method="post" action="<?= e(url('admin/settings/amazon/save')) ?>" class="panel form-panel"><?= Csrf::field() ?>
+<div class="form-grid">
+<label class="check span-2"><input type="checkbox" name="enabled" value="1" <?= !empty($s['enabled'])?'checked':'' ?>> Enable Creators API integration</label>
+<label>Marketplace<input name="marketplace" required value="<?= e($s['marketplace']??'www.amazon.in') ?>" placeholder="www.amazon.in"></label>
+<label>Associate / Partner tag<input name="partner_tag" value="<?= e($s['partner_tag']??'') ?>"></label>
+<label>Credential version<select name="credential_version"><option value="3.2" <?= ($s['credential_version']??'3.2')==='3.2'?'selected':'' ?>>3.2 — EU/India (Login with Amazon)</option><option value="3.1" <?= ($s['credential_version']??'')==='3.1'?'selected':'' ?>>3.1 — North America</option><option value="3.3" <?= ($s['credential_version']??'')==='3.3'?'selected':'' ?>>3.3 — Far East</option><option value="2.2" <?= ($s['credential_version']??'')==='2.2'?'selected':'' ?>>2.2 — EU/India legacy Cognito</option><option value="2.1" <?= ($s['credential_version']??'')==='2.1'?'selected':'' ?>>2.1 — North America legacy Cognito</option><option value="2.3" <?= ($s['credential_version']??'')==='2.3'?'selected':'' ?>>2.3 — Far East legacy Cognito</option></select></label>
+<label>Credential ID<input name="credential_id" autocomplete="off" value="<?= e($s['credential_id']??'') ?>"></label>
+<label>Credential secret<input type="password" name="credential_secret" autocomplete="new-password" placeholder="Leave blank to keep existing secret"></label>
+</div>
+<div class="form-actions"><button class="primary-button">Save settings</button></div>
+</form>
+<div class="panel" style="margin-top:1rem"><h3>Connection status</h3><p><strong>Last successful authentication:</strong> <?= e($s['last_success']?:'Never') ?></p><?php if(!empty($s['last_error'])):?><p class="flash error"><strong>Last error:</strong> <?= e($s['last_error']) ?></p><?php endif;?><form method="post" action="<?= e(url('admin/settings/amazon/test')) ?>"><?= Csrf::field() ?><button class="secondary-button">Test Amazon authentication</button></form><p><small>The test requests an OAuth access token only. It does not import or modify products.</small></p></div>
+<div class="panel" style="margin-top:1rem"><h3>Security</h3><p>Credential ID and secret are encrypted at rest using the application's <code>APP_KEY</code>. Only administrators can access this screen. Set a strong production <code>APP_KEY</code> before storing credentials.</p></div>
