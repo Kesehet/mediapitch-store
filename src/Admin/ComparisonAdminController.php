@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -23,6 +24,7 @@ final class ComparisonAdminController
     {
         if(!str_starts_with($path,'/admin/comparisons'))return false;
         if(!Auth::check())$this->redirect('/admin/login');
+        if(!Auth::canEditContent()){http_response_code(403);exit('Forbidden');}
 
         if($path==='/admin/comparisons'&&$method==='GET'){
             View::render('admin/comparisons',array_merge([
@@ -55,6 +57,10 @@ final class ComparisonAdminController
                 if($old && !empty($old['slug']) && $newSlug!=='' && $old['slug']!==$newSlug){
                     (new RedirectRepository())->upsert('/compare/'.$old['slug'],'/compare/'.$newSlug);
                 }
+                Audit::record($existingId?'comparison.update':'comparison.create','comparison',$id,$existingId?'Updated comparison':'Created comparison',[
+                    'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'category_id'=>(int)($_POST['category_id']??0),
+                    'product_ids'=>array_values(array_map('intval',is_array($_POST['product_id']??null)?$_POST['product_id']:[])),
+                ]);
                 $this->setFlash('success','Comparison saved.');
                 $this->redirect('/admin/comparisons/'.$id.'/edit');
             }catch(Throwable $e){
