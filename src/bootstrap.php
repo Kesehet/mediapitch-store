@@ -64,10 +64,49 @@ function safe_html(?string $value): string
     return Html::sanitize($value);
 }
 
+function request_base_url(): ?string
+{
+    if (PHP_SAPI === 'cli' || empty($_SERVER['HTTP_HOST'])) {
+        return null;
+    }
+
+    $host = preg_replace('/[^A-Za-z0-9.\-:\[\]]/', '', (string) $_SERVER['HTTP_HOST']) ?: '';
+    if ($host === '') {
+        return null;
+    }
+
+    $proto = '';
+    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+        $forwarded = strtolower(trim(explode(',', (string) $_SERVER['HTTP_X_FORWARDED_PROTO'])[0]));
+        if (in_array($forwarded, ['http', 'https'], true)) {
+            $proto = $forwarded;
+        }
+    }
+    if ($proto === '') {
+        $https = $_SERVER['HTTPS'] ?? '';
+        $proto = ($https !== '' && strtolower((string) $https) !== 'off') ? 'https' : 'http';
+    }
+
+    return $proto . '://' . $host;
+}
+
 function url(string $path = ''): string
 {
-    $base = rtrim((string) env('APP_URL', ''), '/');
-    return $base . '/' . ltrim($path, '/');
+    $configured = rtrim((string) env('APP_URL', ''), '/');
+    $requestBase = request_base_url();
+
+    $configuredHost = $configured !== '' ? (string) parse_url($configured, PHP_URL_HOST) : '';
+    $configuredIsLocal = in_array(strtolower($configuredHost), ['localhost', '127.0.0.1', '::1'], true);
+    $requestHost = $requestBase ? (string) parse_url($requestBase, PHP_URL_HOST) : '';
+    $requestIsLocal = in_array(strtolower($requestHost), ['localhost', '127.0.0.1', '::1'], true);
+
+    if ($requestBase !== null && ($configured === '' || ($configuredIsLocal && !$requestIsLocal))) {
+        $base = $requestBase;
+    } else {
+        $base = $configured;
+    }
+
+    return rtrim($base, '/') . '/' . ltrim($path, '/');
 }
 
 load_env(dirname(__DIR__) . '/.env');
