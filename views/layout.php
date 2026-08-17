@@ -34,6 +34,7 @@ $ogImage = $ogImage
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/app.css">
     <link rel="stylesheet" href="/assets/catalog.css">
+    <script src="/assets/search.js" defer></script>
 </head>
 <body>
 <header class="site-header">
@@ -49,7 +50,7 @@ $ogImage = $ogImage
             <a href="/blog">Blog</a>
         </nav>
         <form class="header-search" action="/search" method="get" role="search">
-            <input type="search" name="q" placeholder="Search products…" aria-label="Search products">
+            <input type="search" name="q" placeholder="Search products…" aria-label="Search products" autocomplete="off">
         </form>
     </div>
 </header>
