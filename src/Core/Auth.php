@@ -12,15 +12,26 @@ final class Auth
 {
     public static function attempt(string $email, string $password): bool
     {
-        if (self::loginBlocked()) {
-            return false;
-        }
-
         $stmt = Database::connection()->prepare(
             'SELECT id, name, email, password_hash, role FROM users WHERE email = :email AND active = 1 LIMIT 1'
         );
         $stmt->execute(['email' => strtolower(trim($email))]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // A browser/session lockout belongs to the password hash that existed
+        // when the failed attempts happened. If an administrator/password-reset
+        // workflow changes that hash, automatically discard the stale lockout so
+        // the newly issued password can be used immediately without weakening
+        // normal brute-force protection.
+        if (self::loginBlocked()) {
+            $guardFingerprint=(string)($_SESSION['_login_guard']['password_fingerprint'] ?? '');
+            $currentFingerprint=$user ? self::passwordFingerprint((string)$user['password_hash']) : '';
+            if($user && $guardFingerprint!=='' && !hash_equals($guardFingerprint,$currentFingerprint)){
+                unset($_SESSION['_login_guard']);
+            }else{
+                return false;
+            }
+        }
 
         if (!$user || !password_verify($password, (string) $user['password_hash'])) {
             if ($user) {
@@ -29,7 +40,7 @@ final class Auth
                 );
                 $failed->execute(['id'=>(int)$user['id']]);
             }
-            self::recordFailedAttempt();
+            self::recordFailedAttempt($user ? (string)$user['password_hash'] : null);
             return false;
         }
 
@@ -161,7 +172,7 @@ final class Auth
         }
     }
 
-    private static function recordFailedAttempt(): void
+    private static function recordFailedAttempt(?string $passwordHash=null): void
     {
         $now = time();
         $window = max(60, (int) env('LOGIN_ATTEMPT_WINDOW', 600));
@@ -173,11 +184,17 @@ final class Auth
             $guard = ['count' => 0, 'first_at' => $now, 'blocked_until' => 0];
         }
         $guard['count'] = (int) ($guard['count'] ?? 0) + 1;
+        if($passwordHash!==null && $passwordHash!=='')$guard['password_fingerprint']=self::passwordFingerprint($passwordHash);
         if ($guard['count'] >= $limit) {
             $guard['blocked_until'] = $now + $blockFor;
             $guard['count'] = 0;
             $guard['first_at'] = $now;
         }
         $_SESSION['_login_guard'] = $guard;
+    }
+
+    private static function passwordFingerprint(string $passwordHash): string
+    {
+        return hash('sha256',$passwordHash);
     }
 }
