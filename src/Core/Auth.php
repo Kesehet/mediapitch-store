@@ -117,6 +117,12 @@ final class Auth
         return in_array(self::role(), ['administrator', 'editor', 'writer'], true);
     }
 
+    /** Upload/select media for catalog or editorial work. */
+    public static function canUploadMedia(): bool
+    {
+        return self::canManageProducts() || self::canEditContent();
+    }
+
     /** Publish or schedule editorial content. */
     public static function canPublish(): bool
     {
