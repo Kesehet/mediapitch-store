@@ -3,6 +3,7 @@ $pageTitle = $pageTitle ?? 'MediaPitch Store';
 $metaDescription = $metaDescription ?? 'Independent product recommendations and buying guides.';
 $robotsIndex = $robotsIndex ?? true;
 $canonicalUrl = $canonicalUrl ?? null;
+$ogImage = $ogImage ?? null;
 ?>
 <!doctype html>
 <html lang="en">
@@ -17,10 +18,16 @@ $canonicalUrl = $canonicalUrl ?? null;
     <meta property="og:description" content="<?= e($metaDescription) ?>">
     <meta property="og:type" content="website">
     <?php if ($canonicalUrl): ?><meta property="og:url" content="<?= e($canonicalUrl) ?>"><?php endif; ?>
+    <?php if ($ogImage): ?><meta property="og:image" content="<?= e($ogImage) ?>"><?php endif; ?>
+    <meta name="twitter:card" content="<?= $ogImage ? 'summary_large_image' : 'summary' ?>">
+    <meta name="twitter:title" content="<?= e($pageTitle) ?>">
+    <meta name="twitter:description" content="<?= e($metaDescription) ?>">
+    <?php if ($ogImage): ?><meta name="twitter:image" content="<?= e($ogImage) ?>"><?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/catalog.css">
 </head>
 <body>
 <header class="site-header">
