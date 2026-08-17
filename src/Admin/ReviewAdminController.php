@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -21,6 +22,7 @@ final class ReviewAdminController
     {
         if(!str_starts_with($path,'/admin/reviews')) return false;
         if(!Auth::check()) $this->redirect('/admin/login');
+        if(!Auth::canEditContent()){http_response_code(403);exit('Forbidden');}
 
         if($path==='/admin/reviews'&&$method==='GET'){
             View::render('admin/reviews',[
@@ -51,6 +53,9 @@ final class ReviewAdminController
                 if($old && !empty($old['slug']) && $newSlug!=='' && $old['slug']!==$newSlug){
                     (new RedirectRepository())->upsert('/review/'.$old['slug'],'/review/'.$newSlug);
                 }
+                Audit::record($existingId?'review.update':'review.create','review',$id,$existingId?'Updated review':'Created review',[
+                    'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'product_id'=>(int)($_POST['product_id']??0),
+                ]);
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
             }catch(Throwable $e){$this->setFlash('error',$e->getMessage());$this->redirect('/admin/reviews');}
         }
