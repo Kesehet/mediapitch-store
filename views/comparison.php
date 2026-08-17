@@ -14,5 +14,5 @@
 <tr><th>Buy / check price</th><?php foreach($products as $product):?><td><?php if(!empty($product['affiliate_url'])):?><a class="button button-secondary" href="<?= e(url('go/'.(int)$product['id'].'?content='.(int)$comparison['id'].'&from=comparison')) ?>">Check Price</a><?php else:?>—<?php endif;?></td><?php endforeach;?></tr>
 </tbody></table></div></div></section>
 
-<?php if(!empty($comparison['body'])):?><section class="section"><div class="container narrow prose"><h2>Our verdict</h2><?= $comparison['body'] ?></div></section><?php endif;?>
+<?php if(!empty($comparison['body'])):?><section class="section"><div class="container narrow prose"><h2>Our verdict</h2><?= safe_html($comparison['body']) ?></div></section><?php endif;?>
 <section class="section section-soft"><div class="container narrow"><p class="affiliate-note">We may earn a commission from qualifying purchases. Prices and availability are controlled by Amazon and can change.</p></div></section>
