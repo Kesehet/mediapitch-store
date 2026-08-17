@@ -10,6 +10,13 @@ $name = $product['display_title'] ?: $product['title'];
 $specifications = $product['specifications'] ?? [];
 $displayPrice = public_product_price($product);
 $amazonManagedPrice = in_array((string)($product['source'] ?? ''), ['amazon_api','hybrid'], true);
+$brandPage=null;
+if(!empty($product['brand_id'])){
+    try{
+        $candidate=(new \MediaPitch\Repositories\BrandRepository())->find((int)$product['brand_id']);
+        if($candidate && !empty($candidate['active']))$brandPage=$candidate;
+    }catch(Throwable){}
+}
 $specValue = static function (array $spec): string {
     return match ($spec['data_type']) {
         'number' => $spec['value_number'] !== null ? rtrim(rtrim((string)$spec['value_number'], '0'), '.') : '',
@@ -22,7 +29,10 @@ $schemaImages=[];
 if(!empty($product['main_image_url']))$schemaImages[]=$product['main_image_url'];
 foreach($gallery as $image){if(is_string($image)&&$image!=='')$schemaImages[]=$image;}
 if($schemaImages)$productSchema['image']=array_values(array_unique($schemaImages));
-if(!empty($product['brand_name'])) $productSchema['brand']=['@type'=>'Brand','name'=>$product['brand_name']];
+if(!empty($product['brand_name'])){
+    $productSchema['brand']=['@type'=>'Brand','name'=>$product['brand_name']];
+    if($brandPage)$productSchema['brand']['url']=url('brand/'.$brandPage['slug']);
+}
 if(!empty($product['asin'])) $productSchema['sku']=$product['asin'];
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
     ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
@@ -51,7 +61,7 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
         <div>
             <?php if (!empty($product['category_name'])): ?><div class="eyebrow"><?= e($product['category_name']) ?></div><?php endif; ?>
             <h1><?= e($name) ?></h1>
-            <?php if (!empty($product['brand_name'])): ?><p class="muted">By <?= e($product['brand_name']) ?></p><?php endif; ?>
+            <?php if (!empty($product['brand_name'])): ?><p class="muted">By <?php if($brandPage):?><a class="text-link" style="margin-left:0" href="<?= e(url('brand/'.$brandPage['slug'])) ?>"><?= e($product['brand_name']) ?></a><?php else:?><?= e($product['brand_name']) ?><?php endif;?></p><?php endif; ?>
             <?php if (!empty($product['best_for_label'])): ?><span class="badge"><?= e($product['best_for_label']) ?></span><?php endif; ?>
             <?php if ($product['custom_score'] !== null): ?><div class="detail-score"><strong><?= e((string) $product['custom_score']) ?>/10</strong><span>MediaPitch score</span></div><?php endif; ?>
             <?php if (!empty($product['short_description'])): ?><p class="lead"><?= e($product['short_description']) ?></p><?php endif; ?>
@@ -87,7 +97,7 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
 <?php endif; ?>
 
 <?php if (!empty($product['full_description'])): ?>
-<section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><p><?= nl2br(e((string)$product['full_description'])) ?></p></div></section>
+<section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><?= safe_html((string)$product['full_description']) ?></div></section>
 <?php endif; ?>
 
 <?php if($relatedProducts):?>
