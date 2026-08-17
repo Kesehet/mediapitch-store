@@ -71,7 +71,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [ ] Full role permission matrix
 - [ ] Admin audit trail
 - [ ] CSP/security headers
-- [ ] Rich-content XSS review
+- [ ] Rich-content XSS review for blog/review HTML
 
 ---
 
@@ -82,10 +82,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Public `/category/{slug}`
 - [x] Category product / guide / article sections
 - [x] Category canonical metadata
-- [ ] Nested breadcrumbs
+- [x] Category image assignment from Media Library
+- [x] Category product pagination
+- [x] Category brand / price / score / sort filters
+- [x] Category dynamic specification filters
+- [ ] Nested breadcrumb hierarchy
 - [ ] Archive/delete
-- [ ] Category media picker
-- [ ] Pagination and filters
 
 ## Brands
 - [x] Brand model
@@ -112,6 +114,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Public `/product/{slug}`
 - [x] Product media-library picker
 - [x] Default MediaPitch/Fill Masjid product seed data
+- [x] Product page escapes manual full-description text
 - [ ] Slug auto-generation
 - [ ] Friendly duplicate-slug validation
 - [ ] Duplicate ASIN warning
@@ -131,7 +134,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Type validation and persistence
 - [x] Public product specification table
 - [x] Comparison pages consume comparable specs
-- [ ] Dynamic public filters using filterable specs
+- [x] Public category filtering using filterable specs
 - [ ] Spec archive/delete
 - [ ] Better select-option UX
 
@@ -160,13 +163,14 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Transactional product relationship save
 - [x] Public guide route and ranked product output
 - [x] Affiliate rank/context tracking
+- [x] Guide media picker
+- [x] Buying-guide Article schema
+- [x] Buying-guide breadcrumb UI/schema
 - [ ] Product autocomplete/search in editor
 - [ ] Drag-and-drop ranking
 - [ ] Better duplicate-product UX
 - [ ] FAQ / “How we selected” / table of contents
 - [ ] Related guides/articles/comparisons
-- [ ] Buying-guide schema and breadcrumbs
-- [ ] Guide media picker
 
 ---
 
@@ -177,12 +181,14 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] SEO title/meta/canonical/index controls
 - [x] Public `/blog` and `/blog/{slug}`
 - [x] Author/category/date display
-- [ ] Safe Markdown or rich-text editor
+- [x] Blog media picker
+- [x] BlogPosting structured data
+- [x] Article breadcrumb UI/schema
+- [ ] Safe Markdown or sanitized rich-text editor
 - [ ] Tags
 - [ ] Product embeds
 - [ ] Related articles
-- [ ] Blog media picker
-- [ ] Article structured data / OG image
+- [ ] Article-specific OG image wiring
 
 ---
 
@@ -202,12 +208,15 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [ ] Comparison structured data if appropriate
 
 ## Reviews
-- [x] Review content type exists
-- [ ] Admin review editor
-- [ ] Review-product relationship
-- [ ] Rating/score UI
-- [ ] Public review route
-- [ ] Review structured data
+- [x] Review content type
+- [x] Admin review list/editor
+- [x] Review-product relationship
+- [x] Rating/score UI
+- [x] Public `/review/{slug}` route
+- [x] Review media picker
+- [x] Review structured data
+- [x] Review breadcrumb UI/schema
+- [ ] Related reviews/products
 
 ---
 
@@ -218,10 +227,14 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Buying guides
 - [x] Comparisons
 - [x] Blog articles
-- [ ] Reviews once review pages exist
-- [ ] Pagination/sorting
-- [ ] Brand / price / score / category filters
-- [ ] Dynamic specification filters
+- [x] Search repository includes published reviews
+- [x] Category product pagination
+- [x] Category sorting
+- [x] Brand / price / score filters on category pages
+- [x] Dynamic specification filters on category pages
+- [ ] Render reviews as a dedicated section in search UI
+- [ ] Search-result pagination
+- [ ] Global category filter on search results
 - [ ] Search analytics
 - [ ] Autocomplete/suggestions
 
@@ -253,11 +266,16 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Media browser
 - [x] Alt-text capture
 - [x] Product media picker
-- [ ] Image optimization
-- [ ] Thumbnail generation
+- [x] Guide media picker
+- [x] Blog media picker
+- [x] Review media picker
+- [x] Category image assignment
+- [x] WebP thumbnail generation when GD/WebP is available
+- [x] Graceful fallback when image-processing extensions are missing
+- [x] Media browser prefers thumbnail derivatives
+- [ ] Original-image optimization/compression policy
 - [ ] Media search
-- [ ] Category picker
-- [ ] Guide/blog picker
+- [ ] Brand logo picker
 - [ ] Safe delete / usage checks
 - [ ] Storage abstraction for future S3/R2
 
@@ -265,15 +283,21 @@ This file is the project source of truth. Update it as work lands on `main`.
 
 # 12. SEO
 - [x] SEO titles/meta descriptions
-- [x] Canonical/index support across product/category/guide/blog/comparison
+- [x] Canonical/index support across product/category/guide/blog/comparison/review
 - [x] Base Open Graph title/description
+- [x] Twitter card/title/description support
+- [x] Optional Open Graph/Twitter image support in shared layout
 - [x] Dynamic `/sitemap.xml`
 - [x] Sitemap includes products/categories/guides/blog/comparisons/reviews
 - [x] `robots.txt`
-- [ ] Dynamic OG images
-- [ ] Twitter cards
-- [ ] Breadcrumb UI + schema
-- [ ] Product/article/review/buying-guide structured data
+- [x] Product structured data
+- [x] BlogPosting structured data
+- [x] Review structured data
+- [x] Buying-guide Article structured data
+- [x] Product/article/review/guide breadcrumb UI + schema
+- [ ] Dynamic OG image wiring per public route
+- [ ] Category breadcrumb schema
+- [ ] Comparison structured data if appropriate
 - [ ] Redirect admin UI
 - [ ] Auto-redirect when published slug changes
 - [ ] SEO preview in editors
@@ -320,10 +344,10 @@ This file is the project source of truth. Update it as work lands on `main`.
 ---
 
 # Immediate next queue
-1. [~] Extend media picker to category, buying-guide and blog editors
-2. [ ] Add image optimization + thumbnail generation
-3. [ ] Build review CMS + public review pages
-4. [ ] Add product/category filtering and pagination
-5. [ ] Add structured data + breadcrumbs
-6. [ ] Build Amazon settings page and verify current Creators API policy/docs
+1. [ ] Render review results in unified search UI
+2. [ ] Add dynamic OG-image wiring on product/blog/guide/review/comparison routes
+3. [ ] Add search-result pagination and autocomplete foundation
+4. [ ] Add safe rich-text/HTML sanitization for blog and review bodies
+5. [ ] Build Amazon settings page and verify current Creators API policy/docs
+6. [ ] Add user/security hardening: session rotation, secure cookies, rate limiting
 7. [!] Configure production DB, run migrations/seeds and verify seeded products live
