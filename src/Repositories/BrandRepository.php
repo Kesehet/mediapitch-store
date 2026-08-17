@@ -29,6 +29,25 @@ final class BrandRepository
         return $row?:null;
     }
 
+    public function bySlug(string $slug): ?array
+    {
+        $db=Database::connection();
+        $stmt=$db->prepare('SELECT * FROM brands WHERE slug=:slug AND active=1 LIMIT 1');
+        $stmt->execute(['slug'=>$slug]);
+        $brand=$stmt->fetch(PDO::FETCH_ASSOC);
+        if(!$brand)return null;
+
+        $products=$db->prepare(
+            'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.custom_score,p.best_for_label,p.source,p.last_synced_at,c.name AS category_name,c.slug AS category_slug
+             FROM products p LEFT JOIN categories c ON c.id=p.category_id
+             WHERE p.brand_id=:brand_id AND p.active=1
+             ORDER BY p.custom_score DESC,p.updated_at DESC,p.title ASC'
+        );
+        $products->execute(['brand_id'=>(int)$brand['id']]);
+        $brand['products']=$products->fetchAll(PDO::FETCH_ASSOC);
+        return $brand;
+    }
+
     public function save(array $data,?int $id=null): int
     {
         $name=trim((string)($data['name']??''));
