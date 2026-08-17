@@ -23,6 +23,27 @@ final class SettingsAdminController
         if(!Auth::check()){$this->redirect('/admin/login');}
         if(!Auth::isAdministrator()){http_response_code(403);echo 'Administrator access required.';return true;}
 
+        if($path==='/admin/settings/site'&&$method==='GET'){
+            View::render('admin/settings-site',[
+                'pageTitle'=>'Website Settings',
+                'adminUser'=>Auth::user(),
+                'settings'=>$this->repo->site(),
+                'success'=>$this->flash('success'),
+                'error'=>$this->flash('error'),
+            ],'admin/layout');
+            return true;
+        }
+        if($path==='/admin/settings/site/save'&&$method==='POST'){
+            $this->requireCsrf();
+            try{
+                $this->repo->saveSite($_POST);
+                $this->setFlash('success','Website settings saved.');
+            }catch(Throwable $e){
+                $this->setFlash('error','Website settings could not be saved: '.$e->getMessage());
+            }
+            $this->redirect('/admin/settings/site');
+        }
+
         if($path==='/admin/settings/amazon'&&$method==='GET'){
             View::render('admin/settings-amazon',[
                 'pageTitle'=>'Amazon Creators API',
