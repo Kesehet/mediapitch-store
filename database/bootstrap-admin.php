@@ -19,8 +19,8 @@ if(!filter_var($email,FILTER_VALIDATE_EMAIL)){
     fwrite(STDERR,"BOOTSTRAP_ADMIN_EMAIL must be a valid email address.\n");
     exit(1);
 }
-if(strlen($password)<12){
-    fwrite(STDERR,"BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters.\n");
+if(strlen($password)<8){
+    fwrite(STDERR,"BOOTSTRAP_ADMIN_PASSWORD must be at least 8 characters.\n");
     exit(1);
 }
 
