@@ -2,6 +2,7 @@
 $daily=$report['daily']??[];
 $maxDaily=1;
 foreach($daily as $row)$maxDaily=max($maxDaily,(int)$row['clicks']);
+$search=$report['search']??['total'=>0,'zero_total'=>0,'top'=>[],'zero'=>[],'categories'=>[]];
 ?>
 <section class="panel">
   <div class="panel-head"><div><h2>Affiliate analytics</h2><p>Track outbound Amazon clicks by date, product, content, CTA, rank and campaign.</p></div><a class="secondary-button" href="<?= e(url('admin/analytics/export?from='.$from.'&to='.$to)) ?>">Export CSV</a></div>
@@ -10,7 +11,7 @@ foreach($daily as $row)$maxDaily=max($maxDaily,(int)$row['clicks']);
     <label>To<input type="date" name="to" value="<?= e($to) ?>"></label>
     <div><button class="primary-button">Apply range</button></div>
   </form>
-  <div class="stat-grid"><div class="stat-card"><span>Total affiliate clicks</span><strong><?= (int)($report['total']??0) ?></strong><small><?= e($from) ?> → <?= e($to) ?></small></div></div>
+  <div class="stat-grid"><div class="stat-card"><span>Total affiliate clicks</span><strong><?= (int)($report['total']??0) ?></strong><small><?= e($from) ?> → <?= e($to) ?></small></div><div class="stat-card"><span>Site searches</span><strong><?= (int)$search['total'] ?></strong><small>Query/category only; no visitor identifiers</small></div><div class="stat-card"><span>Zero-result searches</span><strong><?= (int)$search['zero_total'] ?></strong><small>Content gaps to investigate</small></div></div>
 </section>
 
 <section class="panel">
@@ -29,3 +30,10 @@ foreach($daily as $row)$maxDaily=max($maxDaily,(int)$row['clicks']);
 </div>
 
 <section class="panel" style="margin-top:20px"><div class="panel-head"><h2>Guide/comparison rank positions</h2></div><table class="data-table"><thead><tr><th>Rank</th><th>Clicks</th></tr></thead><tbody><?php foreach($report['ranks'] as $row):?><tr><td><?= e($row['label']) ?></td><td><?= (int)$row['clicks'] ?></td></tr><?php endforeach;?></tbody></table></section>
+
+<div class="two-col" style="margin-top:20px">
+<section class="panel"><div class="panel-head"><div><h2>Top site searches</h2><p class="muted">What visitors are actively trying to find.</p></div></div><table class="data-table"><thead><tr><th>Query</th><th>Category</th><th>Searches</th><th>Avg. results</th></tr></thead><tbody><?php foreach($search['top'] as $row):?><tr><td><strong><?= e($row['query_text']) ?></strong></td><td><?= e($row['category_name']) ?></td><td><?= (int)$row['searches'] ?></td><td><?= e((string)$row['avg_results']) ?></td></tr><?php endforeach;?><?php if(!$search['top']):?><tr><td colspan="4" class="empty">No search data yet.</td></tr><?php endif;?></tbody></table></section>
+<section class="panel"><div class="panel-head"><div><h2>Zero-result searches</h2><p class="muted">Useful ideas for missing products, categories or editorial content.</p></div></div><table class="data-table"><thead><tr><th>Query</th><th>Category</th><th>Searches</th></tr></thead><tbody><?php foreach($search['zero'] as $row):?><tr><td><strong><?= e($row['query_text']) ?></strong></td><td><?= e($row['category_name']) ?></td><td><?= (int)$row['searches'] ?></td></tr><?php endforeach;?><?php if(!$search['zero']):?><tr><td colspan="3" class="empty">No zero-result searches.</td></tr><?php endif;?></tbody></table></section>
+</div>
+
+<section class="panel" style="margin-top:20px"><div class="panel-head"><div><h2>Searches by category filter</h2><p class="muted">Shows which catalog areas visitors narrow into most often.</p></div></div><table class="data-table"><thead><tr><th>Category</th><th>Searches</th></tr></thead><tbody><?php foreach($search['categories'] as $row):?><tr><td><?= e($row['category_name']) ?></td><td><?= (int)$row['searches'] ?></td></tr><?php endforeach;?><?php if(!$search['categories']):?><tr><td colspan="2" class="empty">No search data yet.</td></tr><?php endif;?></tbody></table></section>
