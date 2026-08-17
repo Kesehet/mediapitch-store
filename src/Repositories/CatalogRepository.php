@@ -264,7 +264,7 @@ final class CatalogRepository
             'content_id' => $contentId,
             'rank_position' => $rank,
             'cta_location' => $ctaLocation,
-            'referrer' => $referrer,
+            'referring_url' => $referrer,
             'user_agent' => $userAgent,
             'campaign' => $campaign,
         ]);
