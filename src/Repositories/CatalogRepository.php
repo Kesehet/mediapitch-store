@@ -50,7 +50,8 @@ final class CatalogRepository
 
     public function productBySlug(string $slug): ?array
     {
-        $stmt = Database::connection()->prepare(
+        $db = Database::connection();
+        $stmt = $db->prepare(
             'SELECT p.*, b.name AS brand_name, c.name AS category_name, c.slug AS category_slug
              FROM products p
              LEFT JOIN brands b ON b.id = p.brand_id
@@ -59,7 +60,19 @@ final class CatalogRepository
         );
         $stmt->execute(['slug' => $slug]);
         $row = $stmt->fetch();
-        return $row ?: null;
+        if (!$row) return null;
+
+        $specs = $db->prepare(
+            'SELECT sd.name,sd.slug,sd.unit,sd.data_type,sd.sort_order,
+                    ps.value_text,ps.value_number,ps.value_boolean
+             FROM product_specifications ps
+             JOIN specification_definitions sd ON sd.id=ps.specification_definition_id
+             WHERE ps.product_id=:product_id
+             ORDER BY sd.sort_order,sd.name'
+        );
+        $specs->execute(['product_id'=>$row['id']]);
+        $row['specifications'] = $specs->fetchAll(PDO::FETCH_ASSOC);
+        return $row;
     }
 
     public function productById(int $id): ?array
