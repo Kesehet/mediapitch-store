@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use MediaPitch\Admin\AdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
+use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\CatalogRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -17,6 +19,13 @@ if ($path === '//') {
 }
 
 try {
+    if (str_starts_with($path, '/admin')) {
+        $admin = new AdminController(new AdminRepository());
+        if ($admin->handle($method, $path)) {
+            exit;
+        }
+    }
+
     if ($method === 'GET' && $path === '/') {
         View::render('home', [
             'pageTitle' => 'MediaPitch Store — Smart Product Discovery',
