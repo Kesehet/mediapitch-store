@@ -41,4 +41,23 @@ final class RelatedContentRepository
 
         return ['products'=>$products,'guides'=>$guides->fetchAll(PDO::FETCH_ASSOC)];
     }
+
+    public function forContent(int $contentId, ?int $categoryId, int $limit = 6): array
+    {
+        if(!$categoryId)return [];
+        $stmt=Database::connection()->prepare(
+            "SELECT c.id,c.type,c.title,c.slug,c.excerpt,c.featured_image_url,c.published_at
+             FROM content c
+             WHERE c.category_id=:category_id AND c.id<>:content_id
+               AND c.type IN ('buying_guide','blog','comparison','review')
+               AND c.status IN ('published','scheduled')
+               AND (c.published_at IS NULL OR c.published_at<=UTC_TIMESTAMP())
+             ORDER BY COALESCE(c.published_at,c.created_at) DESC LIMIT :limit"
+        );
+        $stmt->bindValue(':category_id',$categoryId,PDO::PARAM_INT);
+        $stmt->bindValue(':content_id',$contentId,PDO::PARAM_INT);
+        $stmt->bindValue(':limit',$limit,PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
