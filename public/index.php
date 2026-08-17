@@ -50,6 +50,7 @@ $redirectRepo = new RedirectRepository();
 $relatedRepo = new RelatedContentRepository();
 $categoryHierarchy = new CategoryHierarchyRepository();
 $merchandisingRepo = new MerchandisingRepository();
+$brandRepo = new BrandRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -138,6 +139,11 @@ try {
     if ($method === 'GET' && preg_match('#^/category/([a-z0-9-]+)$#i',$path,$matches)) {
         $category=$catalog->categoryBySlug($matches[1]);if(!$category){http_response_code(404);View::render('404',['pageTitle'=>'Category not found','metaDescription'=>'']);exit;}
         View::render('category',['pageTitle'=>($category['seo_title'] ?: $category['name']).' — MediaPitch Store','metaDescription'=>(string)($category['meta_description'] ?: $category['description']),'canonicalUrl'=>url('category/'.$category['slug']),'category'=>$category,'breadcrumbs'=>$categoryHierarchy->ancestors((int)$category['id'])]);exit;
+    }
+
+    if ($method === 'GET' && preg_match('#^/brand/([a-z0-9-]+)$#i',$path,$matches)) {
+        $brand=$brandRepo->bySlug($matches[1]);if(!$brand){http_response_code(404);View::render('404',['pageTitle'=>'Brand not found','metaDescription'=>'']);exit;}
+        View::render('brand',['pageTitle'=>$brand['name'].' | MediaPitch Store','metaDescription'=>'Browse '.$brand['name'].' products, recommendations and MediaPitch scores.','canonicalUrl'=>url('brand/'.$brand['slug']),'brand'=>$brand]);exit;
     }
 
     if ($method === 'GET' && $path === '/blog') {View::render('blog-index',['pageTitle'=>'MediaPitch Blog — Buying Advice & Product Guides','metaDescription'=>'Buying advice, product explainers, how-to articles and shopping insights from MediaPitch.','posts'=>$contentRepo->publishedPosts()]);exit;}
