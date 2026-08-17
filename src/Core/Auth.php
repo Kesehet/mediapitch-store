@@ -23,9 +23,19 @@ final class Auth
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || !password_verify($password, (string) $user['password_hash'])) {
+            if ($user) {
+                $failed=Database::connection()->prepare(
+                    'UPDATE users SET failed_login_count=failed_login_count+1,last_failed_login_at=UTC_TIMESTAMP() WHERE id=:id'
+                );
+                $failed->execute(['id'=>(int)$user['id']]);
+            }
             self::recordFailedAttempt();
             return false;
         }
+
+        Database::connection()->prepare(
+            'UPDATE users SET last_login_at=UTC_TIMESTAMP(),failed_login_count=0 WHERE id=:id'
+        )->execute(['id'=>(int)$user['id']]);
 
         unset($_SESSION['_login_guard']);
         session_regenerate_id(true);
