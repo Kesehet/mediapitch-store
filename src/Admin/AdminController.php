@@ -10,6 +10,7 @@ use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\UserRepository;
 use Throwable;
 
 final class AdminController
@@ -33,7 +34,10 @@ final class AdminController
                 if (Auth::attempt((string)($_POST['email'] ?? ''), (string)($_POST['password'] ?? ''))) {
                     $this->redirect('/admin');
                 }
-                $this->setFlash('error', 'Invalid email or password.');
+                $message = Auth::loginBlocked()
+                    ? 'Too many failed sign-in attempts. Try again in about ' . max(1, (int)ceil(Auth::retryAfter()/60)) . ' minute(s).'
+                    : 'Invalid email or password.';
+                $this->setFlash('error', $message);
                 $this->redirect('/admin/login');
             }
         }
@@ -53,6 +57,51 @@ final class AdminController
         if ($path === '/admin' && $method === 'GET') {
             View::render('admin/dashboard', array_merge($this->repo->dashboard(), $this->common('Dashboard')), 'admin/layout');
             return true;
+        }
+
+        if ($path === '/admin/account' && $method === 'GET') {
+            View::render('admin/account', $this->common('My Account'), 'admin/layout');
+            return true;
+        }
+        if ($path === '/admin/account/password' && $method === 'POST') {
+            $this->requireCsrf();
+            try {
+                $user=Auth::user();
+                Auth::changePassword(
+                    (int)$user['id'],
+                    (string)($_POST['current_password']??''),
+                    (string)($_POST['new_password']??''),
+                    (string)($_POST['new_password_confirmation']??'')
+                );
+                $this->setFlash('success','Password changed successfully.');
+            } catch (Throwable $e) {
+                $this->setFlash('error',$e->getMessage());
+            }
+            $this->redirect('/admin/account');
+        }
+
+        if (str_starts_with($path, '/admin/users')) {
+            if (!Auth::isAdministrator()) { http_response_code(403); exit('Forbidden'); }
+            $usersRepo=new UserRepository();
+            if ($path === '/admin/users' && $method === 'GET') {
+                $editId=isset($_GET['edit'])?(int)$_GET['edit']:null;
+                View::render('admin/users', array_merge([
+                    'users'=>$usersRepo->all(),
+                    'editUser'=>$usersRepo->find($editId),
+                ],$this->common($editId?'Edit User':'Users')), 'admin/layout');
+                return true;
+            }
+            if ($path === '/admin/users/save' && $method === 'POST') {
+                $this->requireCsrf();
+                try {
+                    $current=Auth::user();
+                    $usersRepo->save($_POST,!empty($_POST['id'])?(int)$_POST['id']:null,(int)$current['id']);
+                    $this->setFlash('success','User saved.');
+                } catch (Throwable $e) {
+                    $this->setFlash('error','User could not be saved: '.$e->getMessage());
+                }
+                $this->redirect('/admin/users');
+            }
         }
 
         if ($path === '/admin/categories' && $method === 'GET') {
