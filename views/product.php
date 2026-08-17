@@ -2,6 +2,8 @@
 $features = !empty($product['features_json']) ? json_decode((string) $product['features_json'], true) : [];
 $pros = !empty($product['pros_json']) ? json_decode((string) $product['pros_json'], true) : [];
 $cons = !empty($product['cons_json']) ? json_decode((string) $product['cons_json'], true) : [];
+$gallery = !empty($product['gallery_json']) ? json_decode((string) $product['gallery_json'], true) : [];
+if(!is_array($gallery))$gallery=[];
 $name = $product['display_title'] ?: $product['title'];
 $specifications = $product['specifications'] ?? [];
 $specValue = static function (array $spec): string {
@@ -12,7 +14,10 @@ $specValue = static function (array $spec): string {
     };
 };
 $productSchema=['@context'=>'https://schema.org','@type'=>'Product','name'=>$name,'description'=>(string)($product['short_description'] ?? '')];
-if(!empty($product['main_image_url'])) $productSchema['image']=$product['main_image_url'];
+$schemaImages=[];
+if(!empty($product['main_image_url']))$schemaImages[]=$product['main_image_url'];
+foreach($gallery as $image){if(is_string($image)&&$image!=='')$schemaImages[]=$image;}
+if($schemaImages)$productSchema['image']=array_values(array_unique($schemaImages));
 if(!empty($product['brand_name'])) $productSchema['brand']=['@type'=>'Brand','name'=>$product['brand_name']];
 if(!empty($product['asin'])) $productSchema['sku']=$product['asin'];
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
@@ -26,12 +31,18 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
 <section class="section">
     <div class="container"><nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a><?php if(!empty($product['category_name'])&&!empty($product['category_slug'])):?> · <a href="<?= e(url('category/'.$product['category_slug'])) ?>"><?= e($product['category_name']) ?></a><?php endif;?> · <?= e($name) ?></nav></div>
     <div class="container product-detail-grid">
-        <div class="product-detail-image">
-            <?php if (!empty($product['main_image_url'])): ?>
-                <img src="<?= e($product['main_image_url']) ?>" alt="<?= e($name) ?>">
-            <?php else: ?>
-                <div class="image-placeholder">Product image</div>
-            <?php endif; ?>
+        <div>
+            <div class="product-detail-image" id="product-main-image">
+                <?php if (!empty($product['main_image_url'])): ?>
+                    <img src="<?= e($product['main_image_url']) ?>" alt="<?= e($name) ?>">
+                <?php else: ?>
+                    <div class="image-placeholder">Product image</div>
+                <?php endif; ?>
+            </div>
+            <?php if($gallery):?><div class="product-gallery" aria-label="Product gallery">
+                <?php if(!empty($product['main_image_url'])):?><button type="button" class="product-gallery-thumb active" data-image="<?= e($product['main_image_url']) ?>"><img src="<?= e($product['main_image_url']) ?>" alt="<?= e($name) ?> main image"></button><?php endif;?>
+                <?php foreach($gallery as $i=>$image): if(!is_string($image)||$image==='')continue;?><button type="button" class="product-gallery-thumb" data-image="<?= e($image) ?>"><img src="<?= e($image) ?>" alt="<?= e($name) ?> image <?= (int)$i+1 ?>" loading="lazy"></button><?php endforeach;?>
+            </div><?php endif;?>
         </div>
         <div>
             <?php if (!empty($product['category_name'])): ?><div class="eyebrow"><?= e($product['category_name']) ?></div><?php endif; ?>
@@ -74,3 +85,5 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
 <?php if (!empty($product['full_description'])): ?>
 <section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><p><?= nl2br(e((string)$product['full_description'])) ?></p></div></section>
 <?php endif; ?>
+
+<?php if($gallery):?><script>(function(){const box=document.getElementById('product-main-image');const thumbs=[...document.querySelectorAll('.product-gallery-thumb')];if(!box||!thumbs.length)return;thumbs.forEach(btn=>btn.addEventListener('click',()=>{const src=btn.dataset.image;if(!src)return;let img=box.querySelector('img');if(!img){box.innerHTML='<img alt="">';img=box.querySelector('img');}img.src=src;img.alt=<?= json_encode($name,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;thumbs.forEach(t=>t.classList.remove('active'));btn.classList.add('active');}));})();</script><?php endif;?>
