@@ -12,6 +12,12 @@
     "sort-packages": true
   },
   "scripts": {
+    "post-install-cmd": [
+      "@php database/composer-deploy.php"
+    ],
+    "post-update-cmd": [
+      "@php database/composer-deploy.php"
+    ],
     "deploy-db": "@php database/deploy.php"
   }
 }
