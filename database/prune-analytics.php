@@ -18,8 +18,8 @@ $targets=[
 
 foreach($targets as $target){
     $table=$target['table'];$days=(int)$target['days'];
-    $stmt=$db->prepare("DELETE FROM {$table} WHERE created_at < (UTC_TIMESTAMP() - INTERVAL :days DAY)");
-    $stmt->bindValue(':days',$days,PDO::PARAM_INT);
-    $stmt->execute();
+    $cutoff=gmdate('Y-m-d H:i:s',time()-($days*86400));
+    $stmt=$db->prepare("DELETE FROM {$table} WHERE created_at < :cutoff");
+    $stmt->execute(['cutoff'=>$cutoff]);
     echo sprintf("%s: removed %d row(s) older than %d days.\n",$table,$stmt->rowCount(),$days);
 }
