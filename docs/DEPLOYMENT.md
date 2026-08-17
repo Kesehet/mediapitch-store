@@ -45,7 +45,17 @@ For analytics retention, schedule:
 35 3 * * * cd /path/to/mediapitch-store && /usr/bin/composer prune-analytics --quiet >> /var/log/mediapitch-prune.log 2>&1
 ```
 
-## Post-deploy smoke test
+## Automated smoke test
+After deployment, run:
+
+```bash
+composer smoke-test
+```
+
+This is non-destructive. It checks PHP/extensions, production env basics, DB connectivity, required tables, migration tracking, an active user/admin presence and upload-directory writability. A non-zero exit code means at least one required check failed. GD is reported as a warning because the app can operate without it, but thumbnails/original-image optimization are reduced.
+
+## Browser smoke test
+After `composer smoke-test` passes:
 1. `/health` returns HTTP 200 with `{"status":"ok","database":"ok"}`.
 2. Homepage loads with CSS/JS.
 3. `/admin/login` loads and remains on the production host after login.
