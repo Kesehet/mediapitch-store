@@ -9,6 +9,7 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use Throwable;
 
@@ -42,8 +43,14 @@ final class ReviewAdminController
             if(!Csrf::validate(isset($_POST['_csrf'])?(string)$_POST['_csrf']:null)){http_response_code(419);exit('Invalid or expired form token.');}
             $status=(string)($_POST['status']??'draft');
             if(in_array($status,['published','scheduled'],true)&&!Auth::canPublish()){http_response_code(403);exit('Forbidden');}
+            $existingId=!empty($_POST['id'])?(int)$_POST['id']:null;
+            $old=$existingId?$this->reviews->adminReview($existingId):null;
             try{
-                $id=$this->reviews->save($_POST,(int)Auth::user()['id'],!empty($_POST['id'])?(int)$_POST['id']:null);
+                $id=$this->reviews->save($_POST,(int)Auth::user()['id'],$existingId);
+                $newSlug=trim((string)($_POST['slug']??''));
+                if($old && !empty($old['slug']) && $newSlug!=='' && $old['slug']!==$newSlug){
+                    (new RedirectRepository())->upsert('/review/'.$old['slug'],'/review/'.$newSlug);
+                }
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
             }catch(Throwable $e){$this->setFlash('error',$e->getMessage());$this->redirect('/admin/reviews');}
         }
