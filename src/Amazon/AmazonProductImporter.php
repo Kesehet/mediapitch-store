@@ -17,16 +17,22 @@ final class AmazonProductImporter
         if(!preg_match('/^[A-Z0-9]{10}$/',$asin))throw new RuntimeException('Amazon result does not contain a valid ASIN.');
         $title=trim((string)($item['itemInfo']['title']['displayValue']??''));
         if($title==='')throw new RuntimeException('Amazon result does not contain a product title.');
+        $marketplace=strtolower(trim((string)($settings['marketplace']??'')));
+        if($marketplace==='')throw new RuntimeException('Amazon marketplace is required for import.');
 
         $detailUrl=trim((string)($item['detailPageURL']??''))?:null;
         $image=$this->image($item);
         $features=$this->features($item);
         [$price,$currency]=$this->price($item);
-        $marketplace=trim((string)($settings['marketplace']??''))?:null;
         $db=Database::connection();
 
-        $stmt=$db->prepare('SELECT * FROM products WHERE asin=:asin LIMIT 1');
-        $stmt->execute(['asin'=>$asin]);
+        // Prefer an exact marketplace match. A legacy row with no marketplace
+        // may be claimed once, which upgrades older single-market imports safely.
+        $stmt=$db->prepare(
+            "SELECT * FROM products WHERE asin=:asin AND (api_marketplace=:marketplace OR api_marketplace IS NULL OR api_marketplace='')
+             ORDER BY CASE WHEN api_marketplace=:marketplace_order THEN 0 ELSE 1 END,id ASC LIMIT 1"
+        );
+        $stmt->execute(['asin'=>$asin,'marketplace'=>$marketplace,'marketplace_order'=>$marketplace]);
         $existing=$stmt->fetch(PDO::FETCH_ASSOC);
         if($existing){
             $overrides=(new ProductOverrides())->forProduct($existing);
@@ -41,8 +47,7 @@ final class AmazonProductImporter
             );
             $update->execute([
                 'title'=>$overrides['title']?$existing['title']:$title,
-                'source'=>$hybrid?'hybrid':'amazon_api',
-                'marketplace'=>$marketplace,
+                'source'=>$hybrid?'hybrid':'amazon_api','marketplace'=>$marketplace,
                 'image'=>$overrides['main_image_url']?$existing['main_image_url']:$image,
                 'features'=>$overrides['features_json']?$existing['features_json']:$features,
                 'price'=>$overrides['price']?$existing['price']:$price,
@@ -70,52 +75,32 @@ final class AmazonProductImporter
     {
         [$price,$currency,$displayPrice]=$this->price($item,true);
         return [
-            'asin'=>(string)($item['asin']??''),
-            'title'=>(string)($item['itemInfo']['title']['displayValue']??'Untitled Amazon product'),
-            'image'=>$this->image($item),
-            'features'=>json_decode((string)$this->features($item),true)?:[],
-            'price'=>$price,'currency'=>$currency,'display_price'=>$displayPrice,
-            'detail_url'=>(string)($item['detailPageURL']??''),
+            'asin'=>(string)($item['asin']??''),'title'=>(string)($item['itemInfo']['title']['displayValue']??'Untitled Amazon product'),
+            'image'=>$this->image($item),'features'=>json_decode((string)$this->features($item),true)?:[],
+            'price'=>$price,'currency'=>$currency,'display_price'=>$displayPrice,'detail_url'=>(string)($item['detailPageURL']??''),
             'availability'=>(string)($item['offersV2']['listings'][0]['availability']['message']??''),
         ];
     }
 
     private function image(array $item): ?string
     {
-        foreach(['large','medium','small'] as $size){$url=trim((string)($item['images']['primary'][$size]['url']??''));if($url!=='')return $url;}
-        return null;
+        foreach(['large','medium','small'] as $size){$url=trim((string)($item['images']['primary'][$size]['url']??''));if($url!=='')return $url;}return null;
     }
 
     private function features(array $item): ?string
     {
-        $values=$item['itemInfo']['features']['displayValues']??[];
-        if(!is_array($values))return null;
-        $values=array_values(array_filter(array_map(static fn($v)=>trim((string)$v),$values)));
-        return $values?json_encode($values,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null;
+        $values=$item['itemInfo']['features']['displayValues']??[];if(!is_array($values))return null;$values=array_values(array_filter(array_map(static fn($v)=>trim((string)$v),$values)));return $values?json_encode($values,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null;
     }
 
     private function price(array $item,bool $withDisplay=false): array
     {
-        $money=$item['offersV2']['listings'][0]['price']['money']??[];
-        $amount=isset($money['amount'])&&is_numeric($money['amount'])?(float)$money['amount']:null;
-        $currency=trim((string)($money['currency']??''))?:null;
-        $display=trim((string)($money['displayAmount']??''))?:null;
-        return $withDisplay?[$amount,$currency,$display]:[$amount,$currency];
+        $money=$item['offersV2']['listings'][0]['price']['money']??[];$amount=isset($money['amount'])&&is_numeric($money['amount'])?(float)$money['amount']:null;$currency=trim((string)($money['currency']??''))?:null;$display=trim((string)($money['displayAmount']??''))?:null;return $withDisplay?[$amount,$currency,$display]:[$amount,$currency];
     }
 
     private function uniqueSlug(string $title,string $asin): string
     {
-        $value=$title;
-        if(function_exists('iconv')){$ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$value);if(is_string($ascii)&&$ascii!=='')$value=$ascii;}
-        $base=trim(preg_replace('/[^a-z0-9]+/','-',strtolower($value))??'','-');
-        if($base==='')$base='amazon-product';
-        $base=substr($base,0,220);
-        $candidate=$base;
-        $db=Database::connection();$n=1;
-        while(true){
-            $stmt=$db->prepare('SELECT 1 FROM products WHERE slug=:slug LIMIT 1');$stmt->execute(['slug'=>$candidate]);
-            if(!$stmt->fetchColumn())return $candidate;
-            $candidate=substr($base,0,205).'-'.strtolower($asin).($n>1?'-'.$n:'');$n++;
-        }
+        $value=$title;if(function_exists('iconv')){$ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$value);if(is_string($ascii)&&$ascii!=='')$value=$ascii;}
+        $base=trim(preg_replace('/[^a-z0-9]+/','-',strtolower($value))??'','-');if($base==='')$base='amazon-product';$base=substr($base,0,220);$candidate=$base;$db=Database::connection();$n=1;
+        while(true){$stmt=$db->prepare('SELECT 1 FROM products WHERE slug=:slug LIMIT 1');$stmt->execute(['slug'=>$candidate]);if(!$stmt->fetchColumn())return $candidate;$candidate=substr($base,0,205).'-'.strtolower($asin).($n>1?'-'.$n:'');$n++;}
     }
 }
