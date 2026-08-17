@@ -45,8 +45,8 @@ $ogImage = $ogImage
         </a>
         <nav class="main-nav" aria-label="Main navigation">
             <a href="/#categories">Categories</a>
-            <a href="/#guides">Best Products</a>
             <a href="/#guides">Buying Guides</a>
+            <a href="/comparisons">Comparisons</a>
             <a href="/blog">Blog</a>
         </nav>
         <form class="header-search" action="/search" method="get" role="search">
