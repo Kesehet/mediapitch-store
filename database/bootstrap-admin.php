@@ -25,6 +25,17 @@ if(strlen($password)<8){
 }
 
 $db=Database::connection();
+$columns=[];
+try{
+    foreach($db->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_ASSOC) as $row){
+        $field=(string)($row['Field']??'');
+        if($field!=='')$columns[$field]=true;
+    }
+}catch(Throwable){
+    // Oldest supported schema fallback; security migration can add tracking later.
+}
+$hasSecurityColumns=isset($columns['failed_login_count'],$columns['last_failed_login_at']);
+
 $db->beginTransaction();
 try{
     // Prefer the explicitly configured email. If this is an older installation
@@ -43,12 +54,10 @@ try{
 
     $passwordHash=password_hash($password,PASSWORD_DEFAULT);
     if($user){
-        $update=$db->prepare(
-            "UPDATE users
-             SET name=:name,email=:email,password_hash=:password_hash,role='administrator',active=1,
-                 failed_login_count=0,last_failed_login_at=NULL
-             WHERE id=:id"
-        );
+        $sql="UPDATE users SET name=:name,email=:email,password_hash=:password_hash,role='administrator',active=1";
+        if($hasSecurityColumns)$sql.=',failed_login_count=0,last_failed_login_at=NULL';
+        $sql.=' WHERE id=:id';
+        $update=$db->prepare($sql);
         $update->execute([
             'name'=>$name,
             'email'=>$email,
@@ -58,10 +67,11 @@ try{
         $id=(int)$user['id'];
         $action='updated';
     }else{
-        $insert=$db->prepare(
-            "INSERT INTO users (name,email,password_hash,role,active,failed_login_count,last_failed_login_at)
-             VALUES (:name,:email,:password_hash,'administrator',1,0,NULL)"
-        );
+        if($hasSecurityColumns){
+            $insert=$db->prepare("INSERT INTO users (name,email,password_hash,role,active,failed_login_count,last_failed_login_at) VALUES (:name,:email,:password_hash,'administrator',1,0,NULL)");
+        }else{
+            $insert=$db->prepare("INSERT INTO users (name,email,password_hash,role,active) VALUES (:name,:email,:password_hash,'administrator',1)");
+        }
         $insert->execute(['name'=>$name,'email'=>$email,'password_hash'=>$passwordHash]);
         $id=(int)$db->lastInsertId();
         $action='created';
@@ -69,6 +79,7 @@ try{
 
     $db->commit();
     fwrite(STDOUT,"Bootstrap administrator {$action}: {$email} (user #{$id}).\n");
+    if(!$hasSecurityColumns)fwrite(STDOUT,"User security tracking columns are not present yet; credential sync used legacy-schema compatibility.\n");
     fwrite(STDOUT,"Credentials were synchronized from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD.\n");
 }catch(Throwable $e){
     if($db->inTransaction())$db->rollBack();
