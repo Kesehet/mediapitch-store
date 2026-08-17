@@ -1,6 +1,8 @@
 <?php
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
+use MediaPitch\Core\Database;
+use MediaPitch\Services\ProductOverrides;
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '/admin';
 $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/admin.css');
 $browserTitle = str_replace(' — ', ' | ', ($pageTitle ?? 'Admin') . ' | MediaPitch');
@@ -8,8 +10,28 @@ $canCatalog=Auth::canManageProducts();
 $canContent=Auth::canEditContent();
 $canMedia=Auth::canUploadMedia();
 $isAdmin=Auth::isAdministrator();
+$productSyncState=null;
+if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$syncMatch)){
+  try{
+    $stmt=Database::connection()->prepare('SELECT id,source,asin,api_marketplace,last_synced_at,manual_override_json FROM products WHERE id=:id LIMIT 1');
+    $stmt->execute(['id'=>(int)$syncMatch[1]]);
+    $syncProduct=$stmt->fetch(PDO::FETCH_ASSOC);
+    if($syncProduct){
+      $productSyncState=[
+        'id'=>(int)$syncProduct['id'],
+        'source'=>(string)$syncProduct['source'],
+        'asin'=>(string)($syncProduct['asin']??''),
+        'marketplace'=>(string)($syncProduct['api_marketplace']??''),
+        'last_synced_at'=>$syncProduct['last_synced_at']?:null,
+        'overrides'=>(new ProductOverrides())->forProduct($syncProduct),
+      ];
+    }
+  }catch(Throwable $syncError){
+    if((bool)env('APP_DEBUG',false))error_log('Product sync UI state failed: '.$syncError->getMessage());
+  }
+}
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-editor.css"><script src="/assets/admin-editor.js" defer></script></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-editor.css"><script src="/assets/admin-editor.js" defer></script><script src="/assets/product-sync.js" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
 <body class="admin-body">
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
