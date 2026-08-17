@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Repositories;
 
+use InvalidArgumentException;
 use MediaPitch\Core\Database;
 use PDO;
 
@@ -111,6 +112,69 @@ final class AdminRepository
         return (int)$db->lastInsertId();
     }
 
+    public function specificationDefinitions(): array
+    {
+        return Database::connection()->query(
+            'SELECT sd.*, c.name AS category_name
+             FROM specification_definitions sd
+             JOIN categories c ON c.id=sd.category_id
+             ORDER BY c.name, sd.sort_order, sd.name'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function specificationDefinition(?int $id): ?array
+    {
+        if (!$id) return null;
+        $stmt = Database::connection()->prepare('SELECT * FROM specification_definitions WHERE id=:id LIMIT 1');
+        $stmt->execute(['id'=>$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function saveSpecificationDefinition(array $data, ?int $id = null): int
+    {
+        $db = Database::connection();
+        $type = (string)($data['data_type'] ?? 'text');
+        if (!in_array($type, ['text','number','boolean','select'], true)) {
+            $type = 'text';
+        }
+        $options = array_values(array_unique(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($data['options'] ?? '')) ?: []))));
+        if ($type === 'select' && !$options) {
+            throw new InvalidArgumentException('Select specifications require at least one option.');
+        }
+        $params = [
+            'category_id' => (int)($data['category_id'] ?? 0),
+            'name' => trim((string)($data['name'] ?? '')),
+            'slug' => trim((string)($data['slug'] ?? '')),
+            'unit' => trim((string)($data['unit'] ?? '')) ?: null,
+            'data_type' => $type,
+            'options_json' => $type === 'select' ? json_encode($options, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'filterable' => !empty($data['filterable']) ? 1 : 0,
+            'comparable' => !empty($data['comparable']) ? 1 : 0,
+            'sort_order' => (int)($data['sort_order'] ?? 0),
+        ];
+        if ($params['category_id'] < 1 || $params['name'] === '' || $params['slug'] === '') {
+            throw new InvalidArgumentException('Category, name and slug are required.');
+        }
+
+        if ($id) {
+            $params['id'] = $id;
+            $stmt = $db->prepare(
+                'UPDATE specification_definitions SET category_id=:category_id,name=:name,slug=:slug,unit=:unit,data_type=:data_type,
+                 options_json=:options_json,filterable=:filterable,comparable=:comparable,sort_order=:sort_order WHERE id=:id'
+            );
+            $stmt->execute($params);
+            return $id;
+        }
+
+        $stmt = $db->prepare(
+            'INSERT INTO specification_definitions (category_id,name,slug,unit,data_type,options_json,filterable,comparable,sort_order)
+             VALUES (:category_id,:name,:slug,:unit,:data_type,:options_json,:filterable,:comparable,:sort_order)'
+        );
+        $stmt->execute($params);
+        return (int)$db->lastInsertId();
+    }
+
     public function products(): array
     {
         return Database::connection()->query(
@@ -128,6 +192,20 @@ final class AdminRepository
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    public function productSpecificationValues(?int $productId): array
+    {
+        if (!$productId) return [];
+        $stmt = Database::connection()->prepare(
+            'SELECT specification_definition_id, value_text, value_number, value_boolean FROM product_specifications WHERE product_id=:id'
+        );
+        $stmt->execute(['id'=>$productId]);
+        $values = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $values[(int)$row['specification_definition_id']] = $row;
+        }
+        return $values;
     }
 
     public function saveProduct(array $data, ?int $id = null): int
@@ -162,19 +240,83 @@ final class AdminRepository
             'active' => !empty($data['active']) ? 1 : 0,
         ];
 
-        $fields = array_keys($params);
-        if ($id) {
-            $params['id'] = $id;
-            $sets = implode(',', array_map(static fn($f) => "$f=:$f", $fields));
-            $stmt = $db->prepare("UPDATE products SET $sets WHERE id=:id");
-            $stmt->execute($params);
+        $db->beginTransaction();
+        try {
+            $fields = array_keys($params);
+            if ($id) {
+                $params['id'] = $id;
+                $sets = implode(',', array_map(static fn($f) => "$f=:$f", $fields));
+                $stmt = $db->prepare("UPDATE products SET $sets WHERE id=:id");
+                $stmt->execute($params);
+            } else {
+                $columns = implode(',', $fields);
+                $values = implode(',', array_map(static fn($f) => ":$f", $fields));
+                $stmt = $db->prepare("INSERT INTO products ($columns) VALUES ($values)");
+                $stmt->execute($params);
+                $id = (int)$db->lastInsertId();
+            }
+
+            $this->saveProductSpecifications($id, $params['category_id'], is_array($data['spec'] ?? null) ? $data['spec'] : []);
+            $db->commit();
             return $id;
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
         }
-        $columns = implode(',', $fields);
-        $values = implode(',', array_map(static fn($f) => ":$f", $fields));
-        $stmt = $db->prepare("INSERT INTO products ($columns) VALUES ($values)");
-        $stmt->execute($params);
-        return (int)$db->lastInsertId();
+    }
+
+    private function saveProductSpecifications(int $productId, ?int $categoryId, array $submitted): void
+    {
+        $db = Database::connection();
+        $db->prepare('DELETE FROM product_specifications WHERE product_id=:id')->execute(['id'=>$productId]);
+        if (!$categoryId) return;
+
+        $stmt = $db->prepare(
+            'SELECT id,data_type,options_json FROM specification_definitions WHERE category_id=:category_id ORDER BY sort_order,id'
+        );
+        $stmt->execute(['category_id'=>$categoryId]);
+        $insert = $db->prepare(
+            'INSERT INTO product_specifications (product_id,specification_definition_id,value_text,value_number,value_boolean)
+             VALUES (:product_id,:definition_id,:value_text,:value_number,:value_boolean)'
+        );
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $definition) {
+            $definitionId = (int)$definition['id'];
+            $raw = $submitted[$definitionId] ?? null;
+            if ($raw === null || $raw === '') continue;
+
+            $valueText = null;
+            $valueNumber = null;
+            $valueBoolean = null;
+            switch ($definition['data_type']) {
+                case 'number':
+                    if (!is_numeric($raw)) throw new InvalidArgumentException('A numeric specification contains an invalid value.');
+                    $valueNumber = (float)$raw;
+                    break;
+                case 'boolean':
+                    if (!in_array((string)$raw, ['0','1'], true)) throw new InvalidArgumentException('A yes/no specification contains an invalid value.');
+                    $valueBoolean = (int)$raw;
+                    break;
+                case 'select':
+                    $options = json_decode((string)$definition['options_json'], true);
+                    if (!is_array($options) || !in_array((string)$raw, $options, true)) {
+                        throw new InvalidArgumentException('A selected specification option is invalid.');
+                    }
+                    $valueText = (string)$raw;
+                    break;
+                default:
+                    $valueText = trim((string)$raw);
+                    if ($valueText === '') continue 2;
+            }
+
+            $insert->execute([
+                'product_id'=>$productId,
+                'definition_id'=>$definitionId,
+                'value_text'=>$valueText,
+                'value_number'=>$valueNumber,
+                'value_boolean'=>$valueBoolean,
+            ]);
+        }
     }
 
     public function guides(): array
