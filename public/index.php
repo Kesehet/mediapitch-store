@@ -216,12 +216,20 @@ try {
     }
 
     if ($method === 'GET' && $path === '/search') {
-        $query=trim((string)($_GET['q']??''));$page=max(1,(int)($_GET['page']??1));
+        $query=trim((string)($_GET['q']??''));
+        $page=max(1,(int)($_GET['page']??1));
+        $categoryId=max(0,(int)($_GET['category']??0));
+        $results=$query!==''?$searchRepo->search($query,$page,12,$categoryId?:null):['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[],'result_count'=>0,'pagination'=>['page'=>1,'pages'=>1,'product_total'=>0]];
+        if($query!==''&&$page===1){
+            try{$searchRepo->recordQuery($query,$categoryId?:null,(int)($results['result_count']??0));}catch(Throwable $searchLogError){if((bool)env('APP_DEBUG',false))error_log('Search analytics write failed: '.$searchLogError->getMessage());}
+        }
         View::render('search',[
             'pageTitle'=>$query!==''?'Search: '.$query.' — MediaPitch':'Search — MediaPitch',
             'metaDescription'=>'Search MediaPitch products, categories, buying guides, comparisons and articles.',
             'query'=>$query,
-            'results'=>$query!==''?$searchRepo->search($query,$page):['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[],'pagination'=>['page'=>1,'pages'=>1,'product_total'=>0]],
+            'selectedCategory'=>$categoryId,
+            'searchCategories'=>$searchRepo->categoryOptions(),
+            'results'=>$results,
         ]);
         exit;
     }
