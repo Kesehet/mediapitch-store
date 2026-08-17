@@ -108,11 +108,13 @@ final class AdminController
         }
 
         if ($path === '/admin/categories' && $method === 'GET') {
+            $editId=isset($_GET['edit'])?(int)$_GET['edit']:null;
             View::render('admin/categories', array_merge([
                 'categories'=>$this->repo->categories(),
+                'category'=>$this->repo->category($editId),
                 'categoryOptions'=>$this->repo->categoryOptions(),
                 'mediaItems'=>$media(),
-            ], $this->common('Categories')), 'admin/layout');
+            ], $this->common($editId?'Edit Category':'Categories')), 'admin/layout');
             return true;
         }
         if ($path === '/admin/categories/save' && $method === 'POST') {
@@ -123,6 +125,12 @@ final class AdminController
             } catch (Throwable $e) {
                 $this->setFlash('error','Category could not be saved: ' . $e->getMessage());
             }
+            $this->redirect('/admin/categories');
+        }
+        if($method==='POST' && preg_match('#^/admin/categories/(\d+)/(archive|restore)$#',$path,$m)){
+            $this->requireEditor();$this->requireCsrf();
+            $this->repo->setCategoryActive((int)$m[1],$m[2]==='restore');
+            $this->setFlash('success',$m[2]==='restore'?'Category restored.':'Category archived.');
             $this->redirect('/admin/categories');
         }
 
