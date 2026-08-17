@@ -6,6 +6,7 @@ use MediaPitch\Admin\AdminController;
 use MediaPitch\Admin\AnalyticsAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
+use MediaPitch\Admin\RedirectAdminController;
 use MediaPitch\Admin\ReviewAdminController;
 use MediaPitch\Admin\SettingsAdminController;
 use MediaPitch\Core\Database;
@@ -17,6 +18,7 @@ use MediaPitch\Repositories\ComparisonCatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 use MediaPitch\Repositories\SettingsRepository;
@@ -29,6 +31,7 @@ $comparisonRepo = new ComparisonRepository();
 $comparisonCatalog = new ComparisonCatalogRepository();
 $reviewRepo = new ReviewRepository();
 $searchRepo = new SearchRepository();
+$redirectRepo = new RedirectRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -45,6 +48,11 @@ try {
     if (str_starts_with($path, '/admin/analytics')) {
         $analyticsAdmin = new AnalyticsAdminController(new AnalyticsRepository());
         if ($analyticsAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/redirects')) {
+        $redirectAdmin = new RedirectAdminController($redirectRepo);
+        if ($redirectAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/reviews')) {
@@ -73,6 +81,16 @@ try {
         $query=trim((string)($_GET['q']??''));
         echo json_encode(['suggestions'=>$searchRepo->suggestions($query)],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
         exit;
+    }
+
+    if($method==='GET' && !str_starts_with($path,'/api/') && $path!=='/health'){
+        $redirect=$redirectRepo->resolve($path);
+        if($redirect){
+            $destination=(string)$redirect['to_url'];
+            if(str_starts_with($destination,'/')) $destination=url(ltrim($destination,'/'));
+            header('Location: '.$destination,true,(int)$redirect['status_code']);
+            exit;
+        }
     }
 
     if ($method === 'GET' && $path === '/') {
