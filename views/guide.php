@@ -1,5 +1,19 @@
+<?php
+$guideSchema=['@context'=>'https://schema.org','@type'=>'Article','headline'=>$guide['title'],'description'=>(string)($guide['excerpt'] ?? ''),'mainEntityOfPage'=>url('guide/'.$guide['slug'])];
+if(!empty($guide['featured_image_url'])) $guideSchema['image']=$guide['featured_image_url'];
+if(!empty($guide['published_at'])) $guideSchema['datePublished']=date(DATE_ATOM,strtotime((string)$guide['published_at']));
+if(!empty($guide['updated_at'])) $guideSchema['dateModified']=date(DATE_ATOM,strtotime((string)$guide['updated_at']));
+$breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
+  ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
+  ['@type'=>'ListItem','position'=>2,'name'=>'Buying Guides','item'=>url().'#guides'],
+  ['@type'=>'ListItem','position'=>3,'name'=>$guide['title'],'item'=>url('guide/'.$guide['slug'])],
+]];
+?>
+<script type="application/ld+json"><?= json_encode($guideSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <section class="guide-hero section-soft">
     <div class="container narrow">
+        <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · Buying Guides · <?= e($guide['title']) ?></nav>
         <span class="eyebrow">Buying Guide</span>
         <h1><?= e($guide['title']) ?></h1>
         <?php if (!empty($guide['excerpt'])): ?><p class="lead"><?= e($guide['excerpt']) ?></p><?php endif; ?>
