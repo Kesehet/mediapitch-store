@@ -1,6 +1,7 @@
 Options -Indexes
 RewriteEngine On
 RewriteRule ^sitemap\.xml$ sitemap.php [QSA,L]
+RewriteRule ^api/v1(?:/.*)?$ api-v1.php [QSA,L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
