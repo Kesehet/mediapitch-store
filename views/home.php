@@ -1,4 +1,4 @@
-<?php $siteSettings=$siteSettings??[]; ?>
+<?php $siteSettings=$siteSettings??[]; $deals=$deals??[]; $dealsTitle=$dealsTitle??'Deals worth a look'; ?>
 <section class="hero">
     <div class="container hero-grid">
         <div>
@@ -79,6 +79,27 @@
 </section>
 <?php endif; ?>
 
+<?php if(!empty($deals)): ?>
+<section class="section section-soft" id="deals">
+    <div class="container">
+        <div class="section-head"><div><span class="eyebrow">Deals</span><h2><?= e($dealsTitle) ?></h2></div></div>
+        <div class="product-grid">
+            <?php foreach($deals as $product): $displayPrice=public_product_price($product); ?>
+                <article class="product-card">
+                    <a class="product-image" href="<?= e(url('product/'.$product['slug'])) ?>"><?php if(!empty($product['main_image_url'])):?><img src="<?= e($product['main_image_url']) ?>" alt="<?= e($product['display_title'] ?: $product['title']) ?>" loading="lazy"><?php else:?><span class="image-placeholder">Product image</span><?php endif;?></a>
+                    <div class="card-body">
+                        <span class="badge">Deal pick</span>
+                        <h3><a href="<?= e(url('product/'.$product['slug'])) ?>"><?= e($product['display_title'] ?: $product['title']) ?></a></h3>
+                        <?php if($displayPrice!==null):?><p class="price"><?= e(($product['currency']??'INR').' '.number_format($displayPrice,0)) ?></p><?php endif;?>
+                        <a class="button button-secondary" href="<?= e(url('product/'.$product['slug'])) ?>">View product</a>
+                    </div>
+                </article>
+            <?php endforeach;?>
+        </div>
+    </div>
+</section>
+<?php endif;?>
+
 <?php if (($siteSettings['home_comparisons']??true) && !empty($comparisons)): ?>
 <section class="section section-soft" id="comparisons">
     <div class="container">
@@ -113,6 +134,6 @@
 </section>
 <?php endif; ?>
 
-<?php if (empty($categories) && empty($products) && empty($guides) && empty($articles) && empty($comparisons)): ?>
+<?php if (empty($categories) && empty($products) && empty($guides) && empty($articles) && empty($comparisons) && empty($deals)): ?>
 <section class="section"><div class="container empty-state"><h2>Your storefront is ready for content.</h2><p>Import the database schema, add categories and products, and this homepage will populate automatically.</p></div></section>
 <?php endif; ?>
