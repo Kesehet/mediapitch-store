@@ -33,17 +33,29 @@ final class MediaAdminController
 
         if ($path === '/admin/media' && $method === 'GET') {
             $query=trim((string)($_GET['q']??''));
-            $categories=Auth::canManageProducts()
-                ? Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC)
-                : [];
+            $items=[];$categories=[];$schemaError=null;
+            try{
+                $categories=Auth::canManageProducts()
+                    ? Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC)
+                    : [];
+                $items=$this->repo->all(100,$query);
+            }catch(Throwable $e){
+                $message=$e->getMessage();
+                if(str_contains($message,"Table") || str_contains($message,'Base table or view not found')){
+                    $schemaError='The Media Library database table is not installed yet. Run `composer deploy-db` (or redeploy the latest main branch) to apply pending migrations.';
+                    error_log('MediaPitch media schema is incomplete: '.$message);
+                }else{
+                    throw $e;
+                }
+            }
             View::render('admin/media', [
                 'pageTitle'=>'Media',
                 'adminUser'=>Auth::user(),
-                'items'=>$this->repo->all(100,$query),
+                'items'=>$items,
                 'query'=>$query,
                 'categories'=>$categories,
                 'success'=>$this->flash('success'),
-                'error'=>$this->flash('error'),
+                'error'=>$schemaError ?? $this->flash('error'),
             ], 'admin/layout');
             return true;
         }
