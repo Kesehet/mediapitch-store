@@ -8,6 +8,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
   ['@type'=>'ListItem','position'=>2,'name'=>'Buying Guides','item'=>url().'#guides'],
   ['@type'=>'ListItem','position'=>3,'name'=>$guide['title'],'item'=>url('guide/'.$guide['slug'])],
 ]];
+$relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forContent((int)$guide['id'],!empty($guide['category_id'])?(int)$guide['category_id']:null);
 ?>
 <script type="application/ld+json"><?= json_encode($guideSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
@@ -60,3 +61,4 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
 <?php endif; ?>
 
 <section class="section"><div class="container narrow affiliate-panel"><strong>Affiliate disclosure</strong><p>MediaPitch may earn from qualifying purchases made through Amazon links. Rankings and editorial recommendations are managed by MediaPitch.</p></div></section>
+<?php require __DIR__.'/partials/related-content.php'; ?>
