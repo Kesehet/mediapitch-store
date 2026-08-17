@@ -8,6 +8,7 @@ use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
+use MediaPitch\Repositories\ContentRepository;
 use Throwable;
 
 final class AdminController
@@ -130,6 +131,35 @@ final class AdminController
             } catch (Throwable $e) {
                 $this->setFlash('error','Product could not be saved: ' . $e->getMessage());
                 $this->redirect('/admin/products');
+            }
+        }
+
+        $contentRepo = new ContentRepository();
+        if ($path === '/admin/blog' && $method === 'GET') {
+            View::render('admin/blog', array_merge(['posts'=>$contentRepo->adminPosts()], $this->common('Blog')), 'admin/layout');
+            return true;
+        }
+        if ($method === 'GET' && ($path === '/admin/blog/new' || preg_match('#^/admin/blog/(\d+)/edit$#', $path, $m))) {
+            $id=isset($m[1]) ? (int)$m[1] : null;
+            View::render('admin/blog-form', array_merge([
+                'post'=>$contentRepo->adminPost($id),
+                'categories'=>$this->repo->categoryOptions(),
+            ], $this->common($id ? 'Edit Article' : 'New Article')), 'admin/layout');
+            return true;
+        }
+        if ($path === '/admin/blog/save' && $method === 'POST') {
+            $this->requireCsrf();
+            $status=(string)($_POST['status'] ?? 'draft');
+            if (in_array($status,['published','scheduled'],true) && !Auth::canPublish()) {
+                http_response_code(403); echo 'You do not have permission to publish or schedule.'; return true;
+            }
+            try {
+                $id=$contentRepo->savePost($_POST,(int)Auth::user()['id'],!empty($_POST['id'])?(int)$_POST['id']:null);
+                $this->setFlash('success','Article saved.');
+                $this->redirect('/admin/blog/' . $id . '/edit');
+            } catch (Throwable $e) {
+                $this->setFlash('error','Article could not be saved: ' . $e->getMessage());
+                $this->redirect('/admin/blog');
             }
         }
 
