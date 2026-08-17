@@ -58,6 +58,11 @@ final class Auth
         return self::user() !== null;
     }
 
+    public static function isAdministrator(): bool
+    {
+        return (string) (self::user()['role'] ?? '') === 'administrator';
+    }
+
     public static function canManageProducts(): bool
     {
         return in_array((string) (self::user()['role'] ?? ''), ['administrator', 'editor'], true);
