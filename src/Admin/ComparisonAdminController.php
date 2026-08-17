@@ -9,6 +9,7 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ComparisonRepository;
+use MediaPitch\Repositories\RedirectRepository;
 use Throwable;
 
 final class ComparisonAdminController
@@ -46,8 +47,14 @@ final class ComparisonAdminController
             if(in_array($status,['published','scheduled'],true)&&!Auth::canPublish()){
                 http_response_code(403);echo 'You do not have permission to publish or schedule.';return true;
             }
+            $existingId=!empty($_POST['id'])?(int)$_POST['id']:null;
+            $old=$existingId?$this->comparisons->adminComparison($existingId):null;
             try{
-                $id=$this->comparisons->save($_POST,(int)Auth::user()['id'],!empty($_POST['id'])?(int)$_POST['id']:null);
+                $id=$this->comparisons->save($_POST,(int)Auth::user()['id'],$existingId);
+                $newSlug=trim((string)($_POST['slug']??''));
+                if($old && !empty($old['slug']) && $newSlug!=='' && $old['slug']!==$newSlug){
+                    (new RedirectRepository())->upsert('/compare/'.$old['slug'],'/compare/'.$newSlug);
+                }
                 $this->setFlash('success','Comparison saved.');
                 $this->redirect('/admin/comparisons/'.$id.'/edit');
             }catch(Throwable $e){
