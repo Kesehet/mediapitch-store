@@ -3,6 +3,7 @@ RewriteEngine On
 
 # Serve public assets when the hosting document root points at the repository root.
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+RewriteRule ^sitemap\.xml$ public/sitemap.php [QSA,L]
 
 # Protect application internals and secrets from direct web access.
 RewriteRule ^(?:src|database|views)/ - [F,L]
