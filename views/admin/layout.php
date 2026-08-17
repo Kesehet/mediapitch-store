@@ -20,6 +20,7 @@ $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/adm
     <a class="<?= str_starts_with($currentPath,'/admin/blog')?'active':'' ?>" href="<?= e(url('admin/blog')) ?>">Blog</a>
     <a class="<?= str_starts_with($currentPath,'/admin/media')?'active':'' ?>" href="<?= e(url('admin/media')) ?>">Media</a>
     <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/analytics')?'active':'' ?>" href="<?= e(url('admin/analytics')) ?>">Analytics</a><?php endif;?>
+    <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/audit')?'active':'' ?>" href="<?= e(url('admin/audit')) ?>">Audit Log</a><?php endif;?>
     <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/redirects')?'active':'' ?>" href="<?= e(url('admin/redirects')) ?>">Redirects</a><?php endif;?>
     <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/users')?'active':'' ?>" href="<?= e(url('admin/users')) ?>">Users</a><?php endif;?>
     <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= $currentPath==='/admin/settings/site'?'active':'' ?>" href="<?= e(url('admin/settings/site')) ?>">Website Settings</a><?php endif;?>
