@@ -64,6 +64,50 @@ function safe_html(?string $value): string
     return Html::sanitize($value);
 }
 
+/**
+ * Return a price that is safe to display publicly.
+ * Amazon offer data is treated as fresh for one hour. Manual products are
+ * unaffected. The helper lazily looks up source/sync metadata when compact
+ * repository rows do not include it, and caches that lookup for the request.
+ */
+function public_product_price(array $product): ?float
+{
+    if (!isset($product['price']) || $product['price'] === null || $product['price'] === '') {
+        return null;
+    }
+
+    $source = isset($product['source']) ? (string) $product['source'] : null;
+    $lastSynced = isset($product['last_synced_at']) ? (string) $product['last_synced_at'] : null;
+
+    if (($source === null || $lastSynced === null) && !empty($product['id'])) {
+        static $metadata = [];
+        $id = (int) $product['id'];
+        if (!array_key_exists($id, $metadata)) {
+            try {
+                $stmt = Database::connection()->prepare('SELECT source,last_synced_at FROM products WHERE id=:id LIMIT 1');
+                $stmt->execute(['id' => $id]);
+                $metadata[$id] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable) {
+                $metadata[$id] = [];
+            }
+        }
+        $source ??= isset($metadata[$id]['source']) ? (string) $metadata[$id]['source'] : null;
+        $lastSynced ??= isset($metadata[$id]['last_synced_at']) ? (string) $metadata[$id]['last_synced_at'] : null;
+    }
+
+    if (in_array($source, ['amazon_api', 'hybrid'], true)) {
+        if ($lastSynced === null || $lastSynced === '') {
+            return null;
+        }
+        $stamp = strtotime($lastSynced . ' UTC');
+        if ($stamp === false || $stamp < time() - 3600) {
+            return null;
+        }
+    }
+
+    return (float) $product['price'];
+}
+
 function request_base_url(): ?string
 {
     if (PHP_SAPI === 'cli' || empty($_SERVER['HTTP_HOST'])) {
