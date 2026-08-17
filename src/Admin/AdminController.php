@@ -86,6 +86,26 @@ final class AdminController
             $this->redirect('/admin/brands');
         }
 
+        if ($path === '/admin/specifications' && $method === 'GET') {
+            $editId = isset($_GET['edit']) ? (int)$_GET['edit'] : null;
+            View::render('admin/specifications', array_merge([
+                'definitions'=>$this->repo->specificationDefinitions(),
+                'definition'=>$this->repo->specificationDefinition($editId),
+                'categories'=>$this->repo->categoryOptions(),
+            ], $this->common($editId ? 'Edit Specification' : 'Specifications')), 'admin/layout');
+            return true;
+        }
+        if ($path === '/admin/specifications/save' && $method === 'POST') {
+            $this->requireEditor(); $this->requireCsrf();
+            try {
+                $this->repo->saveSpecificationDefinition($_POST, !empty($_POST['id']) ? (int)$_POST['id'] : null);
+                $this->setFlash('success','Specification saved.');
+            } catch (Throwable $e) {
+                $this->setFlash('error','Specification could not be saved: ' . $e->getMessage());
+            }
+            $this->redirect('/admin/specifications');
+        }
+
         if ($path === '/admin/products' && $method === 'GET') {
             View::render('admin/products', array_merge(['products'=>$this->repo->products()], $this->common('Products')), 'admin/layout');
             return true;
@@ -96,6 +116,8 @@ final class AdminController
                 'product'=>$this->repo->product($id),
                 'categories'=>$this->repo->categoryOptions(),
                 'brands'=>$this->repo->brands(),
+                'specDefinitions'=>$this->repo->specificationDefinitions(),
+                'specValues'=>$this->repo->productSpecificationValues($id),
             ], $this->common($id ? 'Edit Product' : 'Add Product')), 'admin/layout');
             return true;
         }
