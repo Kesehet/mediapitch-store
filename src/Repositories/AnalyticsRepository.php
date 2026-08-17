@@ -6,6 +6,7 @@ namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
 use PDO;
+use Throwable;
 
 final class AnalyticsRepository
 {
@@ -35,6 +36,48 @@ final class AnalyticsRepository
         $ranks=$db->prepare("SELECT COALESCE(CAST(rank_position AS CHAR),'not ranked') AS label,COUNT(*) AS clicks FROM affiliate_clicks WHERE clicked_at BETWEEN :from AND :to GROUP BY rank_position ORDER BY clicks DESC LIMIT 25");
         $ranks->execute($params);
 
+        $search=['total'=>0,'zero_total'=>0,'top'=>[],'zero'=>[],'categories'=>[]];
+        try{
+            $searchTotal=$db->prepare('SELECT COUNT(*) FROM search_queries WHERE searched_at BETWEEN :from AND :to');
+            $searchTotal->execute($params);
+            $zeroTotal=$db->prepare('SELECT COUNT(*) FROM search_queries WHERE searched_at BETWEEN :from AND :to AND result_count=0');
+            $zeroTotal->execute($params);
+
+            $top=$db->prepare(
+                "SELECT sq.query_text,COALESCE(c.name,'All categories') AS category_name,COUNT(*) AS searches,ROUND(AVG(sq.result_count),1) AS avg_results
+                 FROM search_queries sq LEFT JOIN categories c ON c.id=sq.category_id
+                 WHERE sq.searched_at BETWEEN :from AND :to
+                 GROUP BY sq.query_text,sq.category_id,c.name ORDER BY searches DESC,sq.query_text LIMIT 25"
+            );
+            $top->execute($params);
+
+            $zero=$db->prepare(
+                "SELECT sq.query_text,COALESCE(c.name,'All categories') AS category_name,COUNT(*) AS searches
+                 FROM search_queries sq LEFT JOIN categories c ON c.id=sq.category_id
+                 WHERE sq.searched_at BETWEEN :from AND :to AND sq.result_count=0
+                 GROUP BY sq.query_text,sq.category_id,c.name ORDER BY searches DESC,sq.query_text LIMIT 25"
+            );
+            $zero->execute($params);
+
+            $searchCategories=$db->prepare(
+                "SELECT COALESCE(c.name,'All categories') AS category_name,COUNT(*) AS searches
+                 FROM search_queries sq LEFT JOIN categories c ON c.id=sq.category_id
+                 WHERE sq.searched_at BETWEEN :from AND :to
+                 GROUP BY sq.category_id,c.name ORDER BY searches DESC LIMIT 25"
+            );
+            $searchCategories->execute($params);
+
+            $search=[
+                'total'=>(int)$searchTotal->fetchColumn(),
+                'zero_total'=>(int)$zeroTotal->fetchColumn(),
+                'top'=>$top->fetchAll(PDO::FETCH_ASSOC),
+                'zero'=>$zero->fetchAll(PDO::FETCH_ASSOC),
+                'categories'=>$searchCategories->fetchAll(PDO::FETCH_ASSOC),
+            ];
+        }catch(Throwable){
+            // Search analytics migration may not have run yet during a rolling deploy.
+        }
+
         return [
             'total'=>(int)$total->fetchColumn(),
             'daily'=>$daily->fetchAll(PDO::FETCH_ASSOC),
@@ -43,6 +86,7 @@ final class AnalyticsRepository
             'cta'=>$cta->fetchAll(PDO::FETCH_ASSOC),
             'campaigns'=>$campaigns->fetchAll(PDO::FETCH_ASSOC),
             'ranks'=>$ranks->fetchAll(PDO::FETCH_ASSOC),
+            'search'=>$search,
         ];
     }
 
