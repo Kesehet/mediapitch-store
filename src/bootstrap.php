@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MediaPitch\Core\Database;
+use MediaPitch\Core\Html;
 
 spl_autoload_register(static function (string $class): void {
     $prefix = 'MediaPitch\\';
@@ -56,6 +57,11 @@ function env(string $key, mixed $default = null): mixed
 function e(?string $value): string
 {
     return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function safe_html(?string $value): string
+{
+    return Html::sanitize($value);
 }
 
 function url(string $path = ''): string
