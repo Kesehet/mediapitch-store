@@ -38,16 +38,20 @@ $ogImage = $ogImage
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/app.css">
     <link rel="stylesheet" href="/assets/catalog.css">
+    <link rel="stylesheet" href="/assets/accessibility.css">
     <script src="/assets/search.js" defer></script>
+    <script src="/assets/navigation.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="site-header">
     <div class="container header-row">
         <a class="brand" href="/" aria-label="<?= e($siteName) ?> home">
             <img src="https://raw.githubusercontent.com/Kesehet/mediapitch/main/images/media_pitchlogo.jpg" alt="MediaPitch" class="brand-logo">
             <span class="brand-store">STORE</span>
         </a>
-        <nav class="main-nav" aria-label="Main navigation">
+        <button class="mobile-nav-toggle" type="button" data-mobile-nav-toggle aria-expanded="false" aria-controls="main-nav">Menu</button>
+        <nav class="main-nav" id="main-nav" aria-label="Main navigation">
             <a href="/#categories">Categories</a>
             <a href="/#guides">Buying Guides</a>
             <a href="/comparisons">Comparisons</a>
@@ -59,7 +63,7 @@ $ogImage = $ogImage
     </div>
 </header>
 
-<main>
+<main id="main-content" tabindex="-1">
     <?= $content ?>
 </main>
 
