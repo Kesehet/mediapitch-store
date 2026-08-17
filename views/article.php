@@ -22,5 +22,5 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
     <?php if(!empty($post['excerpt'])):?><p class="lead"><?= e($post['excerpt']) ?></p><?php endif; ?>
   </div></header>
   <?php if(!empty($post['featured_image_url'])):?><div class="container narrow"><img class="article-hero" src="<?= e($post['featured_image_url']) ?>" alt="<?= e($post['title']) ?>"></div><?php endif; ?>
-  <section class="section"><div class="container narrow prose"><?= $post['body'] ?? '' ?></div></section>
+  <section class="section"><div class="container narrow prose"><?= safe_html($post['body'] ?? '') ?></div></section>
 </article>
