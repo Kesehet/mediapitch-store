@@ -40,6 +40,22 @@ try {
         exit;
     }
 
+    if ($method === 'GET' && preg_match('#^/category/([a-z0-9-]+)$#i', $path, $matches)) {
+        $category=$catalog->categoryBySlug($matches[1]);
+        if(!$category){
+            http_response_code(404);
+            View::render('404',['pageTitle'=>'Category not found','metaDescription'=>'']);
+            exit;
+        }
+        View::render('category',[
+            'pageTitle'=>($category['seo_title'] ?: $category['name']) . ' — MediaPitch Store',
+            'metaDescription'=>(string)($category['meta_description'] ?: $category['description']),
+            'canonicalUrl'=>url('category/' . $category['slug']),
+            'category'=>$category,
+        ]);
+        exit;
+    }
+
     if ($method === 'GET' && $path === '/blog') {
         View::render('blog-index', [
             'pageTitle'=>'MediaPitch Blog — Buying Advice & Product Guides',
@@ -88,6 +104,7 @@ try {
         View::render('product', [
             'pageTitle' => ($product['display_title'] ?: $product['title']) . ' — MediaPitch',
             'metaDescription' => (string) ($product['short_description'] ?? ''),
+            'canonicalUrl'=>url('product/' . $product['slug']),
             'product' => $product,
         ]);
         exit;
@@ -104,6 +121,8 @@ try {
         View::render('guide', [
             'pageTitle' => ($guide['seo_title'] ?: $guide['title']) . ' — MediaPitch',
             'metaDescription' => (string) ($guide['meta_description'] ?: $guide['excerpt']),
+            'canonicalUrl'=>$guide['canonical_url'] ?: url('guide/' . $guide['slug']),
+            'robotsIndex'=>(bool)$guide['robots_index'],
             'guide' => $guide,
         ]);
         exit;
