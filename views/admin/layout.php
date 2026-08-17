@@ -15,6 +15,7 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '
     <a class="<?= str_starts_with($currentPath,'/admin/guides')?'active':'' ?>" href="<?= e(url('admin/guides')) ?>">Buying Guides</a>
     <a class="<?= str_starts_with($currentPath,'/admin/comparisons')?'active':'' ?>" href="<?= e(url('admin/comparisons')) ?>">Comparisons</a>
     <a class="<?= str_starts_with($currentPath,'/admin/blog')?'active':'' ?>" href="<?= e(url('admin/blog')) ?>">Blog</a>
+    <a class="<?= str_starts_with($currentPath,'/admin/media')?'active':'' ?>" href="<?= e(url('admin/media')) ?>">Media</a>
   </nav>
   <div class="admin-user"><strong><?= e($adminUser['name'] ?? '') ?></strong><small><?= e($adminUser['role'] ?? '') ?></small>
     <form method="post" action="<?= e(url('admin/logout')) ?>"><?= Csrf::field() ?><button class="link-button">Sign out</button></form>
