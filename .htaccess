@@ -1,8 +1,10 @@
 Options -Indexes
 RewriteEngine On
 
-# Serve public assets when the hosting document root points at the repository root.
+# Serve public files when the hosting document root points at the repository root.
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
+RewriteRule ^robots\.txt$ public/robots.txt [L]
 RewriteRule ^sitemap\.xml$ public/sitemap.php [QSA,L]
 
 # Protect application internals and secrets from direct web access.
