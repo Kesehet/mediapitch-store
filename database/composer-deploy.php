@@ -9,12 +9,19 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 try {
     Database::connection()->query('SELECT 1');
 } catch (Throwable $e) {
-    fwrite(STDOUT, "Database is not available during the Composer phase; skipping automatic DB deployment.\n");
+    $production=strtolower((string)env('APP_ENV','production'))==='production';
+    $message="Database is not available during the Composer deployment phase.\n";
+    fwrite($production ? STDERR : STDOUT,$message);
     if ((bool) env('APP_DEBUG', false)) {
-        fwrite(STDOUT, 'Database connection detail: ' . $e->getMessage() . "\n");
+        fwrite($production ? STDERR : STDOUT, 'Database connection detail: ' . $e->getMessage() . "\n");
     }
-    fwrite(STDOUT, "Run `composer deploy-db` after production DB environment variables are available.\n");
-    exit(0);
+    fwrite($production ? STDERR : STDOUT, "Run `composer deploy-db` after the production DB environment is available.\n");
+
+    // In production, shipping code without its required schema is unsafe: the
+    // application can immediately fatal on missing tables/columns. Fail the
+    // deployment so the hosting platform cannot report success while leaving
+    // the database behind. Local/dev installs remain tolerant for setup flows.
+    exit($production ? 1 : 0);
 }
 
 $command = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/deploy.php');
