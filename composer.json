@@ -12,12 +12,6 @@
     "sort-packages": true
   },
   "scripts": {
-    "post-install-cmd": [
-      "@php database/deploy.php"
-    ],
-    "post-update-cmd": [
-      "@php database/deploy.php"
-    ],
     "deploy-db": "@php database/deploy.php"
   }
 }
