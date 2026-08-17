@@ -44,6 +44,7 @@ $run = static function (string $script): void {
 };
 
 $run('migrate.php');
+$run('verify-schema.php');
 $run('seed-defaults.php');
 $run('bootstrap-admin.php');
 
