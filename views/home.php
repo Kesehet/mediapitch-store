@@ -78,8 +78,29 @@
 </section>
 <?php endif; ?>
 
+<?php if (!empty($comparisons)): ?>
+<section class="section section-soft" id="comparisons">
+    <div class="container">
+        <div class="section-head"><div><span class="eyebrow">Compare</span><h2>Latest comparisons</h2></div><a href="<?= e(url('comparisons')) ?>">View all</a></div>
+        <div class="article-grid">
+            <?php foreach($comparisons as $comparison): ?>
+                <article class="article-card">
+                    <?php if(!empty($comparison['featured_image_url'])):?><img src="<?= e($comparison['featured_image_url']) ?>" alt="<?= e($comparison['title']) ?>" loading="lazy"><?php endif; ?>
+                    <div class="card-body">
+                        <span class="card-kicker"><?= e($comparison['category_name'] ?: 'Comparison') ?></span>
+                        <h3><a href="<?= e(url('compare/'.$comparison['slug'])) ?>"><?= e($comparison['title']) ?></a></h3>
+                        <p><?= e($comparison['excerpt'] ?? '') ?></p>
+                        <small><?= (int)$comparison['product_count'] ?> products compared</small>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if (!empty($articles)): ?>
-<section class="section section-soft" id="articles">
+<section class="section" id="articles">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Learn</span><h2>Latest articles</h2></div><a href="<?= e(url('blog')) ?>">View all</a></div>
         <div class="article-grid">
@@ -91,6 +112,6 @@
 </section>
 <?php endif; ?>
 
-<?php if (empty($categories) && empty($products) && empty($guides) && empty($articles)): ?>
+<?php if (empty($categories) && empty($products) && empty($guides) && empty($articles) && empty($comparisons)): ?>
 <section class="section"><div class="container empty-state"><h2>Your storefront is ready for content.</h2><p>Import the database schema, add categories and products, and this homepage will populate automatically.</p></div></section>
 <?php endif; ?>
