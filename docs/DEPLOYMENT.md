@@ -4,7 +4,7 @@
 1. Pull `main`.
 2. Composer installs/updates the project.
 3. Composer runs `database/composer-deploy.php`.
-4. If the production DB is reachable, it runs base schema -> unapplied migrations -> non-destructive seed defaults.
+4. If the production DB is reachable, it runs base schema -> unapplied migrations -> non-destructive seed defaults -> optional bootstrap-admin recovery.
 5. If DB credentials are not available during the Composer phase, application deployment continues and DB deployment can be run explicitly with `composer deploy-db`.
 
 ## Required production environment
@@ -27,6 +27,23 @@ MAIL_FROM=admin@mediapitch.in
 ```
 
 Never commit `.env` or production secrets.
+
+## Amazon Creators API refresh schedule
+If Amazon integration is enabled, schedule a server-side refresh at least daily so non-offer Creators API content is refreshed within Amazon's documented 24-hour cache window. Price/offer data is treated more strictly by the application and is hidden after one hour.
+
+Recommended cron example (adjust the PHP/Composer path for the host):
+
+```cron
+15 * * * * cd /path/to/mediapitch-store && /usr/bin/composer refresh-amazon --quiet >> /var/log/mediapitch-amazon-refresh.log 2>&1
+```
+
+Running hourly is preferred because offer data has a one-hour TTL. `composer refresh-amazon` only selects stale Amazon/hybrid products and batches GetItems calls safely. The command exits non-zero if refresh errors occur so hosting/cron monitoring can alert on failures.
+
+For analytics retention, schedule:
+
+```cron
+35 3 * * * cd /path/to/mediapitch-store && /usr/bin/composer prune-analytics --quiet >> /var/log/mediapitch-prune.log 2>&1
+```
 
 ## Post-deploy smoke test
 1. `/health` returns HTTP 200 with `{"status":"ok","database":"ok"}`.
