@@ -36,9 +36,29 @@ try{
     $db->query('SELECT 1');
     $check('Database connection',true);
 
-    $requiredTables=['users','categories','brands','products','content','content_products','product_specifications','specification_definitions','settings','affiliate_clicks','schema_migrations'];
+    $requiredTables=[
+        'users','categories','brands','products','content','content_products','product_specifications',
+        'specification_definitions','settings','affiliate_clicks','redirects','media','search_queries',
+        'admin_audit_log','password_resets','tags','content_tags','schema_migrations',
+    ];
     foreach($requiredTables as $table){
         try{$db->query('SELECT 1 FROM `'.$table.'` LIMIT 1');$check('Table '.$table,true);}catch(Throwable $e){$check('Table '.$table,false,substr($e->getMessage(),0,160));}
+    }
+
+    $requiredColumns=[
+        'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
+        'media'=>['thumbnail_path','optimized'],
+        'brands'=>['active'],
+        'specification_definitions'=>['active'],
+    ];
+    foreach($requiredColumns as $table=>$columns){
+        foreach($columns as $column){
+            try{
+                $stmt=$db->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table AND COLUMN_NAME=:column');
+                $stmt->execute(['table'=>$table,'column'=>$column]);
+                $check('Column '.$table.'.'.$column,(int)$stmt->fetchColumn()===1);
+            }catch(Throwable $e){$check('Column '.$table.'.'.$column,false,substr($e->getMessage(),0,160));}
+        }
     }
 
     try{$migrationCount=(int)$db->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn();$check('Migration tracking',true,$migrationCount.' migration(s) recorded');}catch(Throwable $e){$check('Migration tracking',false,substr($e->getMessage(),0,160));}
