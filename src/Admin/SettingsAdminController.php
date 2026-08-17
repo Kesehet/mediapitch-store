@@ -6,6 +6,7 @@ namespace MediaPitch\Admin;
 
 use MediaPitch\Amazon\AmazonProductImporter;
 use MediaPitch\Amazon\CreatorsApiClient;
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -34,8 +35,15 @@ final class SettingsAdminController
         }
         if($path==='/admin/settings/site/save'&&$method==='POST'){
             $this->requireCsrf();
-            try{$this->repo->saveSite($_POST);$this->setFlash('success','Website settings saved.');}
-            catch(Throwable $e){$this->setFlash('error','Website settings could not be saved: '.$e->getMessage());}
+            try{
+                $this->repo->saveSite($_POST);
+                Audit::record('settings.site.update','settings',null,'Updated website settings',[
+                    'site_name'=>(string)($_POST['site_name']??''),'tagline'=>(string)($_POST['tagline']??''),
+                    'home_categories'=>!empty($_POST['home_categories']),'home_products'=>!empty($_POST['home_products']),
+                    'home_guides'=>!empty($_POST['home_guides']),'home_comparisons'=>!empty($_POST['home_comparisons']),'home_articles'=>!empty($_POST['home_articles']),
+                ]);
+                $this->setFlash('success','Website settings saved.');
+            }catch(Throwable $e){$this->setFlash('error','Website settings could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/settings/site');
         }
 
@@ -49,8 +57,15 @@ final class SettingsAdminController
 
         if($path==='/admin/settings/amazon/save'&&$method==='POST'){
             $this->requireCsrf();
-            try{$this->repo->saveAmazon($_POST);$this->setFlash('success','Amazon settings saved securely.');}
-            catch(Throwable $e){$this->setFlash('error','Settings could not be saved: '.$e->getMessage());}
+            try{
+                $this->repo->saveAmazon($_POST);
+                Audit::record('settings.amazon.update','settings',null,'Updated Amazon Creators API settings',[
+                    'enabled'=>!empty($_POST['enabled']),'marketplace'=>(string)($_POST['marketplace']??''),
+                    'partner_tag'=>(string)($_POST['partner_tag']??''),'credential_version'=>(string)($_POST['credential_version']??''),
+                    'credential_secret'=>'[redacted]','credential_id'=>!empty($_POST['credential_id'])?'[configured]':'[unchanged]',
+                ]);
+                $this->setFlash('success','Amazon settings saved securely.');
+            }catch(Throwable $e){$this->setFlash('error','Settings could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/settings/amazon');
         }
 
@@ -61,9 +76,11 @@ final class SettingsAdminController
                 $result=(new CreatorsApiClient())->testCredentials($settings);
                 $stamp=gmdate('Y-m-d H:i:s');
                 $this->repo->setAmazonStatus($stamp,null);
+                Audit::record('amazon.connection.test','amazon',null,'Amazon authentication test succeeded',['expires_in'=>(int)$result['expires_in']]);
                 $this->setFlash('success','Amazon authentication succeeded. Token lifetime reported: '.(int)$result['expires_in'].' seconds.');
             }catch(Throwable $e){
                 $this->repo->setAmazonStatus(null,substr($e->getMessage(),0,1000));
+                Audit::record('amazon.connection.test_failed','amazon',null,'Amazon authentication test failed');
                 $this->setFlash('error','Amazon connection test failed: '.$e->getMessage());
             }
             $this->redirect('/admin/settings/amazon');
@@ -110,10 +127,12 @@ final class SettingsAdminController
                 if(!$items)throw new \RuntimeException('Amazon did not return that ASIN.');
                 $id=(new AmazonProductImporter())->import($items[0],$settings,$categoryId);
                 $this->repo->setAmazonStatus(gmdate('Y-m-d H:i:s'),null);
+                Audit::record('amazon.product.import','product',$id,'Imported/refreshed Amazon product',['asin'=>$asin,'category_id'=>$categoryId,'marketplace'=>(string)($settings['marketplace']??'')]);
                 $this->setFlash('success','Amazon product imported/refreshed. Review the editorial fields before activating it.');
                 $this->redirect('/admin/products/'.$id.'/edit');
             }catch(Throwable $e){
                 $this->repo->setAmazonStatus(null,substr($e->getMessage(),0,1000));
+                Audit::record('amazon.product.import_failed','product',null,'Amazon product import failed',['asin'=>$asin,'category_id'=>$categoryId]);
                 $this->setFlash('error','Amazon import failed: '.$e->getMessage());
                 $this->redirect('/admin/settings/amazon/import');
             }
