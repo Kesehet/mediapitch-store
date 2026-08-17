@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
 use MediaPitch\Admin\AnalyticsAdminController;
+use MediaPitch\Admin\CategoryAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
 use MediaPitch\Admin\RedirectAdminController;
@@ -15,6 +16,7 @@ use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\AnalyticsRepository;
 use MediaPitch\Repositories\CatalogRepository;
+use MediaPitch\Repositories\CategoryHierarchyRepository;
 use MediaPitch\Repositories\ComparisonCatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
@@ -35,6 +37,7 @@ $reviewRepo = new ReviewRepository();
 $searchRepo = new SearchRepository();
 $redirectRepo = new RedirectRepository();
 $relatedRepo = new RelatedContentRepository();
+$categoryHierarchy = new CategoryHierarchyRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -56,6 +59,11 @@ try {
     if (str_starts_with($path, '/admin/redirects')) {
         $redirectAdmin = new RedirectAdminController($redirectRepo);
         if ($redirectAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/categories')) {
+        $categoryAdmin = new CategoryAdminController(new AdminRepository());
+        if ($categoryAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/specifications')) {
@@ -134,6 +142,7 @@ try {
             'pageTitle'=>($category['seo_title'] ?: $category['name']).' — MediaPitch Store',
             'metaDescription'=>(string)($category['meta_description'] ?: $category['description']),
             'canonicalUrl'=>url('category/'.$category['slug']),'category'=>$category,
+            'breadcrumbs'=>$categoryHierarchy->ancestors((int)$category['id']),
         ]);
         exit;
     }
