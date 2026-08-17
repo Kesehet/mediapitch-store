@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
 use MediaPitch\Admin\ComparisonAdminController;
+use MediaPitch\Admin\MediaAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\CatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
+use MediaPitch\Repositories\MediaRepository;
 use MediaPitch\Repositories\SearchRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -26,6 +28,13 @@ if ($path === '//') {
 }
 
 try {
+    if (str_starts_with($path, '/admin/media')) {
+        $mediaAdmin = new MediaAdminController(new MediaRepository());
+        if ($mediaAdmin->handle($method, $path)) {
+            exit;
+        }
+    }
+
     if (str_starts_with($path, '/admin/comparisons')) {
         $comparisonAdmin = new ComparisonAdminController($comparisonRepo, new AdminRepository());
         if ($comparisonAdmin->handle($method, $path)) {
