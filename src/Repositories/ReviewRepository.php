@@ -71,12 +71,27 @@ final class ReviewRepository
 
     public function publishedBySlug(string $slug): ?array
     {
-        $stmt=Database::connection()->prepare(
-            "SELECT c.*,cp.score AS review_score,p.id AS product_id,p.title AS product_title,p.display_title,p.slug AS product_slug,p.main_image_url,p.price,p.currency,p.affiliate_url,b.name AS brand_name,u.name AS author_name
+        $db=Database::connection();
+        $stmt=$db->prepare(
+            "SELECT c.*,cp.score AS review_score,p.id AS product_id,p.category_id AS product_category_id,p.title AS product_title,p.display_title,p.slug AS product_slug,p.main_image_url,p.price,p.currency,p.affiliate_url,b.name AS brand_name,u.name AS author_name
              FROM content c JOIN content_products cp ON cp.content_id=c.id JOIN products p ON p.id=cp.product_id AND p.active=1
              LEFT JOIN brands b ON b.id=p.brand_id LEFT JOIN users u ON u.id=c.author_id
              WHERE c.type='review' AND c.slug=:slug AND c.status IN ('published','scheduled') AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP() LIMIT 1"
         );
-        $stmt->execute(['slug'=>$slug]); $row=$stmt->fetch(PDO::FETCH_ASSOC); return $row?:null;
+        $stmt->execute(['slug'=>$slug]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
+        if(!$row)return null;
+        $categoryId=(int)($row['product_category_id']?:$row['category_id']);
+        $row['related_products']=[];
+        if($categoryId>0){
+            $related=$db->prepare(
+                'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.custom_score,p.best_for_label,b.name AS brand_name
+                 FROM products p LEFT JOIN brands b ON b.id=p.brand_id
+                 WHERE p.active=1 AND p.category_id=:category_id AND p.id<>:product_id
+                 ORDER BY p.custom_score IS NULL,p.custom_score DESC,p.updated_at DESC LIMIT 4'
+            );
+            $related->execute(['category_id'=>$categoryId,'product_id'=>(int)$row['product_id']]);
+            $row['related_products']=$related->fetchAll(PDO::FETCH_ASSOC);
+        }
+        return $row;
     }
 }
