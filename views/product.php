@@ -3,6 +3,14 @@ $features = !empty($product['features_json']) ? json_decode((string) $product['f
 $pros = !empty($product['pros_json']) ? json_decode((string) $product['pros_json'], true) : [];
 $cons = !empty($product['cons_json']) ? json_decode((string) $product['cons_json'], true) : [];
 $name = $product['display_title'] ?: $product['title'];
+$specifications = $product['specifications'] ?? [];
+$specValue = static function (array $spec): string {
+    return match ($spec['data_type']) {
+        'number' => $spec['value_number'] !== null ? rtrim(rtrim((string)$spec['value_number'], '0'), '.') : '',
+        'boolean' => $spec['value_boolean'] === null ? '' : ((int)$spec['value_boolean'] === 1 ? 'Yes' : 'No'),
+        default => (string)($spec['value_text'] ?? ''),
+    };
+};
 ?>
 <section class="section">
     <div class="container product-detail-grid">
@@ -26,6 +34,19 @@ $name = $product['display_title'] ?: $product['title'];
         </div>
     </div>
 </section>
+
+<?php if (!empty($specifications)): ?>
+<section class="section section-soft">
+  <div class="container narrow">
+    <h2>Specifications</h2>
+    <div class="spec-table-wrap"><table class="spec-table"><tbody>
+      <?php foreach ($specifications as $spec): $value=$specValue($spec); if ($value==='') continue; ?>
+        <tr><th><?= e($spec['name']) ?></th><td><?= e($value) ?><?php if (!empty($spec['unit'])): ?> <?= e($spec['unit']) ?><?php endif; ?></td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+  </div>
+</section>
+<?php endif; ?>
 
 <?php if (!empty($features)): ?>
 <section class="section section-soft"><div class="container narrow"><h2>Key features</h2><ul class="feature-list"><?php foreach ($features as $feature): ?><li><?= e((string) $feature) ?></li><?php endforeach; ?></ul></div></section>
