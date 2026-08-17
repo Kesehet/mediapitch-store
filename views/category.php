@@ -2,15 +2,21 @@
 $active=$category['active_filters'] ?? ['brand'=>0,'min_price'=>null,'max_price'=>null,'min_score'=>null,'sort'=>'score','spec'=>[]];
 $filterOptions=$category['filter_options'] ?? ['brands'=>[],'specifications'=>[]];
 $pagination=$category['pagination'] ?? ['page'=>1,'pages'=>1,'total'=>count($category['products'] ?? [])];
+$breadcrumbs=$breadcrumbs??[['id'=>$category['id'],'name'=>$category['name'],'slug'=>$category['slug']]];
 $baseQuery=$_GET;
 unset($baseQuery['page']);
 $pageUrl=function(int $page) use($baseQuery,$category): string {
     $q=$baseQuery; $q['page']=$page;
     return url('category/' . $category['slug']) . '?' . http_build_query($q);
 };
+$breadcrumbItems=[['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()]];
+foreach($breadcrumbs as $crumb){$breadcrumbItems[]=['@type'=>'ListItem','position'=>count($breadcrumbItems)+1,'name'=>$crumb['name'],'item'=>url('category/'.$crumb['slug'])];}
+$breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>$breadcrumbItems];
 ?>
+<script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <section class="section">
   <div class="container narrow center">
+    <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a><?php foreach($breadcrumbs as $crumb):?> · <?php if((int)$crumb['id']===(int)$category['id']):?><?= e($crumb['name']) ?><?php else:?><a href="<?= e(url('category/'.$crumb['slug'])) ?>"><?= e($crumb['name']) ?></a><?php endif;?><?php endforeach;?></nav>
     <div class="eyebrow">Category</div>
     <h1><?= e($category['name']) ?></h1>
     <?php if(!empty($category['description'])):?><p class="lead"><?= e($category['description']) ?></p><?php endif; ?>
