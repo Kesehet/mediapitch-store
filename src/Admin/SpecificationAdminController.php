@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -36,8 +37,12 @@ final class SpecificationAdminController
 
         if($path==='/admin/specifications/save'&&$method==='POST'){
             $this->requireCsrf();
+            $id=!empty($_POST['id'])?(int)$_POST['id']:null;
             try{
-                $this->repo->saveSpecificationDefinition($_POST,!empty($_POST['id'])?(int)$_POST['id']:null);
+                $saved=$this->repo->saveSpecificationDefinition($_POST,$id);
+                Audit::record($id?'specification.update':'specification.create','specification',$saved,$id?'Updated specification':'Created specification',[
+                    'name'=>(string)($_POST['name']??''),'slug'=>(string)($_POST['slug']??''),'category_id'=>(int)($_POST['category_id']??0),'data_type'=>(string)($_POST['data_type']??'text'),
+                ]);
                 $this->setFlash('success','Specification saved.');
             }catch(Throwable $e){$this->setFlash('error','Specification could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/specifications');
@@ -46,9 +51,10 @@ final class SpecificationAdminController
         if($method==='POST'&&preg_match('#^/admin/specifications/(\d+)/(archive|restore)$#',$path,$m)){
             $this->requireCsrf();
             try{
-                $actions=new SpecificationAdminActions();
-                if($m[2]==='archive'){$actions->archive((int)$m[1]);$this->setFlash('success','Specification archived. Existing values were preserved.');}
-                else{$actions->restore((int)$m[1]);$this->setFlash('success','Specification restored. Re-enable filter/comparison flags if needed.');}
+                $id=(int)$m[1];$action=$m[2];$actions=new SpecificationAdminActions();
+                if($action==='archive'){$actions->archive($id);$this->setFlash('success','Specification archived. Existing values were preserved.');}
+                else{$actions->restore($id);$this->setFlash('success','Specification restored. Re-enable filter/comparison flags if needed.');}
+                Audit::record('specification.'.$action,'specification',$id,ucfirst($action).'d specification');
             }catch(Throwable $e){$this->setFlash('error',$e->getMessage());}
             $this->redirect('/admin/specifications');
         }
