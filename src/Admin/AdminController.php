@@ -67,6 +67,25 @@ final class AdminController
             $this->redirect('/admin/categories');
         }
 
+        if ($path === '/admin/brands' && $method === 'GET') {
+            $editId = isset($_GET['edit']) ? (int)$_GET['edit'] : null;
+            View::render('admin/brands', array_merge([
+                'brands'=>$this->repo->brands(),
+                'brand'=>$this->repo->brand($editId),
+            ], $this->common($editId ? 'Edit Brand' : 'Brands')), 'admin/layout');
+            return true;
+        }
+        if ($path === '/admin/brands/save' && $method === 'POST') {
+            $this->requireEditor(); $this->requireCsrf();
+            try {
+                $this->repo->saveBrand($_POST, !empty($_POST['id']) ? (int)$_POST['id'] : null);
+                $this->setFlash('success','Brand saved.');
+            } catch (Throwable $e) {
+                $this->setFlash('error','Brand could not be saved: ' . $e->getMessage());
+            }
+            $this->redirect('/admin/brands');
+        }
+
         if ($path === '/admin/products' && $method === 'GET') {
             View::render('admin/products', array_merge(['products'=>$this->repo->products()], $this->common('Products')), 'admin/layout');
             return true;
