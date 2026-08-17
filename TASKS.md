@@ -15,7 +15,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - Production `/health`: DB connection confirmed OK
 - Database deploy flow: base schema → migrations → non-destructive defaults
 - Bootstrap admin: created only when user count is zero
-- Amazon API is optional; manual CMS remains fully usable without it
+- Amazon API: optional; manual CMS remains fully usable without it
 
 ---
 
@@ -40,13 +40,14 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Seed defaults only when missing
 - [x] Seed bootstrap admin only when user count is zero
 - [x] Production DB connectivity verified through `/health`
+- [x] URL helper falls back to current production host if `APP_URL` is localhost/missing
 - [ ] `.editorconfig`
 - [ ] Coding-standard documentation
 - [ ] Version/release convention
 - [ ] Development environment documentation
 - [ ] Production deployment documentation
-- [ ] Verify admin CRUD against production DB
-- [ ] Add DB backup/rollback/smoke-test documentation
+- [ ] Verify full admin CRUD flow against production DB
+- [ ] DB backup/rollback/smoke-test documentation
 
 ---
 
@@ -95,8 +96,8 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Admin list/create/edit
 - [x] Website/logo URL fields
 - [x] Product-brand relationship
-- [ ] URL validation UX
-- [ ] Brand logo media picker
+- [x] Website/logo URL validation
+- [x] Brand logo media picker
 - [ ] Archive/delete
 - [ ] Public brand pages if useful
 
@@ -116,10 +117,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Product media-library picker
 - [x] Default MediaPitch/Fill Masjid seed data
 - [x] Product page escapes manual full-description text
-- [ ] Slug auto-generation
-- [ ] Friendly duplicate-slug validation
-- [ ] Duplicate ASIN warning
-- [ ] Archive/delete and duplicate-product action
+- [x] Slug auto-generation in UI and backend
+- [x] Friendly duplicate-slug validation
+- [x] ASIN normalization/validation and duplicate protection
+- [x] Archive/restore product action
+- [x] Duplicate-product action with copied specs and safe identity reset
 - [ ] Gallery editor
 - [ ] Related products / buying guides
 - [ ] Change history / bulk actions / CSV import-export
@@ -146,11 +148,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Header/footer and affiliate disclosure
 - [x] Hero search
 - [x] Featured categories/products/guides/articles
-- [x] Homepage links to category/blog routes
-- [ ] Trending comparisons section
-- [ ] Deals/featured products section
-- [ ] Homepage controls in admin
-- [ ] Mobile nav polish
+- [x] Homepage category/blog links
+- [x] Latest comparisons homepage section
+- [x] Homepage section controls in admin
+- [x] Site name/tagline/disclosure settings
+- [ ] Deals/featured-products merchandising section
+- [ ] Mobile navigation polish
 - [ ] Accessibility/keyboard/skip-link/focus-state review
 - [ ] Final visual QA against MediaPitch brand
 
@@ -201,13 +204,13 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Duplicate-product protection
 - [x] Editorial verdict and scheduling/SEO fields
 - [x] Public `/compare/{slug}`
+- [x] Public `/comparisons` index
 - [x] Category-aware dynamic spec comparison matrix
 - [x] Brand/score/best-for/price rows
 - [x] Affiliate CTA context tracking
 - [x] Sanitized verdict output
-- [ ] Comparison index
+- [x] Improved mobile table UX with sticky feature column
 - [ ] Related comparisons
-- [ ] Better mobile table UX
 - [ ] Comparison structured data if appropriate
 
 ## Reviews
@@ -250,10 +253,13 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Click tracking: product, content, rank, CTA, referrer, user agent, campaign
 - [x] Dashboard total clicks / top products
 - [x] Comparison CTA tracking
+- [x] Administrator affiliate analytics dashboard
+- [x] Date-range reports
+- [x] Product/content/CTA/rank/campaign breakdowns
+- [x] Daily click trend
+- [x] CSV export
 - [ ] Verify redirect/link behavior against current Amazon policy
 - [ ] Bot/internal filtering
-- [ ] Date/guide/comparison/CTA/rank/campaign reports
-- [ ] CSV export
 - [ ] Privacy/data-retention review
 
 ---
@@ -270,12 +276,14 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Media browser
 - [x] Alt-text capture
 - [x] Product/guide/blog/review/category media pickers
+- [x] Brand logo picker
 - [x] WebP thumbnail generation when available
 - [x] Graceful fallback without image-processing extensions
+- [x] Media search by filename/alt text
+- [x] Usage checks across products/categories/brands/content/galleries
+- [x] Safe delete only when unused
+- [x] Delete original + thumbnail files after DB removal
 - [ ] Original-image optimization/compression policy
-- [ ] Media search
-- [ ] Brand logo picker
-- [ ] Safe delete / usage checks
 - [ ] Storage abstraction for future S3/R2
 
 ---
@@ -328,12 +336,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 
 ---
 
-# 14. Settings, analytics & future work
-- [ ] Website settings page
-- [ ] Site name/tagline/global affiliate disclosure
-- [ ] Homepage section controls
+# 14. Settings & future work
+- [x] Website settings page
+- [x] Site name/tagline/global affiliate disclosure
+- [x] Homepage section controls
+- [x] Detailed click analytics dashboard/export
 - [ ] Redirect manager
-- [ ] Detailed click analytics dashboard
 - [ ] Multiple marketplaces
 - [ ] Newsletter/personalization/alerts
 - [ ] Other affiliate networks
@@ -342,11 +350,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 ---
 
 # Immediate next queue
-1. [~] Improve product authoring: slug generation, duplicate slug/ASIN validation
-2. [ ] Product archive + duplicate action
-3. [ ] Add brand URL validation and brand logo media picker
-4. [ ] Build comparison index and improve mobile comparison UX
-5. [ ] Add media search and safe delete/usage checks
-6. [ ] Build detailed affiliate analytics filters/export
-7. [ ] Build Amazon product search/import after policy review
+1. [~] Build redirect manager and automatic redirects when slugs change
+2. [ ] Add category archive/delete and nested breadcrumb hierarchy
+3. [ ] Add specification archive/delete and improve select-option UX
+4. [ ] Add product gallery editor
+5. [ ] Add related products/guides/articles/comparisons
+6. [ ] Improve guide product picker/ranking UX
+7. [ ] Finish Amazon policy review, then product search/import/sync
 8. [ ] Verify full admin CRUD flow on production
