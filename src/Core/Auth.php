@@ -11,6 +11,7 @@ use RuntimeException;
 final class Auth
 {
     private static ?array $userColumns = null;
+    private static bool $schemaChecked = false;
 
     public static function attempt(string $email, string $password): bool
     {
@@ -21,20 +22,11 @@ final class Auth
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Temporary bootstrap recovery: when both submitted values exactly match
-        // the explicitly configured bootstrap credentials, repair/create that one
-        // administrator account and continue this same login request. Blank the
-        // env password after recovery to disable this path completely.
         if((!$user || !password_verify($password,(string)$user['password_hash'])) && self::matchesBootstrapCredentials($email,$password)){
             $user=self::recoverBootstrapAdministrator($email,$password);
             unset($_SESSION['_login_guard']);
         }
 
-        // A browser/session lockout belongs to the password hash that existed
-        // when the failed attempts happened. If an administrator/password-reset
-        // workflow changes that hash, automatically discard the stale lockout so
-        // the newly issued password can be used immediately without weakening
-        // normal brute-force protection.
         if (self::loginBlocked()) {
             $guardFingerprint=(string)($_SESSION['_login_guard']['password_fingerprint'] ?? '');
             $currentFingerprint=$user ? self::passwordFingerprint((string)$user['password_hash']) : '';
@@ -111,6 +103,22 @@ final class Auth
             self::logout();
             return null;
         }
+
+        if(!self::$schemaChecked && PHP_SAPI!=='cli'){
+            $requestPath=(string)(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)?:'/');
+            if(str_starts_with($requestPath,'/admin')){
+                self::$schemaChecked=true;
+                try{
+                    SchemaRepair::ensureFeatureSchema();
+                    self::$userColumns=null;
+                }catch(\Throwable $e){
+                    error_log('MediaPitch CMS schema self-repair failed: '.$e->getMessage());
+                    http_response_code(503);
+                    exit('CMS database schema update could not be completed. Please run `composer deploy-db` or verify that the database user has CREATE/ALTER permissions.');
+                }
+            }
+        }
+
         $_SESSION['_auth_last_activity'] = time();
         return $_SESSION['user'];
     }
@@ -130,37 +138,31 @@ final class Auth
         return self::role() === 'administrator';
     }
 
-    /** Catalog/product/spec/media administration. */
     public static function canManageProducts(): bool
     {
         return in_array(self::role(), ['administrator', 'editor'], true);
     }
 
-    /** Create and edit editorial drafts. Writers are intentionally included. */
     public static function canEditContent(): bool
     {
         return in_array(self::role(), ['administrator', 'editor', 'writer'], true);
     }
 
-    /** Upload/select media for catalog or editorial work. */
     public static function canUploadMedia(): bool
     {
         return self::canManageProducts() || self::canEditContent();
     }
 
-    /** Publish or schedule editorial content. */
     public static function canPublish(): bool
     {
         return in_array(self::role(), ['administrator', 'editor'], true);
     }
 
-    /** SEO-focused access for future dedicated SEO workflows. */
     public static function canManageSeo(): bool
     {
         return in_array(self::role(), ['administrator', 'editor', 'seo_manager'], true);
     }
 
-    /** Users, credentials, integration settings, audit and sensitive analytics. */
     public static function canManageAdministration(): bool
     {
         return self::isAdministrator();
@@ -219,7 +221,6 @@ final class Auth
         return $configuredPassword!=='' && strlen($configuredPassword)>=8 && hash_equals($configuredEmail,$email) && hash_equals($configuredPassword,$password);
     }
 
-    /** @return array<string,mixed> */
     private static function recoverBootstrapAdministrator(string $email,string $password): array
     {
         $db=Database::connection();
@@ -269,7 +270,6 @@ final class Auth
                     if($name!=='')self::$userColumns[$name]=true;
                 }
             }catch(\Throwable){
-                // If introspection fails, behave like the oldest supported schema.
             }
         }
         return isset(self::$userColumns[$column]);
