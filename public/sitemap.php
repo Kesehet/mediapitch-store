@@ -8,7 +8,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 
 header('Content-Type: application/xml; charset=utf-8');
 
-$base=rtrim((string)env('APP_URL','https://store.mediapitch.in'),'/');
+$base=rtrim(url(),'/');
 $urls=[
     ['loc'=>$base.'/','lastmod'=>null],
     ['loc'=>$base.'/blog','lastmod'=>null],
