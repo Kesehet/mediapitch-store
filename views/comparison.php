@@ -1,4 +1,22 @@
-<?php $products=$comparison['products']??[]; $specs=$comparison['specifications']??[]; $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forContent((int)$comparison['id'],!empty($comparison['category_id'])?(int)$comparison['category_id']:null); ?>
+<?php
+$products=$comparison['products']??[];$specs=$comparison['specifications']??[];
+$relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forContent((int)$comparison['id'],!empty($comparison['category_id'])?(int)$comparison['category_id']:null);
+$comparisonUrl=url('compare/'.$comparison['slug']);
+$articleSchema=['@context'=>'https://schema.org','@type'=>'Article','headline'=>$comparison['title'],'description'=>(string)($comparison['excerpt']??''),'mainEntityOfPage'=>$comparisonUrl];
+if(!empty($comparison['featured_image_url']))$articleSchema['image']=$comparison['featured_image_url'];
+if(!empty($comparison['published_at']))$articleSchema['datePublished']=date(DATE_ATOM,strtotime((string)$comparison['published_at']));
+if(!empty($comparison['updated_at']))$articleSchema['dateModified']=date(DATE_ATOM,strtotime((string)$comparison['updated_at']));
+$itemList=['@context'=>'https://schema.org','@type'=>'ItemList','name'=>$comparison['title'].' products','itemListElement'=>[]];
+foreach($products as $i=>$product){$itemList['itemListElement'][]=['@type'=>'ListItem','position'=>$i+1,'item'=>['@type'=>'Product','name'=>$product['display_title']?:$product['title'],'url'=>url('product/'.$product['slug'])]];}
+$breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
+ ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
+ ['@type'=>'ListItem','position'=>2,'name'=>'Comparisons','item'=>url('comparisons')],
+ ['@type'=>'ListItem','position'=>3,'name'=>$comparison['title'],'item'=>$comparisonUrl],
+]];
+?>
+<script type="application/ld+json"><?= json_encode($articleSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<script type="application/ld+json"><?= json_encode($itemList,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <section class="section"><div class="container narrow">
 <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <a href="<?= e(url('comparisons')) ?>">Comparisons</a> · <?= e($comparison['title']) ?></nav>
 <?php if(!empty($comparison['category_name'])):?><div class="eyebrow"><a href="<?= e(url('category/'.$comparison['category_slug'])) ?>"><?= e($comparison['category_name']) ?></a></div><?php endif;?>
