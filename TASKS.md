@@ -16,6 +16,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - Database deploy flow: base schema → migrations → non-destructive defaults
 - Bootstrap admin: created only when user count is zero
 - Amazon API: optional; manual CMS remains fully usable without it
+- GitHub Actions PHP syntax workflow: confirmed running successfully on recent `main` commits
 
 ---
 
@@ -32,6 +33,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] `/health` endpoint
 - [x] 404/500 pages
 - [x] PHP 8.2 syntax workflow
+- [x] GitHub Actions workflow verified passing
 - [x] Landing-page DB fallback
 - [x] Redirect lookup fails open if DB is temporarily unavailable
 - [x] Migration runner and migration tracking
@@ -90,7 +92,8 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Category product pagination
 - [x] Category brand / price / score / sort filters
 - [x] Category dynamic specification filters
-- [ ] Nested breadcrumb hierarchy
+- [x] Nested breadcrumb hierarchy and BreadcrumbList schema
+- [x] Category slug auto-redirect
 
 ## Brands
 - [x] Brand model
@@ -175,12 +178,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Guide media picker
 - [x] Buying-guide Article schema
 - [x] Buying-guide breadcrumb UI/schema
-- [~] Product picker/ranking UX improvements
-- [ ] Product autocomplete/search in editor
-- [ ] Drag-and-drop ranking
-- [ ] Better duplicate-product UX
+- [x] Searchable product picker in editor
+- [x] Drag-and-drop ranking with automatic rank renumbering
+- [x] Duplicate-product prevention UX
+- [x] Guide rank/score field-name persistence bug fixed
+- [x] Related guides/articles/comparisons/reviews
 - [ ] FAQ / “How we selected” / table of contents
-- [ ] Related guides/articles/comparisons
 
 ---
 
@@ -196,10 +199,10 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Article breadcrumb UI/schema
 - [x] Sanitized rich-content public output
 - [x] Dynamic OG image output
+- [x] Related editorial content
 - [ ] Rich-text/Markdown editing UX
 - [ ] Tags
 - [ ] Product embeds
-- [ ] Related articles
 
 ---
 
@@ -216,7 +219,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Affiliate CTA context tracking
 - [x] Sanitized verdict output
 - [x] Improved mobile table UX with sticky feature column
-- [ ] Related comparisons
+- [x] Related comparisons/articles/guides/reviews
 - [ ] Comparison structured data if appropriate
 
 ## Reviews
@@ -229,7 +232,9 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Review structured data
 - [x] Review breadcrumb UI/schema
 - [x] Sanitized review body output
-- [ ] Related reviews/products
+- [x] Related editorial content
+- [x] Link back to reviewed product
+- [ ] Additional related-product recommendations
 
 ---
 
@@ -264,7 +269,8 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Product/content/CTA/rank/campaign breakdowns
 - [x] Daily click trend
 - [x] CSV export
-- [ ] Verify redirect/link behavior against current Amazon policy
+- [~] Amazon Associates/Creators API policy review
+- [x] One-hour freshness enforcement for API-derived Amazon prices on public surfaces
 - [ ] Bot/internal filtering
 - [ ] Privacy/data-retention review
 
@@ -306,15 +312,13 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] BlogPosting structured data
 - [x] Review structured data
 - [x] Buying-guide Article structured data
-- [x] Product/article/review/guide breadcrumb UI + schema
+- [x] Product/article/review/guide/category breadcrumb UI + schema
 - [x] Redirect admin UI
 - [x] Runtime redirect resolution
-- [x] Auto-redirect when product/blog/guide/comparison/review slugs change
-- [ ] Category breadcrumb schema / hierarchy
-- [ ] Category slug auto-redirect
+- [x] Auto-redirect when product/blog/guide/comparison/review/category slugs change
 - [ ] Comparison structured data if appropriate
 - [ ] SEO preview in editors
-- [ ] Internal-link helper
+- [ ] Internal-link helper beyond automatic related-content sections
 
 ---
 
@@ -324,7 +328,9 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Manual workflow independent of API
 - [x] Source abstraction and sync fields
 - [x] Current Creators API authentication/documentation reviewed
-- [ ] Complete Associates policy review for images, price freshness, caching/storage and disclosure
+- [x] OAuth access-token reuse/caching until near expiry
+- [x] One-hour public price freshness enforcement for API-derived offers
+- [~] Complete Associates policy review for images, price freshness, caching/storage and disclosure
 
 ## Settings
 - [x] Administrator-only Amazon settings page
@@ -334,13 +340,18 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Credentials excluded from public output
 
 ## Import & sync
-- [ ] Products → Import from Amazon
-- [ ] Product search/results/import
-- [ ] Map currently permitted fields
-- [ ] Store affiliate-attributed URL where supported
-- [ ] Preserve editorial/manual fields
-- [ ] Refresh imported data and field-level override strategy
-- [ ] API health / retry / last-sync UX
+- [x] Products → Import from Amazon
+- [x] Creators API SearchItems search/results screen
+- [x] GetItems re-fetch before import
+- [x] Map ASIN/title/image/features/offer price/currency/detail URL
+- [x] Store Amazon detail/affiliate URL returned by API
+- [x] New imports arrive inactive for editorial review
+- [x] Re-import existing ASINs rather than duplicating products
+- [x] Preserve MediaPitch editorial image/features for manual/hybrid records
+- [x] Refresh Amazon-owned title/price/link/sync fields on re-import
+- [ ] Background/bulk refresh workflow
+- [ ] API retry/backoff and richer health/last-sync UX
+- [ ] Field-level override controls in the product editor
 
 ---
 
@@ -358,11 +369,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 ---
 
 # Immediate next queue
-1. [~] Improve buying-guide product picker/ranking UX
-2. [ ] Add category breadcrumb hierarchy + category slug redirects
-3. [ ] Add related content to reviews/guides/comparisons/blog
-4. [ ] Add deals/featured-product merchandising controls
-5. [ ] Add global search category filter + search analytics
-6. [ ] Finish Amazon policy review, then product search/import/sync
-7. [ ] Add admin audit trail and complete permission matrix
-8. [ ] Verify full admin CRUD flow on production
+1. [ ] Add deals/featured-product merchandising controls
+2. [ ] Add global search category filter + search analytics
+3. [ ] Add admin audit trail and complete role permission matrix
+4. [ ] Finish Amazon policy review + retry/backoff/bulk refresh UX
+5. [ ] Add password reset workflow
+6. [ ] Add rich-text/Markdown editing UX and product embeds
+7. [ ] Add brand archive/public brand pages if useful
+8. [!] Verify full admin CRUD flow on production
