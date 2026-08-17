@@ -9,6 +9,7 @@ use MediaPitch\Admin\MediaAdminController;
 use MediaPitch\Admin\RedirectAdminController;
 use MediaPitch\Admin\ReviewAdminController;
 use MediaPitch\Admin\SettingsAdminController;
+use MediaPitch\Admin\SpecificationAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
@@ -55,6 +56,11 @@ try {
     if (str_starts_with($path, '/admin/redirects')) {
         $redirectAdmin = new RedirectAdminController($redirectRepo);
         if ($redirectAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/specifications')) {
+        $specAdmin = new SpecificationAdminController(new AdminRepository());
+        if ($specAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/reviews')) {
