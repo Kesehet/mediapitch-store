@@ -1,0 +1,1 @@
+<section class="section"><div class="container narrow empty-state"><span class="eyebrow">Error</span><h1>Something went wrong.</h1><p>Please try again. If the problem continues, check the application and database logs.</p><a class="button" href="/">Back to MediaPitch Store</a></div></section>
