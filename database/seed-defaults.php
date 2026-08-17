@@ -11,6 +11,23 @@ $db = Database::connection();
 $db->beginTransaction();
 
 try {
+    $userCount = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    if ($userCount === 0) {
+        $admin = $db->prepare(
+            'INSERT INTO users (name, email, password_hash, role, active)
+             VALUES (:name, :email, :password_hash, :role, 1)'
+        );
+        $admin->execute([
+            'name' => 'MediaPitch Admin',
+            'email' => 'admin@mediapitch.in',
+            'password_hash' => password_hash('Change me', PASSWORD_DEFAULT),
+            'role' => 'administrator',
+        ]);
+        fwrite(STDOUT, "Bootstrap administrator created: admin@mediapitch.in\n");
+    } else {
+        fwrite(STDOUT, "Users already exist; bootstrap administrator seed skipped.\n");
+    }
+
     $category = $db->prepare(
         "INSERT INTO categories (name, slug, description, sort_order, active)
          VALUES ('Books', 'books', 'Islamic books, children\'s books and educational reading from MediaPitch and Fill Masjid.', 10, 1)
