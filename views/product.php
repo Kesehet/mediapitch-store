@@ -4,6 +4,8 @@ $pros = !empty($product['pros_json']) ? json_decode((string) $product['pros_json
 $cons = !empty($product['cons_json']) ? json_decode((string) $product['cons_json'], true) : [];
 $gallery = !empty($product['gallery_json']) ? json_decode((string) $product['gallery_json'], true) : [];
 if(!is_array($gallery))$gallery=[];
+$relatedProducts=$relatedProducts??[];
+$relatedGuides=$relatedGuides??[];
 $name = $product['display_title'] ?: $product['title'];
 $specifications = $product['specifications'] ?? [];
 $specValue = static function (array $spec): string {
@@ -85,5 +87,17 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
 <?php if (!empty($product['full_description'])): ?>
 <section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><p><?= nl2br(e((string)$product['full_description'])) ?></p></div></section>
 <?php endif; ?>
+
+<?php if($relatedProducts):?>
+<section class="section"><div class="container"><div class="section-head"><div><span class="eyebrow">Keep comparing</span><h2>Related products</h2></div><?php if(!empty($product['category_slug'])):?><a href="<?= e(url('category/'.$product['category_slug'])) ?>">View category</a><?php endif;?></div><div class="product-grid">
+<?php foreach($relatedProducts as $item): $itemName=$item['display_title']?:$item['title'];?><article class="product-card"><a class="product-image" href="<?= e(url('product/'.$item['slug'])) ?>"><?php if(!empty($item['main_image_url'])):?><img src="<?= e($item['main_image_url']) ?>" alt="<?= e($itemName) ?>" loading="lazy"><?php else:?><span class="image-placeholder">Product image</span><?php endif;?></a><div class="card-body"><?php if(!empty($item['best_for_label'])):?><span class="badge"><?= e($item['best_for_label']) ?></span><?php endif;?><h3><a href="<?= e(url('product/'.$item['slug'])) ?>"><?= e($itemName) ?></a></h3><?php if(!empty($item['brand_name'])):?><p class="muted"><?= e($item['brand_name']) ?></p><?php endif;?><?php if($item['custom_score']!==null):?><div class="score">MediaPitch score <strong><?= e((string)$item['custom_score']) ?>/10</strong></div><?php endif;?><?php if($item['price']!==null):?><p class="price"><?= e(($item['currency']??'INR').' '.number_format((float)$item['price'],0)) ?></p><?php endif;?></div></article><?php endforeach;?>
+</div></div></section>
+<?php endif;?>
+
+<?php if($relatedGuides):?>
+<section class="section section-soft"><div class="container"><div class="section-head"><div><span class="eyebrow">Expert advice</span><h2>Buying guides featuring this product</h2></div></div><div class="article-grid">
+<?php foreach($relatedGuides as $guide):?><article class="article-card"><?php if(!empty($guide['featured_image_url'])):?><img src="<?= e($guide['featured_image_url']) ?>" alt="<?= e($guide['title']) ?>" loading="lazy"><?php endif;?><div class="card-body"><span class="card-kicker">Buying Guide</span><h3><a href="<?= e(url('guide/'.$guide['slug'])) ?>"><?= e($guide['title']) ?></a></h3><p><?= e($guide['excerpt']??'') ?></p></div></article><?php endforeach;?>
+</div></div></section>
+<?php endif;?>
 
 <?php if($gallery):?><script>(function(){const box=document.getElementById('product-main-image');const thumbs=[...document.querySelectorAll('.product-gallery-thumb')];if(!box||!thumbs.length)return;thumbs.forEach(btn=>btn.addEventListener('click',()=>{const src=btn.dataset.image;if(!src)return;let img=box.querySelector('img');if(!img){box.innerHTML='<img alt="">';img=box.querySelector('img');}img.src=src;img.alt=<?= json_encode($name,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>;thumbs.forEach(t=>t.classList.remove('active'));btn.classList.add('active');}));})();</script><?php endif;?>
