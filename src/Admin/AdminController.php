@@ -10,6 +10,7 @@ use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\UserRepository;
 use MediaPitch\Services\ProductAdminActions;
 use MediaPitch\Services\ProductAuthoring;
@@ -188,9 +189,13 @@ final class AdminController
         if ($path === '/admin/products/save' && $method === 'POST') {
             $this->requireEditor(); $this->requireCsrf();
             $existingId=!empty($_POST['id']) ? (int)$_POST['id'] : null;
+            $oldProduct=$existingId?$this->repo->product($existingId):null;
             try {
                 $data=(new ProductAuthoring())->prepare($_POST,$existingId);
                 $id=$this->repo->saveProduct($data,$existingId);
+                if($oldProduct && !empty($oldProduct['slug']) && $oldProduct['slug']!==$data['slug']){
+                    (new RedirectRepository())->upsert('/product/'.$oldProduct['slug'],'/product/'.$data['slug']);
+                }
                 $this->setFlash('success','Product saved.');
                 $this->redirect('/admin/products/' . $id . '/edit');
             } catch (Throwable $e) {
@@ -238,8 +243,14 @@ final class AdminController
             if (in_array($status,['published','scheduled'],true) && !Auth::canPublish()) {
                 http_response_code(403); echo 'You do not have permission to publish or schedule.'; return true;
             }
+            $existingId=!empty($_POST['id'])?(int)$_POST['id']:null;
+            $oldPost=$existingId?$contentRepo->adminPost($existingId):null;
             try {
-                $id=$contentRepo->savePost($_POST,(int)Auth::user()['id'],!empty($_POST['id'])?(int)$_POST['id']:null);
+                $id=$contentRepo->savePost($_POST,(int)Auth::user()['id'],$existingId);
+                $newSlug=trim((string)($_POST['slug']??''));
+                if($oldPost && !empty($oldPost['slug']) && $newSlug!=='' && $oldPost['slug']!==$newSlug){
+                    (new RedirectRepository())->upsert('/blog/'.$oldPost['slug'],'/blog/'.$newSlug);
+                }
                 $this->setFlash('success','Article saved.');
                 $this->redirect('/admin/blog/' . $id . '/edit');
             } catch (Throwable $e) {
@@ -268,8 +279,14 @@ final class AdminController
             if ($status === 'published' && !Auth::canPublish()) {
                 http_response_code(403); echo 'You do not have permission to publish.'; return true;
             }
+            $existingId=!empty($_POST['id'])?(int)$_POST['id']:null;
+            $oldGuide=$existingId?$this->repo->guide($existingId):null;
             try {
-                $id=$this->repo->saveGuide($_POST, (int)Auth::user()['id'], !empty($_POST['id']) ? (int)$_POST['id'] : null);
+                $id=$this->repo->saveGuide($_POST, (int)Auth::user()['id'],$existingId);
+                $newSlug=trim((string)($_POST['slug']??''));
+                if($oldGuide && !empty($oldGuide['slug']) && $newSlug!=='' && $oldGuide['slug']!==$newSlug){
+                    (new RedirectRepository())->upsert('/guide/'.$oldGuide['slug'],'/guide/'.$newSlug);
+                }
                 $this->setFlash('success','Buying guide saved.');
                 $this->redirect('/admin/guides/' . $id . '/edit');
             } catch (Throwable $e) {
