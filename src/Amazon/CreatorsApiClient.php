@@ -8,6 +8,8 @@ use RuntimeException;
 
 final class CreatorsApiClient
 {
+    private const RETRYABLE_STATUS=[429,500,502,503,504];
+
     public function testCredentials(array $settings): array
     {
         $token=$this->fetchToken($settings,true);
@@ -25,19 +27,9 @@ final class CreatorsApiClient
         if(empty($settings['enabled']))throw new RuntimeException('Amazon Creators API is disabled in settings.');
 
         $payload=[
-            'keywords'=>$keywords,
-            'searchIndex'=>'All',
-            'itemCount'=>$itemCount,
-            'marketplace'=>$marketplace,
-            'partnerTag'=>$partnerTag,
-            'resources'=>[
-                'images.primary.large',
-                'itemInfo.title',
-                'itemInfo.features',
-                'itemInfo.byLineInfo',
-                'offersV2.listings.price',
-                'offersV2.listings.availability',
-            ],
+            'keywords'=>$keywords,'searchIndex'=>'All','itemCount'=>$itemCount,
+            'marketplace'=>$marketplace,'partnerTag'=>$partnerTag,
+            'resources'=>['images.primary.large','itemInfo.title','itemInfo.features','itemInfo.byLineInfo','offersV2.listings.price','offersV2.listings.availability'],
         ];
         $json=$this->apiRequest('searchItems',$payload,$settings);
         $items=$json['searchResult']['items']??[];
@@ -52,6 +44,7 @@ final class CreatorsApiClient
         $marketplace=trim((string)($settings['marketplace']??''));
         $partnerTag=trim((string)($settings['partner_tag']??''));
         if($marketplace===''||$partnerTag==='')throw new RuntimeException('Amazon marketplace and Partner Tag are required.');
+        if(empty($settings['enabled']))throw new RuntimeException('Amazon Creators API is disabled in settings.');
         $payload=[
             'itemIds'=>$asins,'itemIdType'=>'ASIN','marketplace'=>$marketplace,'partnerTag'=>$partnerTag,
             'resources'=>['images.primary.large','itemInfo.title','itemInfo.features','itemInfo.byLineInfo','offersV2.listings.price','offersV2.listings.availability'],
@@ -64,27 +57,38 @@ final class CreatorsApiClient
     private function apiRequest(string $operation,array $payload,array $settings): array
     {
         if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL extension is required for Creators API requests.');
-        $token=$this->fetchToken($settings);
         $marketplace=trim((string)($settings['marketplace']??''));
         $endpoint='https://creatorsapi.amazon/catalog/v1/'.$operation;
-        $ch=curl_init($endpoint);
-        curl_setopt_array($ch,[
-            CURLOPT_POST=>true,
-            CURLOPT_POSTFIELDS=>json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES),
-            CURLOPT_HTTPHEADER=>[
-                'Authorization: Bearer '.$token['access_token'],
-                'Content-Type: application/json','Accept: application/json','x-marketplace: '.$marketplace,
-            ],
-            CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_FOLLOWLOCATION=>false,
-        ]);
-        $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
-        if($response===false)throw new RuntimeException('Amazon API request failed: '.$error);
-        $json=json_decode((string)$response,true);
-        if($status<200||$status>=300||!is_array($json)){
-            $message=$this->errorMessage($json);
-            throw new RuntimeException('Amazon API request failed (HTTP '.$status.'): '.$message);
+        $attempts=max(1,min(5,(int)env('AMAZON_API_RETRY_ATTEMPTS',3)));
+        $lastMessage='Request failed';
+
+        for($attempt=1;$attempt<=$attempts;$attempt++){
+            $token=$this->fetchToken($settings,$attempt>1 && str_contains($lastMessage,'HTTP 401'));
+            $ch=curl_init($endpoint);
+            curl_setopt_array($ch,[
+                CURLOPT_POST=>true,
+                CURLOPT_POSTFIELDS=>json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES),
+                CURLOPT_HTTPHEADER=>[
+                    'Authorization: Bearer '.$token['access_token'],
+                    'Content-Type: application/json','Accept: application/json','x-marketplace: '.$marketplace,
+                ],
+                CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_FOLLOWLOCATION=>false,
+            ]);
+            $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
+
+            if($response!==false){
+                $json=json_decode((string)$response,true);
+                if($status>=200&&$status<300&&is_array($json)) return $json;
+                $lastMessage='Amazon API request failed (HTTP '.$status.'): '.$this->errorMessage($json);
+                if(!in_array($status,self::RETRYABLE_STATUS,true) && $status!==401) throw new RuntimeException($lastMessage);
+            }else{
+                $lastMessage='Amazon API request failed: '.$error;
+            }
+
+            if($attempt<$attempts)$this->backoff($attempt);
         }
-        return $json;
+
+        throw new RuntimeException($lastMessage.' after '.$attempts.' attempt(s).');
     }
 
     private function fetchToken(array $settings,bool $force=false): array
@@ -97,30 +101,40 @@ final class CreatorsApiClient
 
         $fingerprint=hash('sha256',$version.'|'.$id);
         $cached=$_SESSION['_amazon_creators_token']??null;
-        if(!$force&&is_array($cached)&&($cached['fingerprint']??'')===$fingerprint&&(int)($cached['expires_at']??0)>time()+90&&!empty($cached['access_token'])){
-            return $cached;
-        }
+        if(!$force&&is_array($cached)&&($cached['fingerprint']??'')===$fingerprint&&(int)($cached['expires_at']??0)>time()+90&&!empty($cached['access_token'])) return $cached;
 
         [$endpoint,$body,$contentType]=$this->tokenRequest($version,$id,$secret);
-        $ch=curl_init($endpoint);
-        curl_setopt_array($ch,[
-            CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,
-            CURLOPT_HTTPHEADER=>['Content-Type: '.$contentType,'Accept: application/json'],
-            CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>15,CURLOPT_FOLLOWLOCATION=>false,
-        ]);
-        $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
-        if($response===false)throw new RuntimeException('Amazon authentication request failed: '.$error);
-        $json=json_decode((string)$response,true);
-        if($status<200||$status>=300||!is_array($json)||empty($json['access_token'])){
-            throw new RuntimeException('Amazon authentication failed (HTTP '.$status.'): '.$this->errorMessage($json));
+        $attempts=max(1,min(4,(int)env('AMAZON_AUTH_RETRY_ATTEMPTS',2)));
+        $last='Amazon authentication failed.';
+        for($attempt=1;$attempt<=$attempts;$attempt++){
+            $ch=curl_init($endpoint);
+            curl_setopt_array($ch,[
+                CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,
+                CURLOPT_HTTPHEADER=>['Content-Type: '.$contentType,'Accept: application/json'],
+                CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>15,CURLOPT_FOLLOWLOCATION=>false,
+            ]);
+            $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
+            if($response!==false){
+                $json=json_decode((string)$response,true);
+                if($status>=200&&$status<300&&is_array($json)&&!empty($json['access_token'])){
+                    $expires=max(60,(int)($json['expires_in']??3600));
+                    $token=['access_token'=>(string)$json['access_token'],'expires_in'=>$expires,'token_type'=>(string)($json['token_type']??'bearer'),'expires_at'=>time()+$expires,'fingerprint'=>$fingerprint];
+                    $_SESSION['_amazon_creators_token']=$token;
+                    return $token;
+                }
+                $last='Amazon authentication failed (HTTP '.$status.'): '.$this->errorMessage($json);
+                if(!in_array($status,self::RETRYABLE_STATUS,true)) throw new RuntimeException($last);
+            }else{$last='Amazon authentication request failed: '.$error;}
+            if($attempt<$attempts)$this->backoff($attempt);
         }
-        $expires=max(60,(int)($json['expires_in']??3600));
-        $token=[
-            'access_token'=>(string)$json['access_token'],'expires_in'=>$expires,
-            'token_type'=>(string)($json['token_type']??'bearer'),'expires_at'=>time()+$expires,'fingerprint'=>$fingerprint,
-        ];
-        $_SESSION['_amazon_creators_token']=$token;
-        return $token;
+        throw new RuntimeException($last.' after '.$attempts.' attempt(s).');
+    }
+
+    private function backoff(int $attempt): void
+    {
+        $base=max(100,min(5000,(int)env('AMAZON_RETRY_BASE_MS',350)));
+        $delay=min(5000,$base*(2**max(0,$attempt-1))+random_int(0,150));
+        usleep($delay*1000);
     }
 
     private function errorMessage(mixed $json): string
@@ -141,9 +155,7 @@ final class CreatorsApiClient
             '3.3'=>'https://api.amazon.co.jp/auth/o2/token',
         ];
         if(!isset($endpoints[$version]))throw new RuntimeException('Unsupported Creators API credential version.');
-        if(str_starts_with($version,'2.')){
-            return [$endpoints[$version],http_build_query(['grant_type'=>'client_credentials','client_id'=>$id,'client_secret'=>$secret,'scope'=>'creatorsapi/default']),'application/x-www-form-urlencoded'];
-        }
+        if(str_starts_with($version,'2.')) return [$endpoints[$version],http_build_query(['grant_type'=>'client_credentials','client_id'=>$id,'client_secret'=>$secret,'scope'=>'creatorsapi/default']),'application/x-www-form-urlencoded'];
         return [$endpoints[$version],json_encode(['grant_type'=>'client_credentials','client_id'=>$id,'client_secret'=>$secret,'scope'=>'creatorsapi::default'],JSON_THROW_ON_ERROR),'application/json'];
     }
 }
