@@ -78,21 +78,21 @@ function public_product_price(array $product): ?float
 
     $source = isset($product['source']) ? (string) $product['source'] : null;
     $lastSynced = isset($product['last_synced_at']) ? (string) $product['last_synced_at'] : null;
+    $lookupId = !empty($product['product_id']) ? (int) $product['product_id'] : (!empty($product['id']) ? (int) $product['id'] : 0);
 
-    if (($source === null || $lastSynced === null) && !empty($product['id'])) {
+    if (($source === null || $lastSynced === null) && $lookupId > 0) {
         static $metadata = [];
-        $id = (int) $product['id'];
-        if (!array_key_exists($id, $metadata)) {
+        if (!array_key_exists($lookupId, $metadata)) {
             try {
                 $stmt = Database::connection()->prepare('SELECT source,last_synced_at FROM products WHERE id=:id LIMIT 1');
-                $stmt->execute(['id' => $id]);
-                $metadata[$id] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $stmt->execute(['id' => $lookupId]);
+                $metadata[$lookupId] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
             } catch (Throwable) {
-                $metadata[$id] = [];
+                $metadata[$lookupId] = [];
             }
         }
-        $source ??= isset($metadata[$id]['source']) ? (string) $metadata[$id]['source'] : null;
-        $lastSynced ??= isset($metadata[$id]['last_synced_at']) ? (string) $metadata[$id]['last_synced_at'] : null;
+        $source ??= isset($metadata[$lookupId]['source']) ? (string) $metadata[$lookupId]['source'] : null;
+        $lastSynced ??= isset($metadata[$lookupId]['last_synced_at']) ? (string) $metadata[$lookupId]['last_synced_at'] : null;
     }
 
     if (in_array($source, ['amazon_api', 'hybrid'], true)) {
