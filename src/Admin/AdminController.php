@@ -9,6 +9,7 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ContentRepository;
+use MediaPitch\Repositories\MediaRepository;
 use Throwable;
 
 final class AdminController
@@ -119,6 +120,7 @@ final class AdminController
                 'brands'=>$this->repo->brands(),
                 'specDefinitions'=>$this->repo->specificationDefinitions(),
                 'specValues'=>$this->repo->productSpecificationValues($id),
+                'mediaItems'=>(new MediaRepository())->all(),
             ], $this->common($id ? 'Edit Product' : 'Add Product')), 'admin/layout');
             return true;
         }
