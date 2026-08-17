@@ -5,7 +5,8 @@
     <label class="span-2">Title<input name="title" required value="<?= e($p['title'] ?? '') ?>"></label>
     <label>Slug<input name="slug" required value="<?= e($p['slug'] ?? '') ?>"></label>
     <label>Category<select name="category_id"><option value="">—</option><?php foreach($categories as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)($p['category_id']??0)===(int)$c['id']?'selected':'' ?>><?= e($c['name']) ?></option><?php endforeach;?></select></label>
-    <label class="span-2">Featured image URL<input type="url" name="featured_image_url" value="<?= e($p['featured_image_url'] ?? '') ?>"></label>
+    <?php if(!empty($mediaItems)): ?><label class="span-2">Choose featured image<select id="blog-media-picker"><option value="">— Select uploaded image —</option><?php foreach($mediaItems as $media): $mediaUrl=url(ltrim((string)$media['file_path'],'/')); ?><option value="<?= e($mediaUrl) ?>" <?= ($p['featured_image_url']??'')===$mediaUrl?'selected':'' ?>><?= e($media['original_name']) ?><?= !empty($media['alt_text'])?' — '.e($media['alt_text']):'' ?></option><?php endforeach;?></select></label><?php endif; ?>
+    <label class="span-2">Featured image URL<input type="url" id="blog-image-url" name="featured_image_url" value="<?= e($p['featured_image_url'] ?? '') ?>"></label>
     <label class="span-2">Excerpt<textarea name="excerpt" rows="3"><?= e($p['excerpt'] ?? '') ?></textarea></label>
     <label class="span-2">Article body <small>HTML is supported for now</small><textarea name="body" rows="18"><?= e($p['body'] ?? '') ?></textarea></label>
     <label>Status<select name="status"><option value="draft" <?= ($p['status']??'draft')==='draft'?'selected':'' ?>>Draft</option><option value="scheduled" <?= ($p['status']??'')==='scheduled'?'selected':'' ?>>Scheduled</option><option value="published" <?= ($p['status']??'')==='published'?'selected':'' ?>>Published</option></select></label>
@@ -17,3 +18,4 @@
   <label class="check"><input type="checkbox" name="robots_index" value="1" <?= !isset($p['robots_index'])||!empty($p['robots_index'])?'checked':'' ?>> Allow search engines to index this article</label>
   <div class="form-actions"><a class="secondary-button" href="<?= e(url('admin/blog')) ?>">Cancel</a><?php if(!empty($p['slug'])):?><a class="secondary-button" href="<?= e(url('blog/' . $p['slug'])) ?>" target="_blank" rel="noopener">Preview ↗</a><?php endif;?><button class="primary-button">Save article</button></div>
 </form>
+<script>const picker=document.getElementById('blog-media-picker'),image=document.getElementById('blog-image-url');if(picker&&image)picker.addEventListener('change',()=>{if(picker.value)image.value=picker.value;});</script>
