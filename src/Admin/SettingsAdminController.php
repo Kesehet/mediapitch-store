@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Amazon\AmazonBulkRefresh;
 use MediaPitch\Amazon\AmazonProductImporter;
 use MediaPitch\Amazon\CreatorsApiClient;
 use MediaPitch\Core\Audit;
@@ -82,6 +83,28 @@ final class SettingsAdminController
                 $this->repo->setAmazonStatus(null,substr($e->getMessage(),0,1000));
                 Audit::record('amazon.connection.test_failed','amazon',null,'Amazon authentication test failed');
                 $this->setFlash('error','Amazon connection test failed: '.$e->getMessage());
+            }
+            $this->redirect('/admin/settings/amazon');
+        }
+
+        if($path==='/admin/settings/amazon/refresh'&&$method==='POST'){
+            $this->requireCsrf();
+            try{
+                $settings=$this->repo->amazon();
+                $result=(new AmazonBulkRefresh())->refresh($settings,50,true);
+                $this->repo->setAmazonStatus(gmdate('Y-m-d H:i:s'),empty($result['errors'])?null:'Some products failed to refresh.');
+                Audit::record('amazon.products.bulk_refresh','amazon',null,'Bulk-refreshed stale Amazon products',[
+                    'selected'=>(int)$result['selected'],'refreshed'=>(int)$result['refreshed'],
+                    'missing_count'=>count($result['missing']),'error_count'=>count($result['errors']),
+                ]);
+                $message='Amazon refresh complete: '.(int)$result['refreshed'].' refreshed from '.(int)$result['selected'].' stale product(s).';
+                if($result['missing'])$message.=' '.count($result['missing']).' ASIN(s) were not returned by Amazon.';
+                if($result['errors'])$message.=' '.count($result['errors']).' product(s) failed after retries.';
+                $this->setFlash($result['errors']?'error':'success',$message);
+            }catch(Throwable $e){
+                $this->repo->setAmazonStatus(null,substr($e->getMessage(),0,1000));
+                Audit::record('amazon.products.bulk_refresh_failed','amazon',null,'Bulk Amazon refresh failed');
+                $this->setFlash('error','Amazon bulk refresh failed: '.$e->getMessage());
             }
             $this->redirect('/admin/settings/amazon');
         }
