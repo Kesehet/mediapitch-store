@@ -33,6 +33,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] 404/500 pages
 - [x] PHP 8.2 syntax workflow
 - [x] Landing-page DB fallback
+- [x] Redirect lookup fails open if DB is temporarily unavailable
 - [x] Migration runner and migration tracking
 - [x] Non-destructive default seed script
 - [x] Automatic DB deployment via Composer scripts
@@ -81,6 +82,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 ## Categories
 - [x] Category model, nesting, slug, description, image URL, SEO, sort order, active flag
 - [x] Admin list/create/edit
+- [x] Archive/restore
 - [x] Public `/category/{slug}`
 - [x] Category product / guide / article sections
 - [x] Category canonical metadata
@@ -89,7 +91,6 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Category brand / price / score / sort filters
 - [x] Category dynamic specification filters
 - [ ] Nested breadcrumb hierarchy
-- [ ] Archive/delete
 
 ## Brands
 - [x] Brand model
@@ -122,8 +123,10 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] ASIN normalization/validation and duplicate protection
 - [x] Archive/restore product action
 - [x] Duplicate-product action with copied specs and safe identity reset
-- [ ] Gallery editor
-- [ ] Related products / buying guides
+- [x] Gallery editor with media picker and public thumbnail switching
+- [x] Product schema includes gallery images
+- [x] Related products on product page
+- [x] Buying guides featuring product on product page
 - [ ] Change history / bulk actions / CSV import-export
 
 ---
@@ -138,8 +141,10 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Public product specification table
 - [x] Comparison pages consume comparable specs
 - [x] Public category filtering using filterable specs
-- [ ] Spec archive/delete
-- [ ] Better select-option UX
+- [x] Specification archive/restore with values preserved
+- [x] Archived specs removed from new product editing
+- [x] Archive disables filtering/comparison use
+- [x] Improved select-option cleanup/count/sort UX
 
 ---
 
@@ -170,6 +175,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Guide media picker
 - [x] Buying-guide Article schema
 - [x] Buying-guide breadcrumb UI/schema
+- [~] Product picker/ranking UX improvements
 - [ ] Product autocomplete/search in editor
 - [ ] Drag-and-drop ranking
 - [ ] Better duplicate-product UX
@@ -301,10 +307,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Review structured data
 - [x] Buying-guide Article structured data
 - [x] Product/article/review/guide breadcrumb UI + schema
-- [ ] Category breadcrumb schema
+- [x] Redirect admin UI
+- [x] Runtime redirect resolution
+- [x] Auto-redirect when product/blog/guide/comparison/review slugs change
+- [ ] Category breadcrumb schema / hierarchy
+- [ ] Category slug auto-redirect
 - [ ] Comparison structured data if appropriate
-- [ ] Redirect admin UI
-- [ ] Auto-redirect when published slug changes
 - [ ] SEO preview in editors
 - [ ] Internal-link helper
 
@@ -341,7 +349,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Site name/tagline/global affiliate disclosure
 - [x] Homepage section controls
 - [x] Detailed click analytics dashboard/export
-- [ ] Redirect manager
+- [x] Redirect manager
 - [ ] Multiple marketplaces
 - [ ] Newsletter/personalization/alerts
 - [ ] Other affiliate networks
@@ -350,11 +358,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 ---
 
 # Immediate next queue
-1. [~] Build redirect manager and automatic redirects when slugs change
-2. [ ] Add category archive/delete and nested breadcrumb hierarchy
-3. [ ] Add specification archive/delete and improve select-option UX
-4. [ ] Add product gallery editor
-5. [ ] Add related products/guides/articles/comparisons
-6. [ ] Improve guide product picker/ranking UX
-7. [ ] Finish Amazon policy review, then product search/import/sync
+1. [~] Improve buying-guide product picker/ranking UX
+2. [ ] Add category breadcrumb hierarchy + category slug redirects
+3. [ ] Add related content to reviews/guides/comparisons/blog
+4. [ ] Add deals/featured-product merchandising controls
+5. [ ] Add global search category filter + search analytics
+6. [ ] Finish Amazon policy review, then product search/import/sync
+7. [ ] Add admin audit trail and complete permission matrix
 8. [ ] Verify full admin CRUD flow on production
