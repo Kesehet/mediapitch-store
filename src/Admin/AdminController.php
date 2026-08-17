@@ -11,6 +11,7 @@ use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
 use MediaPitch\Repositories\UserRepository;
+use MediaPitch\Services\ProductAdminActions;
 use MediaPitch\Services\ProductAuthoring;
 use Throwable;
 
@@ -129,12 +130,17 @@ final class AdminController
             View::render('admin/brands', array_merge([
                 'brands'=>$this->repo->brands(),
                 'brand'=>$this->repo->brand($editId),
+                'mediaItems'=>$media(),
             ], $this->common($editId ? 'Edit Brand' : 'Brands')), 'admin/layout');
             return true;
         }
         if ($path === '/admin/brands/save' && $method === 'POST') {
             $this->requireEditor(); $this->requireCsrf();
             try {
+                $website=trim((string)($_POST['website_url']??''));
+                $logo=trim((string)($_POST['logo_url']??''));
+                if($website!=='' && !filter_var($website,FILTER_VALIDATE_URL)) throw new \InvalidArgumentException('Brand website URL is invalid.');
+                if($logo!=='' && !filter_var($logo,FILTER_VALIDATE_URL)) throw new \InvalidArgumentException('Brand logo URL is invalid.');
                 $this->repo->saveBrand($_POST, !empty($_POST['id']) ? (int)$_POST['id'] : null);
                 $this->setFlash('success','Brand saved.');
             } catch (Throwable $e) {
@@ -190,6 +196,25 @@ final class AdminController
             } catch (Throwable $e) {
                 $this->setFlash('error','Product could not be saved: ' . $e->getMessage());
                 $this->redirect($existingId ? '/admin/products/'.$existingId.'/edit' : '/admin/products/new');
+            }
+        }
+        if ($method === 'POST' && preg_match('#^/admin/products/(\d+)/(archive|restore|duplicate)$#',$path,$m)) {
+            $this->requireEditor(); $this->requireCsrf();
+            $id=(int)$m[1]; $action=$m[2];
+            try{
+                $actions=new ProductAdminActions();
+                if($action==='archive'){
+                    $actions->archive($id); $this->setFlash('success','Product archived.'); $this->redirect('/admin/products');
+                }
+                if($action==='restore'){
+                    $actions->restore($id); $this->setFlash('success','Product restored.'); $this->redirect('/admin/products');
+                }
+                $newId=$actions->duplicate($id);
+                $this->setFlash('success','Product duplicated as an inactive draft.');
+                $this->redirect('/admin/products/'.$newId.'/edit');
+            }catch(Throwable $e){
+                $this->setFlash('error','Product action failed: '.$e->getMessage());
+                $this->redirect('/admin/products');
             }
         }
 
