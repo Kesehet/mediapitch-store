@@ -45,6 +45,10 @@ final class AdminController
         }
 
         $this->requireLogin();
+        $mediaItems = null;
+        $media = static function () use (&$mediaItems): array {
+            return $mediaItems ??= (new MediaRepository())->all();
+        };
 
         if ($path === '/admin' && $method === 'GET') {
             View::render('admin/dashboard', array_merge($this->repo->dashboard(), $this->common('Dashboard')), 'admin/layout');
@@ -55,6 +59,7 @@ final class AdminController
             View::render('admin/categories', array_merge([
                 'categories'=>$this->repo->categories(),
                 'categoryOptions'=>$this->repo->categoryOptions(),
+                'mediaItems'=>$media(),
             ], $this->common('Categories')), 'admin/layout');
             return true;
         }
@@ -120,7 +125,7 @@ final class AdminController
                 'brands'=>$this->repo->brands(),
                 'specDefinitions'=>$this->repo->specificationDefinitions(),
                 'specValues'=>$this->repo->productSpecificationValues($id),
-                'mediaItems'=>(new MediaRepository())->all(),
+                'mediaItems'=>$media(),
             ], $this->common($id ? 'Edit Product' : 'Add Product')), 'admin/layout');
             return true;
         }
@@ -146,6 +151,7 @@ final class AdminController
             View::render('admin/blog-form', array_merge([
                 'post'=>$contentRepo->adminPost($id),
                 'categories'=>$this->repo->categoryOptions(),
+                'mediaItems'=>$media(),
             ], $this->common($id ? 'Edit Article' : 'New Article')), 'admin/layout');
             return true;
         }
@@ -175,6 +181,7 @@ final class AdminController
                 'guide'=>$this->repo->guide($id),
                 'categories'=>$this->repo->categoryOptions(),
                 'productOptions'=>$this->repo->productOptions(),
+                'mediaItems'=>$media(),
             ], $this->common($id ? 'Edit Buying Guide' : 'New Buying Guide')), 'admin/layout');
             return true;
         }
