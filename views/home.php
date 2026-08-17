@@ -1,3 +1,4 @@
+<?php $siteSettings=$siteSettings??[]; ?>
 <section class="hero">
     <div class="container hero-grid">
         <div>
@@ -19,7 +20,7 @@
     </div>
 </section>
 
-<?php if (!empty($categories)): ?>
+<?php if (($siteSettings['home_categories']??true) && !empty($categories)): ?>
 <section class="section" id="categories">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Browse</span><h2>Popular categories</h2></div></div>
@@ -35,7 +36,7 @@
 </section>
 <?php endif; ?>
 
-<?php if (!empty($guides)): ?>
+<?php if (($siteSettings['home_guides']??true) && !empty($guides)): ?>
 <section class="section section-soft" id="guides">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Editors' picks</span><h2>Featured buying guides</h2></div></div>
@@ -55,7 +56,7 @@
 </section>
 <?php endif; ?>
 
-<?php if (!empty($products)): ?>
+<?php if (($siteSettings['home_products']??true) && !empty($products)): ?>
 <section class="section">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Discover</span><h2>Top products</h2></div></div>
@@ -78,7 +79,7 @@
 </section>
 <?php endif; ?>
 
-<?php if (!empty($comparisons)): ?>
+<?php if (($siteSettings['home_comparisons']??true) && !empty($comparisons)): ?>
 <section class="section section-soft" id="comparisons">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Compare</span><h2>Latest comparisons</h2></div><a href="<?= e(url('comparisons')) ?>">View all</a></div>
@@ -99,7 +100,7 @@
 </section>
 <?php endif; ?>
 
-<?php if (!empty($articles)): ?>
+<?php if (($siteSettings['home_articles']??true) && !empty($articles)): ?>
 <section class="section" id="articles">
     <div class="container">
         <div class="section-head"><div><span class="eyebrow">Learn</span><h2>Latest articles</h2></div><a href="<?= e(url('blog')) ?>">View all</a></div>
