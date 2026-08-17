@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
@@ -43,6 +44,9 @@ final class CategoryAdminController
                 if($old&&$new&&!empty($old['slug'])&&$old['slug']!==$new['slug']){
                     (new RedirectRepository())->upsert('/category/'.$old['slug'],'/category/'.$new['slug']);
                 }
+                Audit::record($id?'category.update':'category.create','category',$saved,$id?'Updated category':'Created category',[
+                    'name'=>$new['name']??($_POST['name']??''),'slug'=>$new['slug']??($_POST['slug']??''),'active'=>(bool)($new['active']??true),
+                ]);
                 $this->setFlash('success','Category saved.');
             }catch(Throwable $e){$this->setFlash('error','Category could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/categories');
@@ -51,8 +55,10 @@ final class CategoryAdminController
         if($method==='POST'&&preg_match('#^/admin/categories/(\d+)/(archive|restore)$#',$path,$m)){
             $this->requireCsrf();
             try{
-                $this->repo->setCategoryActive((int)$m[1],$m[2]==='restore');
-                $this->setFlash('success',$m[2]==='restore'?'Category restored.':'Category archived.');
+                $id=(int)$m[1];$action=$m[2];
+                $this->repo->setCategoryActive($id,$action==='restore');
+                Audit::record('category.'.$action,'category',$id,ucfirst($action).'d category');
+                $this->setFlash('success',$action==='restore'?'Category restored.':'Category archived.');
             }catch(Throwable $e){$this->setFlash('error',$e->getMessage());}
             $this->redirect('/admin/categories');
         }
