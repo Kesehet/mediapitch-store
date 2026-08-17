@@ -7,10 +7,12 @@ use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\CatalogRepository;
+use MediaPitch\Repositories\ContentRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 $catalog = new CatalogRepository();
+$contentRepo = new ContentRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -34,6 +36,32 @@ try {
             'products' => $catalog->featuredProducts(),
             'guides' => $catalog->latestContent('buying_guide'),
             'articles' => $catalog->latestContent('blog'),
+        ]);
+        exit;
+    }
+
+    if ($method === 'GET' && $path === '/blog') {
+        View::render('blog-index', [
+            'pageTitle'=>'MediaPitch Blog — Buying Advice & Product Guides',
+            'metaDescription'=>'Buying advice, product explainers, how-to articles and shopping insights from MediaPitch.',
+            'posts'=>$contentRepo->publishedPosts(),
+        ]);
+        exit;
+    }
+
+    if ($method === 'GET' && preg_match('#^/blog/([a-z0-9-]+)$#i', $path, $matches)) {
+        $post=$contentRepo->publishedPostBySlug($matches[1]);
+        if (!$post) {
+            http_response_code(404);
+            View::render('404',['pageTitle'=>'Article not found','metaDescription'=>'']);
+            exit;
+        }
+        View::render('article',[
+            'pageTitle'=>($post['seo_title'] ?: $post['title']) . ' — MediaPitch',
+            'metaDescription'=>(string)($post['meta_description'] ?: $post['excerpt']),
+            'canonicalUrl'=>$post['canonical_url'] ?: url('blog/' . $post['slug']),
+            'robotsIndex'=>(bool)$post['robots_index'],
+            'post'=>$post,
         ]);
         exit;
     }
