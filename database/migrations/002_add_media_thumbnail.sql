@@ -1,0 +1,3 @@
+ALTER TABLE media
+    ADD COLUMN IF NOT EXISTS thumbnail_path VARCHAR(1000) NULL AFTER file_path,
+    ADD COLUMN IF NOT EXISTS optimized TINYINT(1) NOT NULL DEFAULT 0 AFTER thumbnail_path;
