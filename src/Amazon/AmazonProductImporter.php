@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Amazon;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ProductOverrides;
 use PDO;
 use RuntimeException;
 
@@ -28,7 +29,9 @@ final class AmazonProductImporter
         $stmt->execute(['asin'=>$asin]);
         $existing=$stmt->fetch(PDO::FETCH_ASSOC);
         if($existing){
-            $hybrid=in_array((string)$existing['source'],['manual','hybrid'],true);
+            $overrides=(new ProductOverrides())->forProduct($existing);
+            $hasOverrides=in_array(true,$overrides,true);
+            $hybrid=in_array((string)$existing['source'],['manual','hybrid'],true)||$hasOverrides;
             $update=$db->prepare(
                 'UPDATE products SET title=:title,source=:source,api_marketplace=:marketplace,
                  main_image_url=:image,features_json=:features,price=:price,currency=:currency,
@@ -37,13 +40,16 @@ final class AmazonProductImporter
                  WHERE id=:id'
             );
             $update->execute([
-                'title'=>$title,
+                'title'=>$overrides['title']?$existing['title']:$title,
                 'source'=>$hybrid?'hybrid':'amazon_api',
                 'marketplace'=>$marketplace,
-                'image'=>$hybrid&&!empty($existing['main_image_url'])?$existing['main_image_url']:$image,
-                'features'=>$hybrid&&!empty($existing['features_json'])?$existing['features_json']:$features,
-                'price'=>$price,'currency'=>$currency?:($existing['currency']?:'INR'),
-                'amazon_url'=>$detailUrl,'affiliate_url'=>$detailUrl,'category_id'=>$categoryId,'id'=>(int)$existing['id'],
+                'image'=>$overrides['main_image_url']?$existing['main_image_url']:$image,
+                'features'=>$overrides['features_json']?$existing['features_json']:$features,
+                'price'=>$overrides['price']?$existing['price']:$price,
+                'currency'=>$overrides['price']?($existing['currency']?:'INR'):($currency?:($existing['currency']?:'INR')),
+                'amazon_url'=>$overrides['amazon_url']?$existing['amazon_url']:$detailUrl,
+                'affiliate_url'=>$overrides['affiliate_url']?$existing['affiliate_url']:$detailUrl,
+                'category_id'=>$categoryId,'id'=>(int)$existing['id'],
             ]);
             return (int)$existing['id'];
         }
