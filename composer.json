@@ -1,0 +1,23 @@
+{
+  "name": "mediapitch/store",
+  "description": "MediaPitch affiliate product discovery and editorial CMS",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-pdo_mysql": "*"
+  },
+  "config": {
+    "lock": false,
+    "sort-packages": true
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "@php database/deploy.php"
+    ],
+    "post-update-cmd": [
+      "@php database/deploy.php"
+    ],
+    "deploy-db": "@php database/deploy.php"
+  }
+}
