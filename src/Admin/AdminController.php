@@ -11,6 +11,7 @@ use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
 use MediaPitch\Repositories\UserRepository;
+use MediaPitch\Services\ProductAuthoring;
 use Throwable;
 
 final class AdminController
@@ -180,13 +181,15 @@ final class AdminController
         }
         if ($path === '/admin/products/save' && $method === 'POST') {
             $this->requireEditor(); $this->requireCsrf();
+            $existingId=!empty($_POST['id']) ? (int)$_POST['id'] : null;
             try {
-                $id=$this->repo->saveProduct($_POST, !empty($_POST['id']) ? (int)$_POST['id'] : null);
+                $data=(new ProductAuthoring())->prepare($_POST,$existingId);
+                $id=$this->repo->saveProduct($data,$existingId);
                 $this->setFlash('success','Product saved.');
                 $this->redirect('/admin/products/' . $id . '/edit');
             } catch (Throwable $e) {
                 $this->setFlash('error','Product could not be saved: ' . $e->getMessage());
-                $this->redirect('/admin/products');
+                $this->redirect($existingId ? '/admin/products/'.$existingId.'/edit' : '/admin/products/new');
             }
         }
 
