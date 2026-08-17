@@ -7,13 +7,15 @@ $siteSettings=$siteSettings??[];
 $siteName=(string)($siteSettings['name']??'MediaPitch Store');
 $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
 $affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.');
+$amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on Amazon.in at the time of purchase will apply to the purchase of the product.';
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
     ?? ($post['featured_image_url'] ?? null)
     ?? ($guide['featured_image_url'] ?? null)
     ?? ($review['featured_image_url'] ?? null)
     ?? ($review['main_image_url'] ?? null)
-    ?? ($comparison['featured_image_url'] ?? null);
+    ?? ($comparison['featured_image_url'] ?? null)
+    ?? ($brand['logo_url'] ?? null);
 ?>
 <!doctype html>
 <html lang="en">
@@ -42,6 +44,7 @@ $ogImage = $ogImage
     <link rel="stylesheet" href="/assets/embeds.css">
     <script src="/assets/search.js" defer></script>
     <script src="/assets/navigation.js" defer></script>
+    <script src="/assets/amazon-disclosure.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -77,6 +80,7 @@ $ogImage = $ogImage
         <div>
             <strong>Affiliate disclosure</strong>
             <p><?= e($affiliateDisclosure) ?></p>
+            <div id="amazon-price-disclosure"><strong>Amazon price &amp; availability</strong><p><?= e($amazonPricingDisclosure) ?></p></div>
         </div>
     </div>
 </footer>
