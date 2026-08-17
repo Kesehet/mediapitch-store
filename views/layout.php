@@ -3,7 +3,13 @@ $pageTitle = $pageTitle ?? 'MediaPitch Store';
 $metaDescription = $metaDescription ?? 'Independent product recommendations and buying guides.';
 $robotsIndex = $robotsIndex ?? true;
 $canonicalUrl = $canonicalUrl ?? null;
-$ogImage = $ogImage ?? null;
+$ogImage = $ogImage
+    ?? ($product['main_image_url'] ?? null)
+    ?? ($post['featured_image_url'] ?? null)
+    ?? ($guide['featured_image_url'] ?? null)
+    ?? ($review['featured_image_url'] ?? null)
+    ?? ($review['main_image_url'] ?? null)
+    ?? ($comparison['featured_image_url'] ?? null);
 ?>
 <!doctype html>
 <html lang="en">
