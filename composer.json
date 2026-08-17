@@ -19,6 +19,7 @@
       "@php database/composer-deploy.php"
     ],
     "deploy-db": "@php database/deploy.php",
-    "prune-analytics": "@php database/prune-analytics.php"
+    "prune-analytics": "@php database/prune-analytics.php",
+    "refresh-amazon": "@php database/refresh-amazon.php"
   }
 }
