@@ -45,5 +45,6 @@ $run = static function (string $script): void {
 
 $run('migrate.php');
 $run('seed-defaults.php');
+$run('bootstrap-admin.php');
 
 fwrite(STDOUT, "Database deployment tasks complete.\n");
