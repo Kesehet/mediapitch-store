@@ -73,6 +73,14 @@ function url(string $path = ''): string
 load_env(dirname(__DIR__) . '/.env');
 date_default_timezone_set('UTC');
 
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: geolocation=(), camera=(), microphone=()');
+    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+}
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
     $secure = (bool) env('SESSION_SECURE_COOKIE', true);
     if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
