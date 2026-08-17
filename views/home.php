@@ -25,7 +25,7 @@
         <div class="section-head"><div><span class="eyebrow">Browse</span><h2>Popular categories</h2></div></div>
         <div class="category-grid">
             <?php foreach ($categories as $category): ?>
-                <a class="category-card" href="/search?q=<?= urlencode((string) $category['name']) ?>">
+                <a class="category-card" href="<?= e(url('category/' . $category['slug'])) ?>">
                     <span><?= e($category['name']) ?></span>
                     <small><?= e($category['description'] ?: 'Explore recommendations') ?></small>
                 </a>
@@ -81,10 +81,10 @@
 <?php if (!empty($articles)): ?>
 <section class="section section-soft" id="articles">
     <div class="container">
-        <div class="section-head"><div><span class="eyebrow">Learn</span><h2>Latest articles</h2></div></div>
+        <div class="section-head"><div><span class="eyebrow">Learn</span><h2>Latest articles</h2></div><a href="<?= e(url('blog')) ?>">View all</a></div>
         <div class="article-grid">
             <?php foreach ($articles as $article): ?>
-                <article class="article-card"><div class="card-body"><span class="card-kicker">Article</span><h3><?= e($article['title']) ?></h3><p><?= e($article['excerpt'] ?? '') ?></p></div></article>
+                <article class="article-card"><div class="card-body"><span class="card-kicker">Article</span><h3><a href="<?= e(url('blog/' . $article['slug'])) ?>"><?= e($article['title']) ?></a></h3><p><?= e($article['excerpt'] ?? '') ?></p></div></article>
             <?php endforeach; ?>
         </div>
     </div>
