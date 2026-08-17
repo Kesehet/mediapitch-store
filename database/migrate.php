@@ -34,17 +34,16 @@ foreach ($files as $file) {
         continue;
     }
 
-    $db->beginTransaction();
     try {
+        // MySQL DDL statements such as CREATE/ALTER TABLE implicitly commit.
+        // Do not wrap schema migrations in a PDO transaction or commit() can
+        // fail after otherwise-successful DDL. Migration SQL must therefore
+        // be written idempotently so a partially-applied deploy can be retried.
         $db->exec($sql);
-        $stmt = $db->prepare('INSERT INTO schema_migrations (migration) VALUES (:migration)');
+        $stmt = $db->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (:migration)');
         $stmt->execute(['migration' => $name]);
-        $db->commit();
         fwrite(STDOUT, "apply {$name}\n");
     } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
         fwrite(STDERR, "failed {$name}: {$e->getMessage()}\n");
         exit(1);
     }
