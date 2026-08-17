@@ -95,19 +95,44 @@ final class Auth
         return self::user() !== null;
     }
 
+    public static function role(): string
+    {
+        return (string) (self::user()['role'] ?? '');
+    }
+
     public static function isAdministrator(): bool
     {
-        return (string) (self::user()['role'] ?? '') === 'administrator';
+        return self::role() === 'administrator';
     }
 
+    /** Catalog/product/spec/media administration. */
     public static function canManageProducts(): bool
     {
-        return in_array((string) (self::user()['role'] ?? ''), ['administrator', 'editor'], true);
+        return in_array(self::role(), ['administrator', 'editor'], true);
     }
 
+    /** Create and edit editorial drafts. Writers are intentionally included. */
+    public static function canEditContent(): bool
+    {
+        return in_array(self::role(), ['administrator', 'editor', 'writer'], true);
+    }
+
+    /** Publish or schedule editorial content. */
     public static function canPublish(): bool
     {
-        return in_array((string) (self::user()['role'] ?? ''), ['administrator', 'editor'], true);
+        return in_array(self::role(), ['administrator', 'editor'], true);
+    }
+
+    /** SEO-focused access for future dedicated SEO workflows. */
+    public static function canManageSeo(): bool
+    {
+        return in_array(self::role(), ['administrator', 'editor', 'seo_manager'], true);
+    }
+
+    /** Users, credentials, integration settings, audit and sensitive analytics. */
+    public static function canManageAdministration(): bool
+    {
+        return self::isAdministrator();
     }
 
     public static function loginBlocked(): bool
