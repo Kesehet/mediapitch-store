@@ -14,6 +14,7 @@ use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\UserRepository;
 use MediaPitch\Services\ProductAdminActions;
 use MediaPitch\Services\ProductAuthoring;
+use MediaPitch\Services\ProductGallery;
 use Throwable;
 
 final class AdminController
@@ -201,6 +202,7 @@ final class AdminController
             try {
                 $data=(new ProductAuthoring())->prepare($_POST,$existingId);
                 $id=$this->repo->saveProduct($data,$existingId);
+                (new ProductGallery())->saveFromInput($id,(string)($_POST['gallery']??''));
                 if($oldProduct && !empty($oldProduct['slug']) && $oldProduct['slug']!==$data['slug']){
                     (new RedirectRepository())->upsert('/product/'.$oldProduct['slug'],'/product/'.$data['slug']);
                 }
