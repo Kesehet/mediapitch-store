@@ -3,6 +3,10 @@ $pageTitle = $pageTitle ?? 'MediaPitch Store';
 $metaDescription = $metaDescription ?? 'Independent product recommendations and buying guides.';
 $robotsIndex = $robotsIndex ?? true;
 $canonicalUrl = $canonicalUrl ?? null;
+$siteSettings=$siteSettings??[];
+$siteName=(string)($siteSettings['name']??'MediaPitch Store');
+$siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
+$affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.');
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
     ?? ($post['featured_image_url'] ?? null)
@@ -39,7 +43,7 @@ $ogImage = $ogImage
 <body>
 <header class="site-header">
     <div class="container header-row">
-        <a class="brand" href="/" aria-label="MediaPitch Store home">
+        <a class="brand" href="/" aria-label="<?= e($siteName) ?> home">
             <img src="https://raw.githubusercontent.com/Kesehet/mediapitch/main/images/media_pitchlogo.jpg" alt="MediaPitch" class="brand-logo">
             <span class="brand-store">STORE</span>
         </a>
@@ -62,12 +66,12 @@ $ogImage = $ogImage
 <footer class="site-footer">
     <div class="container footer-grid">
         <div>
-            <strong>MediaPitch Store</strong>
-            <p>Independent buying guides, comparisons and product discovery.</p>
+            <strong><?= e($siteName) ?></strong>
+            <p><?= e($siteTagline) ?></p>
         </div>
         <div>
             <strong>Affiliate disclosure</strong>
-            <p>As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.</p>
+            <p><?= e($affiliateDisclosure) ?></p>
         </div>
     </div>
 </footer>
