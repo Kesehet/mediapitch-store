@@ -1,0 +1,6 @@
+<section class="stat-grid">
+<?php foreach ([['Products',$counts['products'] ?? 0],['Manual products',$counts['manual_products'] ?? 0],['Amazon API products',$counts['api_products'] ?? 0],['Published guides',$counts['guides'] ?? 0],['Draft content',$counts['drafts'] ?? 0],['Amazon clicks',$counts['clicks'] ?? 0]] as [$label,$value]): ?>
+<div class="stat-card"><span><?= e($label) ?></span><strong><?= number_format((int)$value) ?></strong></div><?php endforeach; ?>
+</section>
+<section class="panel"><div class="panel-head"><div><h2>Most-clicked products</h2><p>Outbound Amazon clicks recorded by the central affiliate redirect.</p></div><a class="secondary-button" href="<?= e(url('admin/products/new')) ?>">+ Add product</a></div>
+<table class="data-table"><thead><tr><th>Product</th><th>Clicks</th><th></th></tr></thead><tbody><?php foreach ($topProducts as $product): ?><tr><td><?= e($product['title']) ?></td><td><?= number_format((int)$product['clicks']) ?></td><td><a href="<?= e(url('admin/products/'.(int)$product['id'].'/edit')) ?>">Edit</a></td></tr><?php endforeach; ?><?php if (!$topProducts): ?><tr><td colspan="3" class="empty">No product data yet.</td></tr><?php endif; ?></tbody></table></section>
