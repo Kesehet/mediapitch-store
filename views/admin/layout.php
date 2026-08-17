@@ -2,8 +2,9 @@
 use MediaPitch\Core\Csrf;
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '/admin';
 $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/admin.css');
+$browserTitle = str_replace(' — ', ' | ', ($pageTitle ?? 'Admin') . ' | MediaPitch');
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($pageTitle ?? 'Admin') ?> — MediaPitch</title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"></head>
 <body class="admin-body">
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
