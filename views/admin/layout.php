@@ -13,6 +13,7 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '
     <a class="<?= str_starts_with($currentPath,'/admin/brands')?'active':'' ?>" href="<?= e(url('admin/brands')) ?>">Brands</a>
     <a class="<?= str_starts_with($currentPath,'/admin/specifications')?'active':'' ?>" href="<?= e(url('admin/specifications')) ?>">Specifications</a>
     <a class="<?= str_starts_with($currentPath,'/admin/guides')?'active':'' ?>" href="<?= e(url('admin/guides')) ?>">Buying Guides</a>
+    <a class="<?= str_starts_with($currentPath,'/admin/comparisons')?'active':'' ?>" href="<?= e(url('admin/comparisons')) ?>">Comparisons</a>
     <a class="<?= str_starts_with($currentPath,'/admin/blog')?'active':'' ?>" href="<?= e(url('admin/blog')) ?>">Blog</a>
   </nav>
   <div class="admin-user"><strong><?= e($adminUser['name'] ?? '') ?></strong><small><?= e($adminUser['role'] ?? '') ?></small>
