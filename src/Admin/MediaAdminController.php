@@ -6,8 +6,10 @@ namespace MediaPitch\Admin;
 
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
+use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\MediaRepository;
+use PDO;
 use Throwable;
 
 final class MediaAdminController
@@ -20,10 +22,12 @@ final class MediaAdminController
         if (!Auth::check()) $this->redirect('/admin/login');
 
         if ($path === '/admin/media' && $method === 'GET') {
+            $categories=Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
             View::render('admin/media', [
                 'pageTitle'=>'Media',
                 'adminUser'=>Auth::user(),
                 'items'=>$this->repo->all(),
+                'categories'=>$categories,
                 'success'=>$this->flash('success'),
                 'error'=>$this->flash('error'),
             ], 'admin/layout');
@@ -32,9 +36,7 @@ final class MediaAdminController
 
         if ($path === '/admin/media/upload' && $method === 'POST') {
             if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
-            if (!Csrf::validate(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : null)) {
-                http_response_code(419); exit('Invalid or expired form token.');
-            }
+            $this->requireCsrf();
 
             try {
                 $this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
@@ -42,6 +44,21 @@ final class MediaAdminController
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
             }
+            $this->redirect('/admin/media');
+        }
+
+        if ($path === '/admin/media/assign-category' && $method === 'POST') {
+            if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
+            $this->requireCsrf();
+            $categoryId=(int)($_POST['category_id'] ?? 0);
+            $imageUrl=trim((string)($_POST['image_url'] ?? ''));
+            if($categoryId<1 || $imageUrl==='') {
+                $this->setFlash('error','Choose a category and image.');
+                $this->redirect('/admin/media');
+            }
+            $stmt=Database::connection()->prepare('UPDATE categories SET image_url=:image_url WHERE id=:id');
+            $stmt->execute(['image_url'=>$imageUrl,'id'=>$categoryId]);
+            $this->setFlash('success','Category image updated.');
             $this->redirect('/admin/media');
         }
 
@@ -150,6 +167,13 @@ final class MediaAdminController
 
         if (!$saved) return [null,false];
         return [$relativeDir . '/' . $thumbName,true];
+    }
+
+    private function requireCsrf(): void
+    {
+        if (!Csrf::validate(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : null)) {
+            http_response_code(419); exit('Invalid or expired form token.');
+        }
     }
 
     private function redirect(string $path): never { header('Location: ' . url($path)); exit; }
