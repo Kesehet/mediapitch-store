@@ -10,7 +10,7 @@
 <tr><th>Brand</th><?php foreach($products as $product):?><td><?= e($product['brand_name']??'—') ?></td><?php endforeach;?></tr>
 <tr><th>MediaPitch score</th><?php foreach($products as $product):?><td><?= $product['custom_score']!==null?e((string)$product['custom_score']).'/10':'—' ?></td><?php endforeach;?></tr>
 <tr><th>Best for</th><?php foreach($products as $product):?><td><?= e($product['best_for_label']??'—') ?></td><?php endforeach;?></tr>
-<tr><th>Last recorded price</th><?php foreach($products as $product):?><td><?= $product['price']!==null?e(($product['currency']??'INR').' '.number_format((float)$product['price'],0)):'—' ?></td><?php endforeach;?></tr>
+<tr><th>Last recorded price</th><?php foreach($products as $product): $displayPrice=public_product_price($product);?><td><?= $displayPrice!==null?e(($product['currency']??'INR').' '.number_format($displayPrice,0)):'—' ?></td><?php endforeach;?></tr>
 <?php foreach($specs as $spec):?><tr><th><?= e($spec['name']) ?><?= !empty($spec['unit'])?' ('.e($spec['unit']).')':'' ?></th><?php foreach($products as $product):?><td><?= e((string)($spec['values'][(int)$product['id']]??'—')) ?></td><?php endforeach;?></tr><?php endforeach;?>
 <tr><th>Buy / check price</th><?php foreach($products as $product):?><td><?php if(!empty($product['affiliate_url'])):?><a class="button button-secondary" href="<?= e(url('go/'.(int)$product['id'].'?content='.(int)$comparison['id'].'&from=comparison')) ?>">Check Price</a><?php else:?>—<?php endif;?></td><?php endforeach;?></tr>
 </tbody></table></div></div></section>
