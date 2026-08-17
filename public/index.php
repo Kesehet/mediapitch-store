@@ -5,6 +5,7 @@ declare(strict_types=1);
 use MediaPitch\Admin\AdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
+use MediaPitch\Admin\ReviewAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
@@ -12,6 +13,7 @@ use MediaPitch\Repositories\CatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -19,6 +21,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 $catalog = new CatalogRepository();
 $contentRepo = new ContentRepository();
 $comparisonRepo = new ComparisonRepository();
+$reviewRepo = new ReviewRepository();
 $searchRepo = new SearchRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -31,6 +34,13 @@ try {
     if (str_starts_with($path, '/admin/media')) {
         $mediaAdmin = new MediaAdminController(new MediaRepository());
         if ($mediaAdmin->handle($method, $path)) {
+            exit;
+        }
+    }
+
+    if (str_starts_with($path, '/admin/reviews')) {
+        $reviewAdmin = new ReviewAdminController($reviewRepo, new AdminRepository());
+        if ($reviewAdmin->handle($method, $path)) {
             exit;
         }
     }
@@ -135,6 +145,23 @@ try {
             'canonicalUrl'=>$comparison['canonical_url'] ?: url('compare/' . $comparison['slug']),
             'robotsIndex'=>(bool)$comparison['robots_index'],
             'comparison'=>$comparison,
+        ]);
+        exit;
+    }
+
+    if ($method === 'GET' && preg_match('#^/review/([a-z0-9-]+)$#i', $path, $matches)) {
+        $review=$reviewRepo->publishedBySlug($matches[1]);
+        if(!$review){
+            http_response_code(404);
+            View::render('404',['pageTitle'=>'Review not found','metaDescription'=>'']);
+            exit;
+        }
+        View::render('review',[
+            'pageTitle'=>($review['seo_title'] ?: $review['title']) . ' — MediaPitch',
+            'metaDescription'=>(string)($review['meta_description'] ?: $review['excerpt']),
+            'canonicalUrl'=>$review['canonical_url'] ?: url('review/' . $review['slug']),
+            'robotsIndex'=>(bool)$review['robots_index'],
+            'review'=>$review,
         ]);
         exit;
     }
