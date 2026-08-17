@@ -11,8 +11,20 @@ $specValue = static function (array $spec): string {
         default => (string)($spec['value_text'] ?? ''),
     };
 };
+$productSchema=['@context'=>'https://schema.org','@type'=>'Product','name'=>$name,'description'=>(string)($product['short_description'] ?? '')];
+if(!empty($product['main_image_url'])) $productSchema['image']=$product['main_image_url'];
+if(!empty($product['brand_name'])) $productSchema['brand']=['@type'=>'Brand','name'=>$product['brand_name']];
+if(!empty($product['asin'])) $productSchema['sku']=$product['asin'];
+$breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
+    ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
+]];
+if(!empty($product['category_name'])&&!empty($product['category_slug'])) $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>2,'name'=>$product['category_name'],'item'=>url('category/'.$product['category_slug'])];
+$breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($breadcrumbSchema['itemListElement'])+1,'name'=>$name,'item'=>url('product/'.$product['slug'])];
 ?>
+<script type="application/ld+json"><?= json_encode($productSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <section class="section">
+    <div class="container"><nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a><?php if(!empty($product['category_name'])&&!empty($product['category_slug'])):?> · <a href="<?= e(url('category/'.$product['category_slug'])) ?>"><?= e($product['category_name']) ?></a><?php endif;?> · <?= e($name) ?></nav></div>
     <div class="container product-detail-grid">
         <div class="product-detail-image">
             <?php if (!empty($product['main_image_url'])): ?>
@@ -60,5 +72,5 @@ $specValue = static function (array $spec): string {
 <?php endif; ?>
 
 <?php if (!empty($product['full_description'])): ?>
-<section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><?= $product['full_description'] ?></div></section>
+<section class="section section-soft"><div class="container narrow prose"><h2>Our review</h2><p><?= nl2br(e((string)$product['full_description'])) ?></p></div></section>
 <?php endif; ?>
