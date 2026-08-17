@@ -1,4 +1,19 @@
-<?php $name=$review['display_title'] ?: $review['product_title']; ?>
-<section class="section section-soft"><div class="container narrow"><span class="eyebrow">Product Review</span><h1><?= e($review['title']) ?></h1><?php if(!empty($review['author_name'])):?><p class="muted">By <?= e($review['author_name']) ?><?php if(!empty($review['published_at'])):?> · <?= e(date('j M Y',strtotime((string)$review['published_at']))) ?><?php endif;?></p><?php endif;?><?php if(!empty($review['excerpt'])):?><p class="lead"><?= e($review['excerpt']) ?></p><?php endif;?></div></section>
+<?php
+$name=$review['display_title'] ?: $review['product_title'];
+$reviewSchema=['@context'=>'https://schema.org','@type'=>'Review','name'=>$review['title'],'reviewBody'=>(string)($review['excerpt'] ?? ''),'itemReviewed'=>['@type'=>'Product','name'=>$name]];
+if(!empty($review['brand_name'])) $reviewSchema['itemReviewed']['brand']=['@type'=>'Brand','name'=>$review['brand_name']];
+if(!empty($review['main_image_url'])) $reviewSchema['itemReviewed']['image']=$review['main_image_url'];
+if($review['review_score']!==null) $reviewSchema['reviewRating']=['@type'=>'Rating','ratingValue'=>(float)$review['review_score'],'bestRating'=>10,'worstRating'=>0];
+if(!empty($review['author_name'])) $reviewSchema['author']=['@type'=>'Person','name'=>$review['author_name']];
+if(!empty($review['published_at'])) $reviewSchema['datePublished']=date(DATE_ATOM,strtotime((string)$review['published_at']));
+$breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
+  ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
+  ['@type'=>'ListItem','position'=>2,'name'=>$name,'item'=>url('product/'.$review['product_slug'])],
+  ['@type'=>'ListItem','position'=>3,'name'=>$review['title'],'item'=>url('review/'.$review['slug'])],
+]];
+?>
+<script type="application/ld+json"><?= json_encode($reviewSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
+<section class="section section-soft"><div class="container narrow"><nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <a href="<?= e(url('product/'.$review['product_slug'])) ?>"><?= e($name) ?></a> · <?= e($review['title']) ?></nav><span class="eyebrow">Product Review</span><h1><?= e($review['title']) ?></h1><?php if(!empty($review['author_name'])):?><p class="muted">By <?= e($review['author_name']) ?><?php if(!empty($review['published_at'])):?> · <?= e(date('j M Y',strtotime((string)$review['published_at']))) ?><?php endif;?></p><?php endif;?><?php if(!empty($review['excerpt'])):?><p class="lead"><?= e($review['excerpt']) ?></p><?php endif;?></div></section>
 <section class="section"><div class="container product-detail-grid"><div class="product-detail-image"><?php if(!empty($review['featured_image_url'])):?><img src="<?= e($review['featured_image_url']) ?>" alt="<?= e($review['title']) ?>"><?php elseif(!empty($review['main_image_url'])):?><img src="<?= e($review['main_image_url']) ?>" alt="<?= e($name) ?>"><?php else:?><div class="image-placeholder">Product image</div><?php endif;?></div><div><h2><?= e($name) ?></h2><?php if(!empty($review['brand_name'])):?><p class="muted">By <?= e($review['brand_name']) ?></p><?php endif;?><?php if($review['review_score']!==null):?><div class="detail-score"><strong><?= e((string)$review['review_score']) ?>/10</strong><span>MediaPitch review score</span></div><?php endif;?><?php if(!empty($review['price'])):?><p class="price">₹<?= e(number_format((float)$review['price'],0)) ?> <small>last recorded price</small></p><?php endif;?><?php if(!empty($review['affiliate_url'])):?><a class="button" href="<?= e(url('go/'.$review['product_id'].'?content='.$review['id'].'&from=review')) ?>">Check Price on Amazon</a><?php endif;?><p><a href="<?= e(url('product/'.$review['product_slug'])) ?>">View product details →</a></p></div></div></section>
 <?php if(!empty($review['body'])):?><section class="section section-soft"><div class="container narrow prose"><?= $review['body'] ?></div></section><?php endif;?>
