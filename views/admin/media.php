@@ -12,12 +12,17 @@
   </div>
 
   <div class="panel">
-    <h2>Media library</h2>
+    <div class="panel-head"><div><h2>Media library</h2><p>Search by filename or alt text. In-use images are protected from deletion.</p></div></div>
+    <form method="get" action="<?= e(url('admin/media')) ?>" class="filter-row" style="margin-bottom:1rem">
+      <input type="search" name="q" value="<?= e($query ?? '') ?>" placeholder="Search media…" aria-label="Search media">
+      <button class="secondary-button">Search</button>
+      <?php if(!empty($query)):?><a class="secondary-button" href="<?= e(url('admin/media')) ?>">Clear</a><?php endif;?>
+    </form>
     <?php if (empty($items)): ?>
-      <p class="muted">No uploads yet.</p>
+      <p class="muted"><?= !empty($query)?'No media matched your search.':'No uploads yet.' ?></p>
     <?php else: ?>
       <div class="media-grid">
-        <?php foreach ($items as $item): $displayPath=$item['thumbnail_path'] ?: $item['file_path']; $imageUrl=url(ltrim($item['file_path'],'/')); ?>
+        <?php foreach ($items as $item): $displayPath=$item['thumbnail_path'] ?: $item['file_path']; $imageUrl=url(ltrim($item['file_path'],'/')); $usage=$item['usage']??[]; ?>
           <article class="media-card">
             <a href="<?= e($imageUrl) ?>" target="_blank" rel="noopener">
               <img src="<?= e(url(ltrim($displayPath,'/'))) ?>" alt="<?= e($item['alt_text'] ?: $item['original_name']) ?>" loading="lazy">
@@ -27,6 +32,7 @@
               <small><?= (int)$item['width'] ?>×<?= (int)$item['height'] ?> · <?= e(round(((int)$item['file_size'])/1024) . ' KB') ?><?= !empty($item['optimized'])?' · thumbnail ready':'' ?></small>
               <input type="text" readonly value="<?= e($imageUrl) ?>" onclick="this.select()" aria-label="Image URL">
               <?php if (!empty($item['alt_text'])): ?><small>Alt: <?= e($item['alt_text']) ?></small><?php endif; ?>
+              <?php if($usage):?><small><strong>In use:</strong> <?= e(implode(', ',$usage)) ?></small><?php else:?><small>Not currently used by CMS content.</small><?php endif;?>
               <?php if(!empty($categories)): ?>
                 <form method="post" action="<?= e(url('admin/media/assign-category')) ?>" class="stack-form">
                   <?= Csrf::field() ?><input type="hidden" name="image_url" value="<?= e($imageUrl) ?>">
@@ -34,6 +40,12 @@
                   <button class="secondary-button">Set category image</button>
                 </form>
               <?php endif; ?>
+              <?php if(!$usage):?>
+                <form method="post" action="<?= e(url('admin/media/delete')) ?>" onsubmit="return confirm('Delete this image permanently? This cannot be undone.')">
+                  <?= Csrf::field() ?><input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
+                  <button class="link-button" style="color:#b91c1c">Delete image</button>
+                </form>
+              <?php endif;?>
             </div>
           </article>
         <?php endforeach; ?>
