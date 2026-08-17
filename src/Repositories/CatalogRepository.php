@@ -19,7 +19,7 @@ final class CatalogRepository
         return $stmt->fetchAll();
     }
 
-    public function categoryBySlug(string $slug): ?array
+    public function categoryBySlug(string $slug, ?array $filters = null): ?array
     {
         $db = Database::connection();
         $stmt=$db->prepare('SELECT * FROM categories WHERE slug=:slug AND active=1 LIMIT 1');
@@ -27,13 +27,108 @@ final class CatalogRepository
         $category=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$category) return null;
 
+        $filters ??= $_GET;
+        $page=max(1,(int)($filters['page'] ?? 1));
+        $perPage=12;
+        $brandId=max(0,(int)($filters['brand'] ?? 0));
+        $minPrice=isset($filters['min_price']) && $filters['min_price'] !== '' && is_numeric($filters['min_price']) ? (float)$filters['min_price'] : null;
+        $maxPrice=isset($filters['max_price']) && $filters['max_price'] !== '' && is_numeric($filters['max_price']) ? (float)$filters['max_price'] : null;
+        $minScore=isset($filters['min_score']) && $filters['min_score'] !== '' && is_numeric($filters['min_score']) ? max(0,min(10,(float)$filters['min_score'])) : null;
+        $sort=(string)($filters['sort'] ?? 'score');
+        $allowedSorts=[
+            'score'=>'p.custom_score DESC,p.updated_at DESC',
+            'price_asc'=>'p.price IS NULL,p.price ASC,p.title ASC',
+            'price_desc'=>'p.price IS NULL,p.price DESC,p.title ASC',
+            'newest'=>'p.updated_at DESC',
+            'title'=>'COALESCE(p.display_title,p.title) ASC',
+        ];
+        if(!isset($allowedSorts[$sort])) $sort='score';
+
+        $definitionsStmt=$db->prepare(
+            'SELECT id,name,slug,unit,data_type,options_json,sort_order FROM specification_definitions
+             WHERE category_id=:category_id AND filterable=1 ORDER BY sort_order,name'
+        );
+        $definitionsStmt->execute(['category_id'=>$category['id']]);
+        $filterDefinitions=$definitionsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $definitionBySlug=[];
+        foreach($filterDefinitions as $definition) $definitionBySlug[$definition['slug']]=$definition;
+
+        $where=['p.category_id=:category_id','p.active=1'];
+        $params=['category_id'=>(int)$category['id']];
+        if($brandId>0){ $where[]='p.brand_id=:brand_id'; $params['brand_id']=$brandId; }
+        if($minPrice!==null){ $where[]='p.price>=:min_price'; $params['min_price']=$minPrice; }
+        if($maxPrice!==null){ $where[]='p.price<=:max_price'; $params['max_price']=$maxPrice; }
+        if($minScore!==null){ $where[]='p.custom_score>=:min_score'; $params['min_score']=$minScore; }
+
+        $activeSpecs=[];
+        $submittedSpecs=is_array($filters['spec'] ?? null) ? $filters['spec'] : [];
+        $specIndex=0;
+        foreach($submittedSpecs as $specSlug=>$raw){
+            if(!isset($definitionBySlug[$specSlug]) || $raw==='') continue;
+            $definition=$definitionBySlug[$specSlug];
+            $value=is_scalar($raw) ? trim((string)$raw) : '';
+            if($value==='') continue;
+            $prefix='spec_' . $specIndex++;
+            $params[$prefix . '_id']=(int)$definition['id'];
+            $condition='';
+            if($definition['data_type']==='number' && is_numeric($value)){
+                $condition='ps.value_number=:' . $prefix . '_value';
+                $params[$prefix . '_value']=(float)$value;
+            }elseif($definition['data_type']==='boolean' && in_array($value,['0','1'],true)){
+                $condition='ps.value_boolean=:' . $prefix . '_value';
+                $params[$prefix . '_value']=(int)$value;
+            }elseif(in_array($definition['data_type'],['text','select'],true)){
+                if($definition['data_type']==='select'){
+                    $options=json_decode((string)$definition['options_json'],true);
+                    if(!is_array($options) || !in_array($value,$options,true)) continue;
+                }
+                $condition='ps.value_text=:' . $prefix . '_value';
+                $params[$prefix . '_value']=$value;
+            }
+            if($condition==='') continue;
+            $where[]='EXISTS (SELECT 1 FROM product_specifications ps WHERE ps.product_id=p.id AND ps.specification_definition_id=:' . $prefix . '_id AND ' . $condition . ')';
+            $activeSpecs[$specSlug]=$value;
+        }
+
+        $whereSql=implode(' AND ',$where);
+        $count=$db->prepare('SELECT COUNT(*) FROM products p WHERE ' . $whereSql);
+        foreach($params as $key=>$value) $count->bindValue(':' . $key,$value,is_int($value)?PDO::PARAM_INT:PDO::PARAM_STR);
+        $count->execute();
+        $total=(int)$count->fetchColumn();
+        $pages=max(1,(int)ceil($total/$perPage));
+        $page=min($page,$pages);
+        $offset=($page-1)*$perPage;
+
         $products=$db->prepare(
             'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.custom_score,p.best_for_label,b.name AS brand_name
              FROM products p LEFT JOIN brands b ON b.id=p.brand_id
-             WHERE p.category_id=:category_id AND p.active=1 ORDER BY p.custom_score DESC,p.updated_at DESC'
+             WHERE ' . $whereSql . ' ORDER BY ' . $allowedSorts[$sort] . ' LIMIT :limit OFFSET :offset'
         );
-        $products->execute(['category_id'=>$category['id']]);
+        foreach($params as $key=>$value) $products->bindValue(':' . $key,$value,is_int($value)?PDO::PARAM_INT:PDO::PARAM_STR);
+        $products->bindValue(':limit',$perPage,PDO::PARAM_INT);
+        $products->bindValue(':offset',$offset,PDO::PARAM_INT);
+        $products->execute();
         $category['products']=$products->fetchAll(PDO::FETCH_ASSOC);
+
+        $brands=$db->prepare(
+            'SELECT DISTINCT b.id,b.name FROM brands b JOIN products p ON p.brand_id=b.id
+             WHERE p.category_id=:category_id AND p.active=1 ORDER BY b.name'
+        );
+        $brands->execute(['category_id'=>$category['id']]);
+
+        $category['filter_options']=[
+            'brands'=>$brands->fetchAll(PDO::FETCH_ASSOC),
+            'specifications'=>$filterDefinitions,
+        ];
+        $category['active_filters']=[
+            'brand'=>$brandId,
+            'min_price'=>$minPrice,
+            'max_price'=>$maxPrice,
+            'min_score'=>$minScore,
+            'sort'=>$sort,
+            'spec'=>$activeSpecs,
+        ];
+        $category['pagination']=['page'=>$page,'pages'=>$pages,'total'=>$total,'per_page'=>$perPage];
 
         $content=$db->prepare(
             "SELECT id,type,title,slug,excerpt,featured_image_url,published_at
@@ -169,7 +264,7 @@ final class CatalogRepository
             'content_id' => $contentId,
             'rank_position' => $rank,
             'cta_location' => $ctaLocation,
-            'referring_url' => $referrer,
+            'referrer' => $referrer,
             'user_agent' => $userAgent,
             'campaign' => $campaign,
         ]);
