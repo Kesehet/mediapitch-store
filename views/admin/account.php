@@ -1,4 +1,4 @@
-<?php use MediaPitch\Core\Csrf; ?>
+<?php use MediaPitch\Core\Csrf; ?><script src="/assets/password-toggle.js" defer></script>
 <div class="panel form-panel" style="max-width:720px">
   <div class="panel-head"><div><h2>Change password</h2><p>Update the password for your currently signed-in account.</p></div></div>
   <form method="post" action="<?= e(url('admin/account/password')) ?>" class="stack-form">
