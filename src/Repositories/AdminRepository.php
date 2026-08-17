@@ -41,16 +41,33 @@ final class AdminRepository
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function category(?int $id): ?array
+    {
+        if(!$id)return null;
+        $stmt=Database::connection()->prepare('SELECT * FROM categories WHERE id=:id LIMIT 1');
+        $stmt->execute(['id'=>$id]);
+        $row=$stmt->fetch(PDO::FETCH_ASSOC);
+        return $row?:null;
+    }
+
     public function categoryOptions(): array
     {
         return Database::connection()->query('SELECT id, name FROM categories WHERE active = 1 ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function setCategoryActive(int $id,bool $active): void
+    {
+        $stmt=Database::connection()->prepare('UPDATE categories SET active=:active WHERE id=:id');
+        $stmt->execute(['active'=>$active?1:0,'id'=>$id]);
+    }
+
     public function saveCategory(array $data, ?int $id = null): int
     {
         $db = Database::connection();
+        $parent=!empty($data['parent_id'])?(int)$data['parent_id']:null;
+        if($id && $parent===$id) throw new InvalidArgumentException('A category cannot be its own parent.');
         $params = [
-            'parent_id' => $data['parent_id'] ?: null,
+            'parent_id' => $parent,
             'name' => trim((string) $data['name']),
             'slug' => trim((string) $data['slug']),
             'description' => trim((string) ($data['description'] ?? '')) ?: null,
@@ -59,6 +76,7 @@ final class AdminRepository
             'sort_order' => (int) ($data['sort_order'] ?? 0),
             'active' => !empty($data['active']) ? 1 : 0,
         ];
+        if($params['name']===''||$params['slug']==='') throw new InvalidArgumentException('Category name and slug are required.');
 
         if ($id) {
             $params['id'] = $id;
@@ -360,46 +378,65 @@ final class AdminRepository
             'excerpt' => trim((string)($data['excerpt'] ?? '')) ?: null,
             'body' => trim((string)($data['body'] ?? '')) ?: null,
             'featured_image_url' => trim((string)($data['featured_image_url'] ?? '')) ?: null,
+            'status' => in_array(($data['status'] ?? 'draft'), ['draft','scheduled','published','archived'], true) ? $data['status'] : 'draft',
+            'published_at' => !empty($data['published_at']) ? date('Y-m-d H:i:s', strtotime((string)$data['published_at'])) : null,
             'seo_title' => trim((string)($data['seo_title'] ?? '')) ?: null,
             'meta_description' => trim((string)($data['meta_description'] ?? '')) ?: null,
-            'status' => in_array(($data['status'] ?? 'draft'), ['draft','scheduled','published'], true) ? $data['status'] : 'draft',
-            'published_at' => !empty($data['published_at']) ? date('Y-m-d H:i:s', strtotime((string)$data['published_at'])) : null,
+            'canonical_url' => trim((string)($data['canonical_url'] ?? '')) ?: null,
+            'robots_index' => !empty($data['robots_index']) ? 1 : 0,
         ];
-        if ($params['status'] === 'published' && !$params['published_at']) $params['published_at'] = gmdate('Y-m-d H:i:s');
-
-        if ($id) {
-            $params['id']=$id;
-            $stmt=$db->prepare('UPDATE content SET category_id=:category_id,author_id=:author_id,title=:title,slug=:slug,excerpt=:excerpt,body=:body,featured_image_url=:featured_image_url,seo_title=:seo_title,meta_description=:meta_description,status=:status,published_at=:published_at WHERE id=:id');
-            $stmt->execute($params);
-        } else {
-            $stmt=$db->prepare("INSERT INTO content (type,category_id,author_id,title,slug,excerpt,body,featured_image_url,seo_title,meta_description,status,published_at) VALUES ('buying_guide',:category_id,:author_id,:title,:slug,:excerpt,:body,:featured_image_url,:seo_title,:meta_description,:status,:published_at)");
-            $stmt->execute($params);
-            $id=(int)$db->lastInsertId();
-        }
 
         $db->beginTransaction();
         try {
+            if ($id) {
+                $params['id']=$id;
+                $stmt=$db->prepare(
+                    "UPDATE content SET category_id=:category_id,author_id=:author_id,title=:title,slug=:slug,excerpt=:excerpt,body=:body,
+                     featured_image_url=:featured_image_url,status=:status,published_at=:published_at,seo_title=:seo_title,
+                     meta_description=:meta_description,canonical_url=:canonical_url,robots_index=:robots_index WHERE id=:id AND type='buying_guide'"
+                );
+                $stmt->execute($params);
+            } else {
+                $stmt=$db->prepare(
+                    "INSERT INTO content (type,category_id,author_id,title,slug,excerpt,body,featured_image_url,status,published_at,seo_title,meta_description,canonical_url,robots_index)
+                     VALUES ('buying_guide',:category_id,:author_id,:title,:slug,:excerpt,:body,:featured_image_url,:status,:published_at,:seo_title,:meta_description,:canonical_url,:robots_index)"
+                );
+                $stmt->execute($params);
+                $id=(int)$db->lastInsertId();
+            }
+
             $db->prepare('DELETE FROM content_products WHERE content_id=:id')->execute(['id'=>$id]);
-            $productIds = $data['product_id'] ?? [];
-            foreach ($productIds as $i => $productId) {
+            $productIds=$data['product_id'] ?? [];
+            if (!is_array($productIds)) $productIds=[];
+            $rank=$data['rank_position'] ?? [];
+            $score=$data['score'] ?? [];
+            $bestFor=$data['product_best_for'] ?? [];
+            $recommendation=$data['recommendation'] ?? [];
+            $cta=$data['cta_text'] ?? [];
+            $insert=$db->prepare(
+                'INSERT INTO content_products (content_id,product_id,rank_position,score,best_for_label,recommendation,cta_text,sort_order)
+                 VALUES (:content_id,:product_id,:rank_position,:score,:best_for_label,:recommendation,:cta_text,:sort_order)'
+            );
+            $seen=[];
+            foreach($productIds as $i=>$productId){
                 $productId=(int)$productId;
-                if ($productId < 1) continue;
-                $stmt=$db->prepare('INSERT INTO content_products (content_id,product_id,rank_position,score,best_for_label,recommendation,cta_text,sort_order) VALUES (:content_id,:product_id,:rank,:score,:best_for,:recommendation,:cta,:sort_order)');
-                $stmt->execute([
+                if($productId<1 || isset($seen[$productId])) continue;
+                $seen[$productId]=true;
+                $insert->execute([
                     'content_id'=>$id,'product_id'=>$productId,
-                    'rank'=>($data['rank'][$i] ?? '') !== '' ? (int)$data['rank'][$i] : null,
-                    'score'=>($data['product_score'][$i] ?? '') !== '' ? (float)$data['product_score'][$i] : null,
-                    'best_for'=>trim((string)($data['product_best_for'][$i] ?? '')) ?: null,
-                    'recommendation'=>trim((string)($data['recommendation'][$i] ?? '')) ?: null,
-                    'cta'=>trim((string)($data['cta_text'][$i] ?? '')) ?: null,
+                    'rank_position'=>isset($rank[$i]) && $rank[$i]!=='' ? (int)$rank[$i] : $i+1,
+                    'score'=>isset($score[$i]) && $score[$i]!=='' ? (float)$score[$i] : null,
+                    'best_for_label'=>trim((string)($bestFor[$i] ?? '')) ?: null,
+                    'recommendation'=>trim((string)($recommendation[$i] ?? '')) ?: null,
+                    'cta_text'=>trim((string)($cta[$i] ?? '')) ?: null,
                     'sort_order'=>$i,
                 ]);
             }
             $db->commit();
+            return (int)$id;
         } catch (\Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
-        return $id;
     }
 }
