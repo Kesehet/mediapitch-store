@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
+use MediaPitch\Admin\AnalyticsAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
 use MediaPitch\Admin\ReviewAdminController;
@@ -10,6 +11,7 @@ use MediaPitch\Admin\SettingsAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
+use MediaPitch\Repositories\AnalyticsRepository;
 use MediaPitch\Repositories\CatalogRepository;
 use MediaPitch\Repositories\ComparisonCatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
@@ -38,6 +40,11 @@ try {
     if (str_starts_with($path, '/admin/media')) {
         $mediaAdmin = new MediaAdminController(new MediaRepository());
         if ($mediaAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/analytics')) {
+        $analyticsAdmin = new AnalyticsAdminController(new AnalyticsRepository());
+        if ($analyticsAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/reviews')) {
