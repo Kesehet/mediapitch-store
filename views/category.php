@@ -50,7 +50,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
   <div class="section-head"><div><span class="eyebrow">Products</span><h2>Recommended <?= e($category['name']) ?></h2><p class="muted"><?= (int)$pagination['total'] ?> product<?= (int)$pagination['total']===1?'':'s' ?> found</p></div></div>
   <?php if(!empty($category['products'])): ?>
   <div class="product-grid">
-    <?php foreach($category['products'] as $product): ?>
+    <?php foreach($category['products'] as $product): $displayPrice=public_product_price($product); ?>
       <article class="product-card">
         <a class="product-image" href="<?= e(url('product/' . $product['slug'])) ?>"><?php if(!empty($product['main_image_url'])):?><img src="<?= e($product['main_image_url']) ?>" alt="<?= e($product['display_title'] ?: $product['title']) ?>" loading="lazy"><?php else:?><span class="image-placeholder">Product image</span><?php endif;?></a>
         <div class="card-body">
@@ -58,7 +58,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
           <h3><a href="<?= e(url('product/' . $product['slug'])) ?>"><?= e($product['display_title'] ?: $product['title']) ?></a></h3>
           <?php if(!empty($product['brand_name'])):?><p class="muted"><?= e($product['brand_name']) ?></p><?php endif;?>
           <?php if($product['custom_score']!==null):?><div class="score">MediaPitch score <strong><?= e((string)$product['custom_score']) ?>/10</strong></div><?php endif;?>
-          <?php if($product['price']!==null):?><p class="price">₹<?= e(number_format((float)$product['price'],0)) ?></p><?php endif;?>
+          <?php if($displayPrice!==null):?><p class="price">₹<?= e(number_format($displayPrice,0)) ?></p><?php endif;?>
         </div>
       </article>
     <?php endforeach; ?>
