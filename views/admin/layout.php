@@ -18,9 +18,11 @@ $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/adm
     <a class="<?= str_starts_with($currentPath,'/admin/reviews')?'active':'' ?>" href="<?= e(url('admin/reviews')) ?>">Reviews</a>
     <a class="<?= str_starts_with($currentPath,'/admin/blog')?'active':'' ?>" href="<?= e(url('admin/blog')) ?>">Blog</a>
     <a class="<?= str_starts_with($currentPath,'/admin/media')?'active':'' ?>" href="<?= e(url('admin/media')) ?>">Media</a>
+    <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/users')?'active':'' ?>" href="<?= e(url('admin/users')) ?>">Users</a><?php endif;?>
     <?php if(($adminUser['role']??'')==='administrator'):?><a class="<?= str_starts_with($currentPath,'/admin/settings')?'active':'' ?>" href="<?= e(url('admin/settings/amazon')) ?>">Amazon Settings</a><?php endif;?>
   </nav>
   <div class="admin-user"><strong><?= e($adminUser['name'] ?? '') ?></strong><small><?= e($adminUser['role'] ?? '') ?></small>
+    <a class="link-button" href="<?= e(url('admin/account')) ?>">My account</a>
     <form method="post" action="<?= e(url('admin/logout')) ?>"><?= Csrf::field() ?><button class="link-button">Sign out</button></form>
   </div>
 </aside>
