@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace MediaPitch\Core;
 
+use InvalidArgumentException;
 use PDO;
+use RuntimeException;
 
 final class Auth
 {
@@ -35,6 +37,31 @@ final class Auth
         ];
         $_SESSION['_auth_last_activity'] = time();
         return true;
+    }
+
+    public static function changePassword(int $userId, string $currentPassword, string $newPassword, string $confirmation): void
+    {
+        if ($newPassword !== $confirmation) {
+            throw new InvalidArgumentException('The new password and confirmation do not match.');
+        }
+        if (strlen($newPassword) < 8) {
+            throw new InvalidArgumentException('The new password must be at least 8 characters.');
+        }
+        if (hash_equals($currentPassword, $newPassword)) {
+            throw new InvalidArgumentException('Choose a new password different from the current password.');
+        }
+
+        $stmt = Database::connection()->prepare('SELECT password_hash FROM users WHERE id=:id AND active=1 LIMIT 1');
+        $stmt->execute(['id'=>$userId]);
+        $hash = $stmt->fetchColumn();
+        if (!$hash || !password_verify($currentPassword, (string)$hash)) {
+            throw new RuntimeException('Current password is incorrect.');
+        }
+
+        $stmt = Database::connection()->prepare('UPDATE users SET password_hash=:password_hash WHERE id=:id');
+        $stmt->execute(['password_hash'=>password_hash($newPassword, PASSWORD_DEFAULT), 'id'=>$userId]);
+        session_regenerate_id(true);
+        $_SESSION['_auth_last_activity'] = time();
     }
 
     public static function user(): ?array
