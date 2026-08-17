@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
 use MediaPitch\Admin\AnalyticsAdminController;
+use MediaPitch\Admin\AuditAdminController;
 use MediaPitch\Admin\CategoryAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
@@ -16,6 +17,7 @@ use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\AnalyticsRepository;
+use MediaPitch\Repositories\AuditRepository;
 use MediaPitch\Repositories\CatalogRepository;
 use MediaPitch\Repositories\CategoryHierarchyRepository;
 use MediaPitch\Repositories\ComparisonCatalogRepository;
@@ -57,6 +59,11 @@ try {
     if (str_starts_with($path, '/admin/analytics')) {
         $analyticsAdmin = new AnalyticsAdminController(new AnalyticsRepository());
         if ($analyticsAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/audit')) {
+        $auditAdmin = new AuditAdminController(new AuditRepository());
+        if ($auditAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/redirects')) {
