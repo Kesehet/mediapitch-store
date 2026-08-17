@@ -17,6 +17,7 @@ $currentCategory=(int)($p['category_id'] ?? 0);
   <div class="panel-head"><div><h2>Category specifications</h2><p class="muted">Fields change automatically when you select a category.</p></div><a href="<?= e(url('admin/specifications')) ?>">Manage definitions</a></div>
   <div class="form-grid" id="product-spec-fields">
     <?php foreach ($specDefinitions as $definition):
+      if(isset($definition['active']) && !(bool)$definition['active']) continue;
       $id=(int)$definition['id'];
       $stored=$specValues[$id] ?? [];
       $value=$stored['value_text'] ?? ($stored['value_number'] ?? ($stored['value_boolean'] ?? ''));
@@ -36,7 +37,7 @@ $currentCategory=(int)($p['category_id'] ?? 0);
       </label>
     <?php endforeach; ?>
   </div>
-  <p class="muted" id="no-spec-message">No specification definitions exist for this category yet.</p>
+  <p class="muted" id="no-spec-message">No active specification definitions exist for this category yet.</p>
 </section>
 <?php endif; ?>
 
@@ -53,7 +54,7 @@ $currentCategory=(int)($p['category_id'] ?? 0);
       if(empty)empty.style.display=visible?'none':'block';
     }
     category.addEventListener('change',update); update();
-  }
+  }else if(empty){empty.style.display='block';}
   const picker=document.getElementById('product-media-picker');
   const image=document.getElementById('main-image-url');
   if(picker&&image){picker.addEventListener('change',()=>{if(picker.value)image.value=picker.value;});}
