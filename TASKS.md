@@ -12,12 +12,13 @@ This file is the source of truth for work landing on `main`.
 - Production branch: `main`
 - Legacy `agent/*` branches: fast-forwarded to current `main`
 - Production URL: `https://store.mediapitch.in/`
-- Production `/health`: DB connection confirmed OK
+- Production `/health`: DB connection confirmed OK from the user's browser
 - PHP syntax GitHub Action: confirmed passing on recent commits
 - Deployment: Composer hook is resilient; MariaDB migrations are retry-safe and no longer wrap DDL in PDO transactions
 - DB deploy: base schema -> migrations -> non-destructive seed defaults
 - Bootstrap admin: created only when user count is zero
 - Public page titles use `|` separators
+- Assistant-side live checks are currently blocked by DNS resolution/cache in the execution environment; production verification continues from user-visible/browser checks
 
 ---
 
@@ -86,7 +87,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Amazon-price freshness enforcement
 - [x] Bulk archive/restore
 - [x] Validated CSV export/import
-- [ ] Product change-history view
+- [x] Product change-history view from audit events
 
 # 4. Flexible specifications
 - [x] Category-specific definitions
@@ -118,9 +119,8 @@ This file is the source of truth for work landing on `main`.
 - [x] Public ranked guide output, schema and breadcrumbs
 - [x] Safe rich-text guide body rendering
 - [x] Related editorial content
-- [ ] FAQ editor/output
-- [ ] “How we selected” structured section
-- [ ] Table of contents
+- [x] Guide structure helper for FAQ and “How we selected” sections
+- [x] Automatic public table of contents from H2/H3 headings
 
 # 7. Blog / editorial CMS
 - [x] Blog CRUD, category, scheduling and SEO
@@ -184,7 +184,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Breadcrumb UI/schema
 - [x] Redirect manager and runtime redirects
 - [x] Automatic redirects on product/content/category slug changes
-- [ ] SEO preview in editors
+- [x] Live SEO preview in editors
 - [ ] Internal-link helper beyond automatic related-content sections
 - [ ] Comparison structured-data decision
 
@@ -202,9 +202,9 @@ This file is the source of truth for work landing on `main`.
 - [x] One-hour public offer-price freshness rule
 - [x] Retry/backoff for transient API/auth errors
 - [x] Stale-product bulk refresh in API-safe batches
+- [x] Per-product source/ASIN/marketplace/last-sync status in product editor
+- [x] Field-level manual override controls for Amazon refresh
 - [~] Finish full Associates policy review
-- [ ] Better per-product last-sync/health UX
-- [ ] Field-level manual override controls
 - [ ] Multiple marketplaces
 
 # 14. Lower-priority/future capabilities
@@ -216,11 +216,10 @@ This file is the source of truth for work landing on `main`.
 
 # Immediate execution queue
 1. [!] Redeploy and verify automatic migration/seed output on production
-2. [ ] Add product change-history view
-3. [ ] Add Amazon per-product sync/override UX
-4. [ ] Add buying-guide FAQ / “How we selected” / TOC
-5. [ ] Add SEO preview in editors
-6. [ ] Add blog tags
-7. [ ] Add affiliate bot filtering + retention policy
-8. [ ] Add image optimization policy / future storage abstraction
-9. [ ] Final visual QA
+2. [!] Run full production admin CRUD smoke test
+3. [ ] Add blog tags
+4. [ ] Add affiliate bot/internal filtering + retention policy
+5. [ ] Add image optimization policy / future storage abstraction
+6. [ ] Add review related-product recommendations
+7. [ ] Decide comparison structured data + public brand pages
+8. [ ] Final visual QA
