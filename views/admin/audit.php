@@ -1,5 +1,6 @@
 <section class="panel">
   <div class="panel-head"><div><h2>Admin audit log</h2><p class="muted">Recent administrative changes. Passwords, credentials and access tokens are never recorded here.</p></div><span><?= count($entries) ?> recent events</span></div>
+  <?php if(!empty($schemaError)):?><div class="flash error"><?= e($schemaError) ?></div><?php endif;?>
   <div class="table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Summary</th><th>Details</th></tr></thead><tbody>
   <?php foreach($entries as $entry): $metadata=json_decode((string)($entry['metadata_json']??''),true); ?>
     <tr>
