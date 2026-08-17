@@ -1,5 +1,5 @@
 <?php
-$pageTitle = $pageTitle ?? 'MediaPitch Store';
+$pageTitle = str_replace(' — ', ' | ', $pageTitle ?? 'MediaPitch Store');
 $metaDescription = $metaDescription ?? 'Independent product recommendations and buying guides.';
 $robotsIndex = $robotsIndex ?? true;
 $canonicalUrl = $canonicalUrl ?? null;
