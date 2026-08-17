@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use MediaPitch\Core\Database;
-use PDO;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -11,21 +10,16 @@ $db = Database::connection();
 $db->beginTransaction();
 
 try {
+    // Administrator credentials are intentionally not seeded here. The
+    // deployment's bootstrap-admin.php step owns administrator creation and
+    // recovery from BOOTSTRAP_ADMIN_* environment variables. Keeping that in
+    // one place prevents a hardcoded seed password from fighting production
+    // credentials during deploys.
     $userCount = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn();
     if ($userCount === 0) {
-        $admin = $db->prepare(
-            'INSERT INTO users (name, email, password_hash, role, active)
-             VALUES (:name, :email, :password_hash, :role, 1)'
-        );
-        $admin->execute([
-            'name' => 'MediaPitch Admin',
-            'email' => 'admin@mediapitch.in',
-            'password_hash' => password_hash('Change me', PASSWORD_DEFAULT),
-            'role' => 'administrator',
-        ]);
-        fwrite(STDOUT, "Bootstrap administrator created: admin@mediapitch.in\n");
+        fwrite(STDOUT, "No users exist yet; bootstrap-admin.php will create the configured administrator when BOOTSTRAP_ADMIN_PASSWORD is set.\n");
     } else {
-        fwrite(STDOUT, "Users already exist; bootstrap administrator seed skipped.\n");
+        fwrite(STDOUT, "Existing users preserved; administrator credentials are managed separately by bootstrap-admin.php.\n");
     }
 
     $category = $db->prepare(
