@@ -59,6 +59,14 @@ try {
         }
     }
 
+    if ($method === 'GET' && $path === '/api/search-suggestions') {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: public, max-age=60');
+        $query=trim((string)($_GET['q']??''));
+        echo json_encode(['suggestions'=>$searchRepo->suggestions($query)],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+        exit;
+    }
+
     if ($method === 'GET' && $path === '/') {
         $categories = [];
         $products = [];
@@ -168,11 +176,12 @@ try {
 
     if ($method === 'GET' && $path === '/search') {
         $query = trim((string) ($_GET['q'] ?? ''));
+        $page=max(1,(int)($_GET['page']??1));
         View::render('search', [
             'pageTitle' => $query !== '' ? 'Search: ' . $query . ' — MediaPitch' : 'Search — MediaPitch',
             'metaDescription' => 'Search MediaPitch products, categories, buying guides, comparisons and articles.',
             'query' => $query,
-            'results' => $query !== '' ? $searchRepo->search($query) : ['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[]],
+            'results' => $query !== '' ? $searchRepo->search($query,$page) : ['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[],'pagination'=>['page'=>1,'pages'=>1,'product_total'=>0]],
         ]);
         exit;
     }
