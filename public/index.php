@@ -3,16 +3,19 @@
 declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
+use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\CatalogRepository;
+use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 $catalog = new CatalogRepository();
 $contentRepo = new ContentRepository();
+$comparisonRepo = new ComparisonRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -21,6 +24,13 @@ if ($path === '//') {
 }
 
 try {
+    if (str_starts_with($path, '/admin/comparisons')) {
+        $comparisonAdmin = new ComparisonAdminController($comparisonRepo, new AdminRepository());
+        if ($comparisonAdmin->handle($method, $path)) {
+            exit;
+        }
+    }
+
     if (str_starts_with($path, '/admin')) {
         $admin = new AdminController(new AdminRepository());
         if ($admin->handle($method, $path)) {
@@ -97,6 +107,23 @@ try {
             'canonicalUrl'=>$post['canonical_url'] ?: url('blog/' . $post['slug']),
             'robotsIndex'=>(bool)$post['robots_index'],
             'post'=>$post,
+        ]);
+        exit;
+    }
+
+    if ($method === 'GET' && preg_match('#^/compare/([a-z0-9-]+)$#i', $path, $matches)) {
+        $comparison=$comparisonRepo->publishedBySlug($matches[1]);
+        if(!$comparison){
+            http_response_code(404);
+            View::render('404',['pageTitle'=>'Comparison not found','metaDescription'=>'']);
+            exit;
+        }
+        View::render('comparison',[
+            'pageTitle'=>($comparison['seo_title'] ?: $comparison['title']) . ' — MediaPitch',
+            'metaDescription'=>(string)($comparison['meta_description'] ?: $comparison['excerpt']),
+            'canonicalUrl'=>$comparison['canonical_url'] ?: url('compare/' . $comparison['slug']),
+            'robotsIndex'=>(bool)$comparison['robots_index'],
+            'comparison'=>$comparison,
         ]);
         exit;
     }
