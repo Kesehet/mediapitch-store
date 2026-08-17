@@ -4,7 +4,7 @@
 1. Pull `main`.
 2. Composer installs/updates the project.
 3. Composer runs `database/composer-deploy.php`.
-4. If the production DB is reachable, it runs base schema -> unapplied migrations -> non-destructive seed defaults -> optional bootstrap-admin recovery.
+4. If the production DB is reachable, it runs base schema -> unapplied migrations -> non-destructive seed defaults -> bootstrap administrator sync.
 5. If DB credentials are not available during the Composer phase, application deployment continues and DB deployment can be run explicitly with `composer deploy-db`.
 
 ## Required production environment
@@ -27,6 +27,27 @@ MAIL_FROM=admin@mediapitch.in
 ```
 
 Never commit `.env` or production secrets.
+
+## Administrator login / recovery
+The administrator login uses an **email address**, not a separate username. To create or reset the deployment administrator, set:
+
+```env
+BOOTSTRAP_ADMIN_NAME="MediaPitch Admin"
+BOOTSTRAP_ADMIN_EMAIL=your-admin@example.com
+BOOTSTRAP_ADMIN_PASSWORD=your-password-at-least-8-characters
+```
+
+Then run:
+
+```bash
+composer deploy-db
+```
+
+When `BOOTSTRAP_ADMIN_PASSWORD` is non-empty, the deployment step synchronizes that account on every run: it creates the administrator if necessary, updates the configured email/name/password, re-enables the account and clears failed-login counters. Historical installs using `admin@mediapitch.in` are migrated to the configured email rather than silently creating a second bootstrap administrator.
+
+After you can log in successfully, blank/remove `BOOTSTRAP_ADMIN_PASSWORD` from production `.env` if you want future deployments to stop resetting the administrator password. You can then manage/password-reset the account through the CMS normally.
+
+A browser login throttle created before the password change is tied to the old password hash. Once deployment changes the password hash, that stale throttle is automatically discarded when the configured administrator tries the new credentials.
 
 ## Amazon Creators API refresh schedule
 If Amazon integration is enabled, schedule a server-side refresh at least daily so non-offer Creators API content is refreshed within Amazon's documented 24-hour cache window. Price/offer data is treated more strictly by the application and is hidden after one hour.
