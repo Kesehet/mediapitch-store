@@ -6,7 +6,7 @@
       <?= Csrf::field() ?>
       <label>Image<input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif" required></label>
       <label>Alt text<input type="text" name="alt_text" maxlength="500" placeholder="Describe the image for accessibility"></label>
-      <p class="muted">JPEG, PNG, WebP or GIF. Maximum 5 MB.</p>
+      <p class="muted">JPEG, PNG, WebP or GIF. Maximum 5 MB. A WebP thumbnail is generated automatically when GD is available.</p>
       <button class="primary-button">Upload image</button>
     </form>
   </div>
@@ -17,16 +17,23 @@
       <p class="muted">No uploads yet.</p>
     <?php else: ?>
       <div class="media-grid">
-        <?php foreach ($items as $item): ?>
+        <?php foreach ($items as $item): $displayPath=$item['thumbnail_path'] ?: $item['file_path']; $imageUrl=url(ltrim($item['file_path'],'/')); ?>
           <article class="media-card">
-            <a href="<?= e(url(ltrim($item['file_path'],'/'))) ?>" target="_blank" rel="noopener">
-              <img src="<?= e(url(ltrim($item['file_path'],'/'))) ?>" alt="<?= e($item['alt_text'] ?: $item['original_name']) ?>" loading="lazy">
+            <a href="<?= e($imageUrl) ?>" target="_blank" rel="noopener">
+              <img src="<?= e(url(ltrim($displayPath,'/'))) ?>" alt="<?= e($item['alt_text'] ?: $item['original_name']) ?>" loading="lazy">
             </a>
             <div class="media-meta">
               <strong><?= e($item['original_name']) ?></strong>
-              <small><?= (int)$item['width'] ?>×<?= (int)$item['height'] ?> · <?= e(round(((int)$item['file_size'])/1024) . ' KB') ?></small>
-              <input type="text" readonly value="<?= e(url(ltrim($item['file_path'],'/'))) ?>" onclick="this.select()" aria-label="Image URL">
+              <small><?= (int)$item['width'] ?>×<?= (int)$item['height'] ?> · <?= e(round(((int)$item['file_size'])/1024) . ' KB') ?><?= !empty($item['optimized'])?' · thumbnail ready':'' ?></small>
+              <input type="text" readonly value="<?= e($imageUrl) ?>" onclick="this.select()" aria-label="Image URL">
               <?php if (!empty($item['alt_text'])): ?><small>Alt: <?= e($item['alt_text']) ?></small><?php endif; ?>
+              <?php if(!empty($categories)): ?>
+                <form method="post" action="<?= e(url('admin/media/assign-category')) ?>" class="stack-form">
+                  <?= Csrf::field() ?><input type="hidden" name="image_url" value="<?= e($imageUrl) ?>">
+                  <label>Use as category image<select name="category_id" required><option value="">Choose category</option><?php foreach($categories as $category):?><option value="<?= (int)$category['id'] ?>"><?= e($category['name']) ?></option><?php endforeach;?></select></label>
+                  <button class="secondary-button">Set category image</button>
+                </form>
+              <?php endif; ?>
             </div>
           </article>
         <?php endforeach; ?>
