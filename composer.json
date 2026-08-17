@@ -18,6 +18,7 @@
     "post-update-cmd": [
       "@php database/composer-deploy.php"
     ],
-    "deploy-db": "@php database/deploy.php"
+    "deploy-db": "@php database/deploy.php",
+    "prune-analytics": "@php database/prune-analytics.php"
   }
 }
