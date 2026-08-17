@@ -22,7 +22,7 @@ $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forCont
 </section>
 
 <?php if (!empty($guide['body'])): ?>
-<section class="section"><div class="container narrow prose"><?= nl2br(e((string) $guide['body'])) ?></div></section>
+<section class="section"><div class="container narrow prose"><?= safe_html((string)$guide['body']) ?></div></section>
 <?php endif; ?>
 
 <?php if (!empty($guide['products'])): ?>
