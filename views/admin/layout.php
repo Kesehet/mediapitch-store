@@ -9,7 +9,7 @@ $canContent=Auth::canEditContent();
 $canMedia=Auth::canUploadMedia();
 $isAdmin=Auth::isAdministrator();
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-editor.css"><script src="/assets/admin-editor.js" defer></script></head>
 <body class="admin-body">
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
