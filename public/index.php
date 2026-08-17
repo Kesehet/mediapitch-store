@@ -7,6 +7,7 @@ use MediaPitch\Admin\AnalyticsAdminController;
 use MediaPitch\Admin\CategoryAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
+use MediaPitch\Admin\MerchandisingAdminController;
 use MediaPitch\Admin\RedirectAdminController;
 use MediaPitch\Admin\ReviewAdminController;
 use MediaPitch\Admin\SettingsAdminController;
@@ -21,6 +22,7 @@ use MediaPitch\Repositories\ComparisonCatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\MerchandisingRepository;
 use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\RelatedContentRepository;
 use MediaPitch\Repositories\ReviewRepository;
@@ -38,6 +40,7 @@ $searchRepo = new SearchRepository();
 $redirectRepo = new RedirectRepository();
 $relatedRepo = new RelatedContentRepository();
 $categoryHierarchy = new CategoryHierarchyRepository();
+$merchandisingRepo = new MerchandisingRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -59,6 +62,11 @@ try {
     if (str_starts_with($path, '/admin/redirects')) {
         $redirectAdmin = new RedirectAdminController($redirectRepo);
         if ($redirectAdmin->handle($method, $path)) exit;
+    }
+
+    if (str_starts_with($path, '/admin/merchandising')) {
+        $merchandisingAdmin = new MerchandisingAdminController($merchandisingRepo);
+        if ($merchandisingAdmin->handle($method, $path)) exit;
     }
 
     if (str_starts_with($path, '/admin/categories')) {
@@ -115,13 +123,17 @@ try {
     }
 
     if ($method === 'GET' && $path === '/') {
-        $categories=[];$products=[];$guides=[];$articles=[];$comparisons=[];$databaseAvailable=true;
+        $categories=[];$products=[];$guides=[];$articles=[];$comparisons=[];$deals=[];$dealsTitle='Deals worth a look';$databaseAvailable=true;
         try {
             $categories=$catalog->featuredCategories();
             $products=$catalog->featuredProducts();
             $guides=$catalog->latestContent('buying_guide');
             $articles=$catalog->latestContent('blog');
             $comparisons=$comparisonCatalog->latest(3);
+            $merch=$merchandisingRepo->homepage();
+            if(!empty($merch['featured']))$products=$merch['featured'];
+            $deals=$merch['deals']??[];
+            $dealsTitle=(string)($merch['deals_title']??$dealsTitle);
         } catch (Throwable $databaseError) {
             $databaseAvailable=false;
             if ((bool) env('APP_DEBUG', false)) error_log('MediaPitch Store homepage database error: '.$databaseError->getMessage());
@@ -130,6 +142,7 @@ try {
             'pageTitle'=>'MediaPitch Store — Smart Product Discovery',
             'metaDescription'=>'Independent buying guides, product comparisons and recommendations from MediaPitch.',
             'categories'=>$categories,'products'=>$products,'guides'=>$guides,'articles'=>$articles,'comparisons'=>$comparisons,
+            'deals'=>$deals,'dealsTitle'=>$dealsTitle,
             'databaseAvailable'=>$databaseAvailable,
         ]);
         exit;
