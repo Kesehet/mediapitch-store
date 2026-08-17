@@ -19,6 +19,38 @@ final class CatalogRepository
         return $stmt->fetchAll();
     }
 
+    public function categoryBySlug(string $slug): ?array
+    {
+        $db = Database::connection();
+        $stmt=$db->prepare('SELECT * FROM categories WHERE slug=:slug AND active=1 LIMIT 1');
+        $stmt->execute(['slug'=>$slug]);
+        $category=$stmt->fetch(PDO::FETCH_ASSOC);
+        if(!$category) return null;
+
+        $products=$db->prepare(
+            'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.custom_score,p.best_for_label,b.name AS brand_name
+             FROM products p LEFT JOIN brands b ON b.id=p.brand_id
+             WHERE p.category_id=:category_id AND p.active=1 ORDER BY p.custom_score DESC,p.updated_at DESC'
+        );
+        $products->execute(['category_id'=>$category['id']]);
+        $category['products']=$products->fetchAll(PDO::FETCH_ASSOC);
+
+        $content=$db->prepare(
+            "SELECT id,type,title,slug,excerpt,featured_image_url,published_at
+             FROM content WHERE category_id=:category_id AND status IN ('published','scheduled')
+             AND published_at IS NOT NULL AND published_at<=UTC_TIMESTAMP()
+             ORDER BY published_at DESC"
+        );
+        $content->execute(['category_id'=>$category['id']]);
+        $category['guides']=[];
+        $category['articles']=[];
+        foreach($content->fetchAll(PDO::FETCH_ASSOC) as $item){
+            if($item['type']==='buying_guide') $category['guides'][]=$item;
+            elseif($item['type']==='blog') $category['articles'][]=$item;
+        }
+        return $category;
+    }
+
     public function featuredProducts(int $limit = 8): array
     {
         $stmt = Database::connection()->prepare(
