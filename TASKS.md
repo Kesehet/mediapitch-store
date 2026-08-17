@@ -32,11 +32,11 @@ This file is the source of truth for work landing on `main`.
 - [x] Non-destructive seed defaults
 - [x] Empty-user-table bootstrap administrator
 - [x] Resilient Composer DB deployment hook
-- [ ] `.editorconfig`
-- [ ] Coding standards / release convention
-- [ ] Development setup documentation
-- [ ] Production deployment documentation
-- [ ] DB backup / rollback / smoke-test documentation
+- [x] `.editorconfig`
+- [x] Coding standards / release convention
+- [x] Development setup documentation
+- [x] Production deployment documentation
+- [x] DB backup / rollback / smoke-test documentation
 - [!] Re-run production deployment and verify Composer/DB output
 - [!] Full production admin CRUD smoke test
 
@@ -52,11 +52,11 @@ This file is the source of truth for work landing on `main`.
 - [x] Last-login tracking
 - [x] User create/edit/activate/deactivate safeguards
 - [x] Logged-in password change
+- [x] Self-service forgotten-password/reset workflow
 - [x] CSP and baseline response security headers
 - [x] Rich-content HTML sanitization
 - [x] Admin audit-log storage and administrator audit screen
-- [~] Complete audit coverage on every mutation path
-- [ ] Self-service forgotten-password/reset workflow
+- [x] Audit coverage across major mutation paths
 
 # 3. Categories, brands & products
 ## Categories
@@ -71,7 +71,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Brand create/edit
 - [x] Website/logo validation
 - [x] Media-library logo picker
-- [ ] Brand archive/restore
+- [x] Brand archive/restore with existing product relationships preserved
 - [ ] Public brand pages if useful
 
 ## Products
@@ -84,9 +84,9 @@ This file is the source of truth for work landing on `main`.
 - [x] Flexible specifications
 - [x] Public product page, schema, gallery and related content
 - [x] Amazon-price freshness enforcement
+- [x] Bulk archive/restore
+- [x] Validated CSV export/import
 - [ ] Product change-history view
-- [ ] Bulk product actions
-- [ ] CSV import/export
 
 # 4. Flexible specifications
 - [x] Category-specific definitions
@@ -105,8 +105,8 @@ This file is the source of truth for work landing on `main`.
 - [x] Homepage categories/products/guides/comparisons/articles
 - [x] Website settings and homepage section toggles
 - [x] Curated Featured and Deals product merchandising
-- [ ] Mobile navigation polish
-- [ ] Accessibility/keyboard/skip-link/focus-state review
+- [x] Accessible mobile navigation toggle
+- [x] Skip link, keyboard focus states and reduced-motion support
 - [ ] Final visual QA against MediaPitch branding
 
 # 6. Buying guides
@@ -116,6 +116,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Drag-and-drop ranking + automatic renumbering
 - [x] Duplicate-product prevention
 - [x] Public ranked guide output, schema and breadcrumbs
+- [x] Safe rich-text guide body rendering
 - [x] Related editorial content
 - [ ] FAQ editor/output
 - [ ] “How we selected” structured section
@@ -126,9 +127,9 @@ This file is the source of truth for work landing on `main`.
 - [x] Media picker and safe public HTML
 - [x] Blog index/article route, schema, breadcrumbs and OG image
 - [x] Related editorial content
-- [ ] Rich-text/Markdown editing UX
+- [x] Safe rich-text editing toolbar
+- [x] Server-side `[product:ID]` product embeds
 - [ ] Tags
-- [ ] Product embeds
 
 # 8. Comparisons & reviews
 ## Comparisons
@@ -199,10 +200,10 @@ This file is the source of truth for work landing on `main`.
 - [x] Preserve editorial/manual fields on refresh
 - [x] Refresh Amazon-owned title/price/link/sync fields
 - [x] One-hour public offer-price freshness rule
+- [x] Retry/backoff for transient API/auth errors
+- [x] Stale-product bulk refresh in API-safe batches
 - [~] Finish full Associates policy review
-- [ ] API retry/backoff
-- [ ] Bulk/background refresh workflow
-- [ ] Better API health / per-product last-sync UX
+- [ ] Better per-product last-sync/health UX
 - [ ] Field-level manual override controls
 - [ ] Multiple marketplaces
 
@@ -215,11 +216,11 @@ This file is the source of truth for work landing on `main`.
 
 # Immediate execution queue
 1. [!] Redeploy and verify automatic migration/seed output on production
-2. [~] Complete admin audit coverage
-3. [ ] Self-service password reset
-4. [ ] Amazon retry/backoff + bulk refresh + sync UX
-5. [ ] Rich-text/Markdown editor + product embeds
-6. [ ] Brand archive/restore
-7. [ ] Mobile/accessibility/final visual polish
-8. [ ] Product CSV/bulk tooling
-9. [ ] Production/development/backup documentation
+2. [ ] Add product change-history view
+3. [ ] Add Amazon per-product sync/override UX
+4. [ ] Add buying-guide FAQ / “How we selected” / TOC
+5. [ ] Add SEO preview in editors
+6. [ ] Add blog tags
+7. [ ] Add affiliate bot filtering + retention policy
+8. [ ] Add image optimization policy / future storage abstraction
+9. [ ] Final visual QA
