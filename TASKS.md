@@ -101,12 +101,15 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Sort order
 - [x] Active/inactive flag
 - [x] Admin category list/create/edit
+- [x] Public category route
+- [x] Public category description/content
+- [x] Category product grid
+- [x] Category buying guides
+- [x] Category blog posts
+- [x] Category SEO title/meta output
+- [x] Category canonical URL
 - [ ] Archive/delete behavior
 - [ ] Image upload/media picker
-- [ ] Public category route
-- [ ] Category product grid
-- [ ] Category buying guides
-- [ ] Category blog posts
 - [ ] Breadcrumbs
 - [ ] Category filters
 - [ ] Pagination
@@ -212,9 +215,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 ## Homepage
 - [x] Hero/search
 - [x] Featured categories
+- [x] Category cards link to real category pages
 - [x] Recent/top products section
 - [x] Buying-guide section
 - [x] Latest articles section
+- [x] Latest articles link to public posts/blog index
 - [ ] Trending comparisons
 - [ ] Deals/featured-products block
 - [ ] Admin homepage ordering
@@ -230,11 +235,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Features/pros/cons
 - [x] Flexible specification table
 - [x] Affiliate CTA
+- [x] Canonical URL supplied
 - [ ] Product gallery
 - [ ] Related products
 - [ ] Related guides
 - [ ] Product structured data
-- [ ] Product canonical URL
 - [ ] Product-specific Open Graph metadata
 
 ---
@@ -261,6 +266,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Public guide route
 - [x] Ranked product output
 - [x] Affiliate rank/context tracking
+- [x] Canonical/index metadata support on guide route
 - [ ] Product autocomplete/search in guide editor
 - [ ] Drag-and-drop ranking
 - [ ] Duplicate product guard UX
@@ -302,7 +308,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [ ] Product embeds
 - [ ] Related articles
 - [ ] Media picker
-- [ ] Blog category pages
+- [ ] Blog category pages beyond category landing integration
 - [ ] Author pages if useful
 - [ ] Article structured data
 - [ ] Article-specific Open Graph image
@@ -338,6 +344,9 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Product search route
 - [x] Product text search
 - [x] Search results page
+- [x] Public category landing pages
+- [x] Category product grids
+- [x] Category guide/article sections
 - [ ] Search articles/content
 - [ ] Search categories
 - [ ] Pagination
@@ -426,7 +435,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Shared canonical output support
 - [x] Shared robots index/noindex output support
 - [x] Basic Open Graph title/description
-- [ ] Canonical URLs supplied for all applicable product/guide/category pages
+- [x] Canonical supplied on product/category/blog/guide routes
 - [ ] Open Graph images/types per content type
 - [ ] Twitter metadata
 - [ ] XML sitemap index
@@ -526,6 +535,7 @@ Phase 1 is launch-ready when a non-technical editor can manually create categori
 - [x] Buying-guide editor
 - [x] Blog editor
 - [x] Public homepage foundation
+- [x] Public category pages
 - [x] Public product pages
 - [x] Public guide pages
 - [x] Public blog pages
@@ -545,10 +555,9 @@ Phase 1 is launch-ready when a non-technical editor can manually create categori
 # Immediate next work queue
 
 1. [~] Get production landing page confirmed working and configure database/admin when hosting details are available.
-2. [ ] Build public category pages and category product grids.
-3. [ ] Add comparison editor + dynamic specification comparison table.
-4. [ ] Build media upload/library so editors stop pasting image URLs.
-5. [ ] Add sitemap/robots/structured-data SEO layer.
-6. [ ] Improve slug validation/generation and duplicate handling.
-7. [ ] Build Settings → Amazon and verify current Creators API documentation/policies before API calls are implemented.
-8. [ ] Add integration tests and ensure GitHub Actions actually executes.
+2. [ ] Add comparison editor + dynamic specification comparison table.
+3. [ ] Build media upload/library so editors stop pasting image URLs.
+4. [ ] Add sitemap/robots/structured-data SEO layer.
+5. [ ] Improve slug validation/generation and duplicate handling.
+6. [ ] Build Settings → Amazon and verify current Creators API documentation/policies before API calls are implemented.
+7. [ ] Add integration tests and ensure GitHub Actions actually executes.
