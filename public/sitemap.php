@@ -9,13 +9,20 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 header('Content-Type: application/xml; charset=utf-8');
 
 $base=rtrim((string)env('APP_URL','https://store.mediapitch.in'),'/');
-$urls=[['loc'=>$base.'/','lastmod'=>null]];
+$urls=[
+    ['loc'=>$base.'/','lastmod'=>null],
+    ['loc'=>$base.'/blog','lastmod'=>null],
+    ['loc'=>$base.'/comparisons','lastmod'=>null],
+];
 
 try{
     $db=Database::connection();
 
     foreach($db->query("SELECT slug,updated_at FROM categories WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/category/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
+    }
+    foreach($db->query("SELECT slug,updated_at FROM brands WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
+        $urls[]=['loc'=>$base.'/brand/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
     foreach($db->query("SELECT slug,updated_at FROM products WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/product/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
@@ -30,7 +37,6 @@ try{
         };
         if($prefix)$urls[]=['loc'=>$base.'/'.$prefix.'/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
-    $urls[]=['loc'=>$base.'/blog','lastmod'=>null];
 }catch(Throwable $e){
     if((bool)env('APP_DEBUG',false))error_log('Sitemap database error: '.$e->getMessage());
 }
