@@ -48,6 +48,13 @@ final class ProductAuthoring
             $data['asin']=$asin;
         }
 
+        // Imported products already have an ID by the time an editor reviews
+        // them. Persist explicit per-field protection before the normal save so
+        // future Amazon refreshes know which editorial values must be preserved.
+        if($productId){
+            (new ProductOverrides())->save($productId,$data['amazon_override']??[]);
+        }
+
         $data['title']=$title;
         $data['slug']=$slug;
         return $data;
