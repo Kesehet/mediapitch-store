@@ -9,6 +9,7 @@ use MediaPitch\Admin\CategoryAdminController;
 use MediaPitch\Admin\ComparisonAdminController;
 use MediaPitch\Admin\MediaAdminController;
 use MediaPitch\Admin\MerchandisingAdminController;
+use MediaPitch\Admin\PasswordResetAdminController;
 use MediaPitch\Admin\RedirectAdminController;
 use MediaPitch\Admin\ReviewAdminController;
 use MediaPitch\Admin\SettingsAdminController;
@@ -30,6 +31,7 @@ use MediaPitch\Repositories\RelatedContentRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Services\PasswordReset;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -51,6 +53,11 @@ if ($path === '//') {
 }
 
 try {
+    if (in_array($path,['/admin/forgot-password','/admin/reset-password'],true)) {
+        $passwordResetAdmin = new PasswordResetAdminController(new PasswordReset());
+        if ($passwordResetAdmin->handle($method, $path)) exit;
+    }
+
     if (str_starts_with($path, '/admin/media')) {
         $mediaAdmin = new MediaAdminController(new MediaRepository());
         if ($mediaAdmin->handle($method, $path)) exit;
