@@ -9,6 +9,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
   ['@type'=>'ListItem','position'=>3,'name'=>$guide['title'],'item'=>url('guide/'.$guide['slug'])],
 ]];
 $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forContent((int)$guide['id'],!empty($guide['category_id'])?(int)$guide['category_id']:null);
+$guideContent=(new \MediaPitch\Services\GuideContent())->render((string)($guide['body']??''));
 ?>
 <script type="application/ld+json"><?= json_encode($guideSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
 <script type="application/ld+json"><?= json_encode($breadcrumbSchema,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script>
@@ -21,8 +22,12 @@ $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forCont
     </div>
 </section>
 
-<?php if (!empty($guide['body'])): ?>
-<section class="section"><div class="container narrow prose"><?= safe_html((string)$guide['body']) ?></div></section>
+<?php if (!empty($guideContent['toc'])): ?>
+<section class="section"><div class="container narrow"><nav class="affiliate-panel" aria-label="Table of contents"><strong>In this guide</strong><ol><?php foreach($guideContent['toc'] as $entry):?><li<?= (int)$entry['level']===3?' style="margin-left:1rem"':'' ?>><a href="#<?= e($entry['id']) ?>"><?= e($entry['label']) ?></a></li><?php endforeach;?></ol></nav></div></section>
+<?php endif; ?>
+
+<?php if ($guideContent['html']!==''): ?>
+<section class="section"><div class="container narrow prose"><?= $guideContent['html'] ?></div></section>
 <?php endif; ?>
 
 <?php if (!empty($guide['products'])): ?>
