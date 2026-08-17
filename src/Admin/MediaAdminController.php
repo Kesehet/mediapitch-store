@@ -9,13 +9,21 @@ use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
+use MediaPitch\Media\ImageOptimizer;
+use MediaPitch\Media\LocalMediaStorage;
+use MediaPitch\Media\MediaStorage;
 use MediaPitch\Repositories\MediaRepository;
 use PDO;
 use Throwable;
 
 final class MediaAdminController
 {
-    public function __construct(private readonly MediaRepository $repo) {}
+    private MediaStorage $storage;
+
+    public function __construct(private readonly MediaRepository $repo, ?MediaStorage $storage=null)
+    {
+        $this->storage=$storage ?? new LocalMediaStorage();
+    }
 
     public function handle(string $method, string $path): bool
     {
@@ -42,13 +50,12 @@ final class MediaAdminController
 
         if ($path === '/admin/media/upload' && $method === 'POST') {
             $this->requireCsrf();
-
             try {
                 $stored=$this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
                 Audit::record('media.upload','media',$stored['id']??null,'Uploaded media item',[
-                    'original_name'=>$stored['original_name']??'','file_path'=>$stored['file_path']??'','mime_type'=>$stored['mime_type']??'','file_size'=>$stored['file_size']??0,
+                    'original_name'=>$stored['original_name']??'','file_path'=>$stored['file_path']??'','mime_type'=>$stored['mime_type']??'','file_size'=>$stored['file_size']??0,'optimized'=>!empty($stored['optimized']),
                 ]);
-                $this->setFlash('success','Image uploaded.');
+                $this->setFlash('success','Image uploaded'.(!empty($stored['optimized'])?' and optimized.':'.'));
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
             }
@@ -61,8 +68,8 @@ final class MediaAdminController
             try {
                 $id=(int)($_POST['id']??0);
                 $item=$this->repo->deleteIfUnused($id);
-                $this->deletePhysicalFile((string)$item['file_path']);
-                if(!empty($item['thumbnail_path'])) $this->deletePhysicalFile((string)$item['thumbnail_path']);
+                $this->storage->delete((string)$item['file_path']);
+                if(!empty($item['thumbnail_path'])) $this->storage->delete((string)$item['thumbnail_path']);
                 Audit::record('media.delete','media',$id,'Deleted unused media item',['file_path'=>$item['file_path']??'']);
                 $this->setFlash('success','Media item deleted.');
             } catch (Throwable $e) {
@@ -92,48 +99,36 @@ final class MediaAdminController
 
     private function storeUpload(array $file, string $altText): array
     {
-        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            throw new \RuntimeException('Choose an image to upload.');
-        }
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) throw new \RuntimeException('Choose an image to upload.');
         $size=(int)($file['size'] ?? 0);
-        if ($size < 1 || $size > 5 * 1024 * 1024) {
-            throw new \RuntimeException('Images must be 5 MB or smaller.');
-        }
+        $maxUpload=max(1,(int)env('MEDIA_MAX_UPLOAD_MB',5))*1024*1024;
+        if ($size < 1 || $size > $maxUpload) throw new \RuntimeException('Images must be '.max(1,(int)env('MEDIA_MAX_UPLOAD_MB',5)).' MB or smaller.');
 
         $tmp=(string)($file['tmp_name'] ?? '');
-        if (!is_uploaded_file($tmp)) {
-            throw new \RuntimeException('Invalid upload.');
-        }
+        if (!is_uploaded_file($tmp)) throw new \RuntimeException('Invalid upload.');
 
         $finfo=new \finfo(FILEINFO_MIME_TYPE);
         $mime=(string)$finfo->file($tmp);
         $extensions=['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'];
-        if (!isset($extensions[$mime])) {
-            throw new \RuntimeException('Only JPEG, PNG, WebP and GIF images are allowed.');
-        }
+        if (!isset($extensions[$mime])) throw new \RuntimeException('Only JPEG, PNG, WebP and GIF images are allowed.');
 
         $imageInfo=@getimagesize($tmp);
-        if ($imageInfo === false) {
-            throw new \RuntimeException('The uploaded file is not a valid image.');
-        }
+        if ($imageInfo === false) throw new \RuntimeException('The uploaded file is not a valid image.');
 
-        $year=gmdate('Y'); $month=gmdate('m');
-        $relativeDir='/uploads/' . $year . '/' . $month;
-        $publicDir=dirname(__DIR__,2) . '/public' . $relativeDir;
-        if (!is_dir($publicDir) && !mkdir($publicDir,0755,true) && !is_dir($publicDir)) {
-            throw new \RuntimeException('Upload directory could not be created.');
-        }
+        $stored=$this->storage->storeUploaded($tmp,$extensions[$mime]);
+        $destination=$stored['absolute_path'];
+        $relativePath=$stored['relative_path'];
+        $relativeDir=str_replace('\\','/',dirname($relativePath));
 
-        $name=bin2hex(random_bytes(16)) . '.' . $extensions[$mime];
-        $destination=$publicDir . '/' . $name;
-        if (!move_uploaded_file($tmp,$destination)) {
-            throw new \RuntimeException('Image could not be stored.');
-        }
+        $optimizedResult=(new ImageOptimizer())->optimize($destination,$mime,(int)$imageInfo[0],(int)$imageInfo[1]);
+        $width=$optimizedResult['width'];
+        $height=$optimizedResult['height'];
+        $optimized=$optimizedResult['optimized'];
 
         $thumbnailPath=null;
-        $optimized=false;
         try {
-            [$thumbnailPath,$optimized]=$this->createThumbnail($destination,$relativeDir,$mime,(int)$imageInfo[0],(int)$imageInfo[1]);
+            [$thumbnailPath,$thumbOptimized]=$this->createThumbnail($destination,$relativeDir,$mime,$width,$height);
+            $optimized=$optimized || $thumbOptimized;
         } catch (Throwable $thumbnailError) {
             error_log('MediaPitch thumbnail generation failed: ' . $thumbnailError->getMessage());
         }
@@ -141,74 +136,51 @@ final class MediaAdminController
         $payload=[
             'uploaded_by'=>(int)(Auth::user()['id'] ?? 0) ?: null,
             'original_name'=>substr((string)($file['name'] ?? 'image'),0,255),
-            'file_name'=>$name,
-            'file_path'=>$relativeDir . '/' . $name,
+            'file_name'=>$stored['file_name'],
+            'file_path'=>$relativePath,
             'thumbnail_path'=>$thumbnailPath,
             'optimized'=>$optimized,
             'mime_type'=>$mime,
-            'file_size'=>(int)(filesize($destination) ?: $size),
-            'width'=>(int)$imageInfo[0],
-            'height'=>(int)$imageInfo[1],
+            'file_size'=>$optimizedResult['file_size'] ?: (int)(filesize($destination) ?: $size),
+            'width'=>$width,
+            'height'=>$height,
             'alt_text'=>$altText !== '' ? $altText : null,
         ];
         $payload['id']=$this->repo->create($payload);
         return $payload;
     }
 
-    private function deletePhysicalFile(string $relativePath): void
-    {
-        $relativePath='/' . ltrim($relativePath,'/');
-        if(!str_starts_with($relativePath,'/uploads/')) return;
-        $absolute=dirname(__DIR__,2) . '/public' . $relativePath;
-        if(is_file($absolute)) @unlink($absolute);
-    }
-
     private function createThumbnail(string $sourcePath,string $relativeDir,string $mime,int $width,int $height): array
     {
         if (!extension_loaded('gd') || $width < 1 || $height < 1) return [null,false];
-
         $loader=match($mime){
-            'image/jpeg'=>'imagecreatefromjpeg',
-            'image/png'=>'imagecreatefrompng',
-            'image/webp'=>'imagecreatefromwebp',
-            'image/gif'=>'imagecreatefromgif',
-            default=>null,
+            'image/jpeg'=>'imagecreatefromjpeg','image/png'=>'imagecreatefrompng','image/webp'=>'imagecreatefromwebp','image/gif'=>'imagecreatefromgif',default=>null,
         };
         if ($loader===null || !function_exists($loader)) return [null,false];
-
         $source=@$loader($sourcePath);
         if ($source===false) return [null,false];
 
-        $maxWidth=480;
+        $maxWidth=max(240,(int)env('MEDIA_THUMB_WIDTH',480));
         $scale=min(1,$maxWidth/$width);
         $thumbWidth=max(1,(int)round($width*$scale));
         $thumbHeight=max(1,(int)round($height*$scale));
         $thumb=imagecreatetruecolor($thumbWidth,$thumbHeight);
         if ($thumb===false) { imagedestroy($source); return [null,false]; }
-
         if (in_array($mime,['image/png','image/webp','image/gif'],true)) {
-            imagealphablending($thumb,false);
-            imagesavealpha($thumb,true);
-            $transparent=imagecolorallocatealpha($thumb,0,0,0,127);
-            imagefilledrectangle($thumb,0,0,$thumbWidth,$thumbHeight,$transparent);
+            imagealphablending($thumb,false);imagesavealpha($thumb,true);$transparent=imagecolorallocatealpha($thumb,0,0,0,127);imagefilledrectangle($thumb,0,0,$thumbWidth,$thumbHeight,$transparent);
         }
         imagecopyresampled($thumb,$source,0,0,0,0,$thumbWidth,$thumbHeight,$width,$height);
-
         $thumbName='thumb-' . pathinfo($sourcePath,PATHINFO_FILENAME) . '.webp';
         $thumbAbsolute=dirname($sourcePath) . '/' . $thumbName;
-        $saved=function_exists('imagewebp') ? imagewebp($thumb,$thumbAbsolute,82) : false;
-        imagedestroy($thumb);
-        imagedestroy($source);
-
+        $saved=function_exists('imagewebp') ? imagewebp($thumb,$thumbAbsolute,max(55,min(95,(int)env('MEDIA_WEBP_QUALITY',84)))) : false;
+        imagedestroy($thumb);imagedestroy($source);
         if (!$saved) return [null,false];
-        return [$relativeDir . '/' . $thumbName,true];
+        return [rtrim($relativeDir,'/').'/'.$thumbName,true];
     }
 
     private function requireCsrf(): void
     {
-        if (!Csrf::validate(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : null)) {
-            http_response_code(419); exit('Invalid or expired form token.');
-        }
+        if (!Csrf::validate(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : null)) { http_response_code(419); exit('Invalid or expired form token.'); }
     }
 
     private function redirect(string $path): never { header('Location: ' . url($path)); exit; }
