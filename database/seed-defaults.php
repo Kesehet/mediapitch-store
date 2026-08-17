@@ -14,7 +14,7 @@ try {
     $category = $db->prepare(
         "INSERT INTO categories (name, slug, description, sort_order, active)
          VALUES ('Books', 'books', 'Islamic books, children\'s books and educational reading from MediaPitch and Fill Masjid.', 10, 1)
-         ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), active=1"
+         ON DUPLICATE KEY UPDATE id=id"
     );
     $category->execute();
     $categoryId = (int) $db->query("SELECT id FROM categories WHERE slug='books' LIMIT 1")->fetchColumn();
@@ -22,7 +22,7 @@ try {
     $brand = $db->prepare(
         "INSERT INTO brands (name, slug, website_url)
          VALUES ('Media Pitch', 'media-pitch', 'https://mediapitch.in')
-         ON DUPLICATE KEY UPDATE name=VALUES(name), website_url=VALUES(website_url)"
+         ON DUPLICATE KEY UPDATE id=id"
     );
     $brand->execute();
     $brandId = (int) $db->query("SELECT id FROM brands WHERE slug='media-pitch' LIMIT 1")->fetchColumn();
@@ -68,11 +68,7 @@ try {
          (category_id,brand_id,title,display_title,slug,source,short_description,full_description,features_json,price,currency,custom_score,best_for_label,editorial_notes,active)
          VALUES
          (:category_id,:brand_id,:title,:display_title,:slug,\'manual\',:short_description,:full_description,:features_json,:price,\'INR\',:custom_score,:best_for_label,:editorial_notes,1)
-         ON DUPLICATE KEY UPDATE
-           category_id=VALUES(category_id), brand_id=VALUES(brand_id), title=VALUES(title), display_title=VALUES(display_title),
-           short_description=VALUES(short_description), full_description=VALUES(full_description), features_json=VALUES(features_json),
-           price=COALESCE(products.price, VALUES(price)), currency=VALUES(currency), custom_score=VALUES(custom_score),
-           best_for_label=VALUES(best_for_label), editorial_notes=VALUES(editorial_notes), active=1'
+         ON DUPLICATE KEY UPDATE id=id'
     );
 
     foreach ($products as $product) {
@@ -93,7 +89,7 @@ try {
     }
 
     $db->commit();
-    fwrite(STDOUT, "Default MediaPitch products seeded successfully.\n");
+    fwrite(STDOUT, "Default MediaPitch data checked/seeded successfully. Existing CMS edits were preserved.\n");
 } catch (Throwable $e) {
     if ($db->inTransaction()) {
         $db->rollBack();
