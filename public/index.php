@@ -10,12 +10,14 @@ use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\CatalogRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
+use MediaPitch\Repositories\SearchRepository;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 $catalog = new CatalogRepository();
 $contentRepo = new ContentRepository();
 $comparisonRepo = new ComparisonRepository();
+$searchRepo = new SearchRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -131,10 +133,10 @@ try {
     if ($method === 'GET' && $path === '/search') {
         $query = trim((string) ($_GET['q'] ?? ''));
         View::render('search', [
-            'pageTitle' => $query !== '' ? 'Search: ' . $query : 'Search',
-            'metaDescription' => 'Search MediaPitch product recommendations.',
+            'pageTitle' => $query !== '' ? 'Search: ' . $query . ' — MediaPitch' : 'Search — MediaPitch',
+            'metaDescription' => 'Search MediaPitch products, categories, buying guides, comparisons and articles.',
             'query' => $query,
-            'results' => $query !== '' ? $catalog->search($query) : [],
+            'results' => $query !== '' ? $searchRepo->search($query) : ['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[]],
         ]);
         exit;
     }
