@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MediaPitch\Admin;
 
+use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\Database;
@@ -20,10 +21,13 @@ final class MediaAdminController
     {
         if (!str_starts_with($path, '/admin/media')) return false;
         if (!Auth::check()) $this->redirect('/admin/login');
+        if (!Auth::canUploadMedia()) { http_response_code(403); exit('Forbidden'); }
 
         if ($path === '/admin/media' && $method === 'GET') {
             $query=trim((string)($_GET['q']??''));
-            $categories=Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+            $categories=Auth::canManageProducts()
+                ? Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC)
+                : [];
             View::render('admin/media', [
                 'pageTitle'=>'Media',
                 'adminUser'=>Auth::user(),
@@ -37,11 +41,13 @@ final class MediaAdminController
         }
 
         if ($path === '/admin/media/upload' && $method === 'POST') {
-            if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
             $this->requireCsrf();
 
             try {
-                $this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
+                $stored=$this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
+                Audit::record('media.upload','media',$stored['id']??null,'Uploaded media item',[
+                    'original_name'=>$stored['original_name']??'','file_path'=>$stored['file_path']??'','mime_type'=>$stored['mime_type']??'','file_size'=>$stored['file_size']??0,
+                ]);
                 $this->setFlash('success','Image uploaded.');
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
@@ -53,9 +59,11 @@ final class MediaAdminController
             if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
             $this->requireCsrf();
             try {
-                $item=$this->repo->deleteIfUnused((int)($_POST['id']??0));
+                $id=(int)($_POST['id']??0);
+                $item=$this->repo->deleteIfUnused($id);
                 $this->deletePhysicalFile((string)$item['file_path']);
                 if(!empty($item['thumbnail_path'])) $this->deletePhysicalFile((string)$item['thumbnail_path']);
+                Audit::record('media.delete','media',$id,'Deleted unused media item',['file_path'=>$item['file_path']??'']);
                 $this->setFlash('success','Media item deleted.');
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
@@ -74,6 +82,7 @@ final class MediaAdminController
             }
             $stmt=Database::connection()->prepare('UPDATE categories SET image_url=:image_url WHERE id=:id');
             $stmt->execute(['image_url'=>$imageUrl,'id'=>$categoryId]);
+            Audit::record('category.image.assign','category',$categoryId,'Assigned category image',['image_url'=>$imageUrl]);
             $this->setFlash('success','Category image updated.');
             $this->redirect('/admin/media');
         }
@@ -81,7 +90,7 @@ final class MediaAdminController
         return false;
     }
 
-    private function storeUpload(array $file, string $altText): void
+    private function storeUpload(array $file, string $altText): array
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             throw new \RuntimeException('Choose an image to upload.');
@@ -129,7 +138,7 @@ final class MediaAdminController
             error_log('MediaPitch thumbnail generation failed: ' . $thumbnailError->getMessage());
         }
 
-        $this->repo->create([
+        $payload=[
             'uploaded_by'=>(int)(Auth::user()['id'] ?? 0) ?: null,
             'original_name'=>substr((string)($file['name'] ?? 'image'),0,255),
             'file_name'=>$name,
@@ -141,7 +150,9 @@ final class MediaAdminController
             'width'=>(int)$imageInfo[0],
             'height'=>(int)$imageInfo[1],
             'alt_text'=>$altText !== '' ? $altText : null,
-        ]);
+        ];
+        $payload['id']=$this->repo->create($payload);
+        return $payload;
     }
 
     private function deletePhysicalFile(string $relativePath): void
