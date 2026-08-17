@@ -1,4 +1,4 @@
-<?php $products=$comparison['products']??[]; $specs=$comparison['specifications']??[]; ?>
+<?php $products=$comparison['products']??[]; $specs=$comparison['specifications']??[]; $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forContent((int)$comparison['id'],!empty($comparison['category_id'])?(int)$comparison['category_id']:null); ?>
 <section class="section"><div class="container narrow">
 <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <a href="<?= e(url('comparisons')) ?>">Comparisons</a> · <?= e($comparison['title']) ?></nav>
 <?php if(!empty($comparison['category_name'])):?><div class="eyebrow"><a href="<?= e(url('category/'.$comparison['category_slug'])) ?>"><?= e($comparison['category_name']) ?></a></div><?php endif;?>
@@ -17,3 +17,4 @@
 
 <?php if(!empty($comparison['body'])):?><section class="section"><div class="container narrow prose"><h2>Our verdict</h2><?= safe_html($comparison['body']) ?></div></section><?php endif;?>
 <section class="section section-soft"><div class="container narrow"><p class="affiliate-note">We may earn a commission from qualifying purchases. Prices and availability are controlled by Amazon and can change.</p><p><a href="<?= e(url('comparisons')) ?>">Browse all comparisons →</a></p></div></section>
+<?php require __DIR__.'/partials/related-content.php'; ?>
