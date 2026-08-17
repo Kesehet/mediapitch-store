@@ -29,13 +29,32 @@ try {
     }
 
     if ($method === 'GET' && $path === '/') {
+        $categories = [];
+        $products = [];
+        $guides = [];
+        $articles = [];
+        $databaseAvailable = true;
+
+        try {
+            $categories = $catalog->featuredCategories();
+            $products = $catalog->featuredProducts();
+            $guides = $catalog->latestContent('buying_guide');
+            $articles = $catalog->latestContent('blog');
+        } catch (Throwable $databaseError) {
+            $databaseAvailable = false;
+            if ((bool) env('APP_DEBUG', false)) {
+                error_log('MediaPitch Store homepage database error: ' . $databaseError->getMessage());
+            }
+        }
+
         View::render('home', [
             'pageTitle' => 'MediaPitch Store — Smart Product Discovery',
             'metaDescription' => 'Independent buying guides, product comparisons and recommendations from MediaPitch.',
-            'categories' => $catalog->featuredCategories(),
-            'products' => $catalog->featuredProducts(),
-            'guides' => $catalog->latestContent('buying_guide'),
-            'articles' => $catalog->latestContent('blog'),
+            'categories' => $categories,
+            'products' => $products,
+            'guides' => $guides,
+            'articles' => $articles,
+            'databaseAvailable' => $databaseAvailable,
         ]);
         exit;
     }
