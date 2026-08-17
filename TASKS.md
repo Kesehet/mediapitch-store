@@ -12,10 +12,10 @@ This file is the project source of truth. Update it as work lands on `main`.
 - Production branch: `main`
 - Production URL: `https://store.mediapitch.in/`
 - Development mode: rapid iteration directly on `main`
-- Amazon API: optional; manual CMS must remain fully usable without it
-- Homepage degrades gracefully when the DB is unavailable
-- GitHub Actions PHP syntax checks run on pushes to `main`
-- Default seed products: Know Your Prophets, The Path of the Caliphs, Growing With Adab
+- Production `/health`: DB connection confirmed OK
+- Database deploy flow: base schema → migrations → non-destructive defaults
+- Bootstrap admin: created only when user count is zero
+- Amazon API is optional; manual CMS remains fully usable without it
 
 ---
 
@@ -33,22 +33,18 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] 404/500 pages
 - [x] PHP 8.2 syntax workflow
 - [x] Landing-page DB fallback
-- [x] Simple migration runner (`database/migrate.php`)
-- [x] Migration tracking table created by runner
-- [x] Idempotent default seed script (`database/seed-defaults.php`)
+- [x] Migration runner and migration tracking
+- [x] Non-destructive default seed script
+- [x] Automatic DB deployment via Composer scripts
+- [x] Base schema bootstrap for empty DB
+- [x] Seed defaults only when missing
+- [x] Seed bootstrap admin only when user count is zero
+- [x] Production DB connectivity verified through `/health`
 - [ ] `.editorconfig`
 - [ ] Coding-standard documentation
 - [ ] Version/release convention
 - [ ] Development environment documentation
 - [ ] Production deployment documentation
-- [!] Confirm production PHP/PDO/MySQL configuration
-- [!] Configure production `.env`
-- [!] Create/confirm production database
-- [!] Import `database/schema.sql`
-- [!] Run `php database/migrate.php`
-- [!] Run `php database/seed-defaults.php`
-- [!] Create first production administrator
-- [ ] Verify `/health` returns DB OK
 - [ ] Verify admin CRUD against production DB
 - [ ] Add DB backup/rollback/smoke-test documentation
 
@@ -62,16 +58,21 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] CSRF protection
 - [x] Role helpers
 - [x] CLI first-admin creation
-- [ ] User CRUD
-- [ ] Password change/reset
-- [ ] Login rate limiting
-- [ ] Failed-login tracking
-- [ ] Session rotation and idle timeout
-- [ ] Secure production cookie settings
+- [x] Bootstrap admin seed for empty user table
+- [x] User admin list/create/edit
+- [x] User activation/deactivation safeguards
+- [x] Prevent removal of last active administrator
+- [x] Logged-in user password-change screen
+- [x] Login rate limiting
+- [x] Persistent failed-login counters/timestamp
+- [x] Last-login timestamp
+- [x] Session rotation and idle timeout
+- [x] Secure/HttpOnly/SameSite production cookie settings
+- [x] Baseline CSP/security headers
+- [x] Rich-content XSS sanitizer for public HTML output
+- [ ] Password-reset / forgotten-password workflow
 - [ ] Full role permission matrix
 - [ ] Admin audit trail
-- [ ] CSP/security headers
-- [ ] Rich-content XSS review for blog/review HTML
 
 ---
 
@@ -113,7 +114,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Product preview
 - [x] Public `/product/{slug}`
 - [x] Product media-library picker
-- [x] Default MediaPitch/Fill Masjid product seed data
+- [x] Default MediaPitch/Fill Masjid seed data
 - [x] Product page escapes manual full-description text
 - [ ] Slug auto-generation
 - [ ] Friendly duplicate-slug validation
@@ -184,11 +185,12 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Blog media picker
 - [x] BlogPosting structured data
 - [x] Article breadcrumb UI/schema
-- [ ] Safe Markdown or sanitized rich-text editor
+- [x] Sanitized rich-content public output
+- [x] Dynamic OG image output
+- [ ] Rich-text/Markdown editing UX
 - [ ] Tags
 - [ ] Product embeds
 - [ ] Related articles
-- [ ] Article-specific OG image wiring
 
 ---
 
@@ -202,6 +204,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Category-aware dynamic spec comparison matrix
 - [x] Brand/score/best-for/price rows
 - [x] Affiliate CTA context tracking
+- [x] Sanitized verdict output
 - [ ] Comparison index
 - [ ] Related comparisons
 - [ ] Better mobile table UX
@@ -216,6 +219,7 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Review media picker
 - [x] Review structured data
 - [x] Review breadcrumb UI/schema
+- [x] Sanitized review body output
 - [ ] Related reviews/products
 
 ---
@@ -227,16 +231,16 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Buying guides
 - [x] Comparisons
 - [x] Blog articles
-- [x] Search repository includes published reviews
+- [x] Reviews rendered in unified search UI
+- [x] Search-result pagination foundation
+- [x] Search suggestions JSON endpoint
+- [x] Header/search autocomplete UI
 - [x] Category product pagination
 - [x] Category sorting
 - [x] Brand / price / score filters on category pages
 - [x] Dynamic specification filters on category pages
-- [ ] Render reviews as a dedicated section in search UI
-- [ ] Search-result pagination
 - [ ] Global category filter on search results
 - [ ] Search analytics
-- [ ] Autocomplete/suggestions
 
 ---
 
@@ -265,14 +269,9 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Uploader attribution
 - [x] Media browser
 - [x] Alt-text capture
-- [x] Product media picker
-- [x] Guide media picker
-- [x] Blog media picker
-- [x] Review media picker
-- [x] Category image assignment
-- [x] WebP thumbnail generation when GD/WebP is available
-- [x] Graceful fallback when image-processing extensions are missing
-- [x] Media browser prefers thumbnail derivatives
+- [x] Product/guide/blog/review/category media pickers
+- [x] WebP thumbnail generation when available
+- [x] Graceful fallback without image-processing extensions
 - [ ] Original-image optimization/compression policy
 - [ ] Media search
 - [ ] Brand logo picker
@@ -284,9 +283,8 @@ This file is the project source of truth. Update it as work lands on `main`.
 # 12. SEO
 - [x] SEO titles/meta descriptions
 - [x] Canonical/index support across product/category/guide/blog/comparison/review
-- [x] Base Open Graph title/description
-- [x] Twitter card/title/description support
-- [x] Optional Open Graph/Twitter image support in shared layout
+- [x] Open Graph and Twitter metadata
+- [x] Dynamic OG/Twitter images per supported public route
 - [x] Dynamic `/sitemap.xml`
 - [x] Sitemap includes products/categories/guides/blog/comparisons/reviews
 - [x] `robots.txt`
@@ -295,7 +293,6 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Review structured data
 - [x] Buying-guide Article structured data
 - [x] Product/article/review/guide breadcrumb UI + schema
-- [ ] Dynamic OG image wiring per public route
 - [ ] Category breadcrumb schema
 - [ ] Comparison structured data if appropriate
 - [ ] Redirect admin UI
@@ -310,14 +307,15 @@ This file is the project source of truth. Update it as work lands on `main`.
 - [x] Amazon provider boundary
 - [x] Manual workflow independent of API
 - [x] Source abstraction and sync fields
-- [ ] Verify current Creators API documentation
-- [ ] Verify Associates policy, image, price/freshness, caching/storage and disclosure rules
+- [x] Current Creators API authentication/documentation reviewed
+- [ ] Complete Associates policy review for images, price freshness, caching/storage and disclosure
 
 ## Settings
-- [ ] Amazon settings admin page
-- [ ] Marketplace / partner tag / credential ID / secret / version
-- [ ] Enabled toggle / connection test / last success/error
-- [ ] Encrypt secrets and prevent logging/frontend exposure
+- [x] Administrator-only Amazon settings page
+- [x] Marketplace / partner tag / credential ID / secret / version
+- [x] Enabled toggle / authentication test / last success/error
+- [x] Encrypted secret storage using `APP_KEY`
+- [x] Credentials excluded from public output
 
 ## Import & sync
 - [ ] Products → Import from Amazon
@@ -344,10 +342,11 @@ This file is the project source of truth. Update it as work lands on `main`.
 ---
 
 # Immediate next queue
-1. [ ] Render review results in unified search UI
-2. [ ] Add dynamic OG-image wiring on product/blog/guide/review/comparison routes
-3. [ ] Add search-result pagination and autocomplete foundation
-4. [ ] Add safe rich-text/HTML sanitization for blog and review bodies
-5. [ ] Build Amazon settings page and verify current Creators API policy/docs
-6. [ ] Add user/security hardening: session rotation, secure cookies, rate limiting
-7. [!] Configure production DB, run migrations/seeds and verify seeded products live
+1. [~] Improve product authoring: slug generation, duplicate slug/ASIN validation
+2. [ ] Product archive + duplicate action
+3. [ ] Add brand URL validation and brand logo media picker
+4. [ ] Build comparison index and improve mobile comparison UX
+5. [ ] Add media search and safe delete/usage checks
+6. [ ] Build detailed affiliate analytics filters/export
+7. [ ] Build Amazon product search/import after policy review
+8. [ ] Verify full admin CRUD flow on production
