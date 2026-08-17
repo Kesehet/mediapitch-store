@@ -8,39 +8,57 @@ use MediaPitch\Repositories\SettingsRepository;
 require dirname(__DIR__).'/src/bootstrap.php';
 
 try {
-    $settings=(new SettingsRepository())->amazon();
-    if(empty($settings['enabled'])){
-        fwrite(STDOUT,"Amazon Creators API integration is disabled; nothing to refresh.\n");
+    $repository=new SettingsRepository();
+    $profiles=$repository->amazonProfiles();
+    $enabled=array_values(array_filter($profiles,static fn(array $profile):bool=>!empty($profile['enabled'])));
+
+    if(!$enabled){
+        fwrite(STDOUT,"Amazon Creators API integration is disabled for all marketplace profiles; nothing to refresh.\n");
         exit(0);
     }
-    if(trim((string)$settings['credential_id'])==='' || trim((string)$settings['credential_secret'])==='' || trim((string)$settings['partner_tag'])===''){
-        fwrite(STDERR,"Amazon Creators API settings are incomplete.\n");
-        exit(1);
-    }
 
-    $limit=max(1,min(500,(int)($argv[1]??100)));
-    $remaining=$limit;
-    $totals=['selected'=>0,'refreshed'=>0,'missing'=>0,'errors'=>0];
+    $limitPerProfile=max(1,min(500,(int)($argv[1]??100)));
     $refresh=new AmazonBulkRefresh();
+    $grand=['profiles'=>0,'selected'=>0,'refreshed'=>0,'missing'=>0,'errors'=>0];
 
-    while($remaining>0){
-        $batch=min(100,$remaining);
-        $result=$refresh->refresh($settings,$batch,true);
-        $selected=(int)($result['selected']??0);
-        $totals['selected']+=$selected;
-        $totals['refreshed']+=(int)($result['refreshed']??0);
-        $totals['missing']+=count($result['missing']??[]);
-        $totals['errors']+=count($result['errors']??[]);
-        if($selected===0)break;
-        $remaining-=$selected;
-        if($selected<$batch)break;
+    foreach($enabled as $settings){
+        $marketplace=(string)($settings['marketplace']??'unknown');
+        if(trim((string)($settings['credential_id']??''))==='' || trim((string)($settings['credential_secret']??''))==='' || trim((string)($settings['partner_tag']??''))===''){
+            fwrite(STDERR,"{$marketplace}: profile is enabled but credentials/partner tag are incomplete; skipped.\n");
+            $grand['errors']++;
+            continue;
+        }
+
+        $remaining=$limitPerProfile;
+        $totals=['selected'=>0,'refreshed'=>0,'missing'=>0,'errors'=>0];
+        $grand['profiles']++;
+        fwrite(STDOUT,"Refreshing {$marketplace}...\n");
+
+        while($remaining>0){
+            $batch=min(100,$remaining);
+            $result=$refresh->refresh($settings,$batch,true);
+            $selected=(int)($result['selected']??0);
+            $totals['selected']+=$selected;
+            $totals['refreshed']+=(int)($result['refreshed']??0);
+            $totals['missing']+=count($result['missing']??[]);
+            $totals['errors']+=count($result['errors']??[]);
+            if($selected===0)break;
+            $remaining-=$selected;
+            if($selected<$batch)break;
+        }
+
+        foreach(['selected','refreshed','missing','errors'] as $key)$grand[$key]+=$totals[$key];
+        fwrite(STDOUT,sprintf(
+            "%s complete: selected=%d refreshed=%d missing=%d errors=%d\n",
+            $marketplace,$totals['selected'],$totals['refreshed'],$totals['missing'],$totals['errors']
+        ));
     }
 
     fwrite(STDOUT,sprintf(
-        "Amazon refresh complete: selected=%d refreshed=%d missing=%d errors=%d\n",
-        $totals['selected'],$totals['refreshed'],$totals['missing'],$totals['errors']
+        "Amazon multi-market refresh complete: profiles=%d selected=%d refreshed=%d missing=%d errors=%d\n",
+        $grand['profiles'],$grand['selected'],$grand['refreshed'],$grand['missing'],$grand['errors']
     ));
-    exit($totals['errors']>0?2:0);
+    exit($grand['errors']>0?2:0);
 }catch(Throwable $e){
     fwrite(STDERR,'Amazon refresh failed: '.$e->getMessage()."\n");
     exit(1);
