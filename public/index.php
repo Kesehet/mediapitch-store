@@ -19,6 +19,7 @@ use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
 use MediaPitch\Repositories\RedirectRepository;
+use MediaPitch\Repositories\RelatedContentRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 use MediaPitch\Repositories\SettingsRepository;
@@ -32,6 +33,7 @@ $comparisonCatalog = new ComparisonCatalogRepository();
 $reviewRepo = new ReviewRepository();
 $searchRepo = new SearchRepository();
 $redirectRepo = new RedirectRepository();
+$relatedRepo = new RelatedContentRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = '/' . trim($path, '/');
@@ -84,7 +86,12 @@ try {
     }
 
     if($method==='GET' && !str_starts_with($path,'/api/') && $path!=='/health'){
-        $redirect=$redirectRepo->resolve($path);
+        try{
+            $redirect=$redirectRepo->resolve($path);
+        }catch(Throwable $redirectError){
+            $redirect=null;
+            if((bool)env('APP_DEBUG',false))error_log('Redirect lookup failed: '.$redirectError->getMessage());
+        }
         if($redirect){
             $destination=(string)$redirect['to_url'];
             if(str_starts_with($destination,'/')) $destination=url(ltrim($destination,'/'));
@@ -194,10 +201,12 @@ try {
     if ($method === 'GET' && preg_match('#^/product/([a-z0-9-]+)$#i',$path,$matches)) {
         $product=$catalog->productBySlug($matches[1]);
         if(!$product){http_response_code(404);View::render('404',['pageTitle'=>'Product not found','metaDescription'=>'']);exit;}
+        $related=$relatedRepo->forProduct((int)$product['id'],!empty($product['category_id'])?(int)$product['category_id']:null);
         View::render('product',[
             'pageTitle'=>($product['display_title'] ?: $product['title']).' — MediaPitch',
             'metaDescription'=>(string)($product['short_description']??''),
             'canonicalUrl'=>url('product/'.$product['slug']),'product'=>$product,
+            'relatedProducts'=>$related['products'],'relatedGuides'=>$related['guides'],
         ]);
         exit;
     }
