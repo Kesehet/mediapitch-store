@@ -77,6 +77,40 @@ final class AdminRepository
         return (int) $db->lastInsertId();
     }
 
+    public function brands(): array
+    {
+        return Database::connection()->query('SELECT id,name,slug,website_url,logo_url,updated_at FROM brands ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function brand(?int $id): ?array
+    {
+        if (!$id) return null;
+        $stmt = Database::connection()->prepare('SELECT * FROM brands WHERE id=:id LIMIT 1');
+        $stmt->execute(['id'=>$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function saveBrand(array $data, ?int $id = null): int
+    {
+        $db = Database::connection();
+        $params = [
+            'name' => trim((string)($data['name'] ?? '')),
+            'slug' => trim((string)($data['slug'] ?? '')),
+            'website_url' => trim((string)($data['website_url'] ?? '')) ?: null,
+            'logo_url' => trim((string)($data['logo_url'] ?? '')) ?: null,
+        ];
+        if ($id) {
+            $params['id'] = $id;
+            $stmt = $db->prepare('UPDATE brands SET name=:name,slug=:slug,website_url=:website_url,logo_url=:logo_url WHERE id=:id');
+            $stmt->execute($params);
+            return $id;
+        }
+        $stmt = $db->prepare('INSERT INTO brands (name,slug,website_url,logo_url) VALUES (:name,:slug,:website_url,:logo_url)');
+        $stmt->execute($params);
+        return (int)$db->lastInsertId();
+    }
+
     public function products(): array
     {
         return Database::connection()->query(
@@ -94,11 +128,6 @@ final class AdminRepository
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
-    }
-
-    public function brands(): array
-    {
-        return Database::connection()->query('SELECT id,name FROM brands ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function saveProduct(array $data, ?int $id = null): int
@@ -206,21 +235,28 @@ final class AdminRepository
             $id=(int)$db->lastInsertId();
         }
 
-        $db->prepare('DELETE FROM content_products WHERE content_id=:id')->execute(['id'=>$id]);
-        $productIds = $data['product_id'] ?? [];
-        foreach ($productIds as $i => $productId) {
-            $productId=(int)$productId;
-            if ($productId < 1) continue;
-            $stmt=$db->prepare('INSERT INTO content_products (content_id,product_id,rank_position,score,best_for_label,recommendation,cta_text,sort_order) VALUES (:content_id,:product_id,:rank,:score,:best_for,:recommendation,:cta,:sort_order)');
-            $stmt->execute([
-                'content_id'=>$id,'product_id'=>$productId,
-                'rank'=>($data['rank'][$i] ?? '') !== '' ? (int)$data['rank'][$i] : null,
-                'score'=>($data['product_score'][$i] ?? '') !== '' ? (float)$data['product_score'][$i] : null,
-                'best_for'=>trim((string)($data['product_best_for'][$i] ?? '')) ?: null,
-                'recommendation'=>trim((string)($data['recommendation'][$i] ?? '')) ?: null,
-                'cta'=>trim((string)($data['cta_text'][$i] ?? '')) ?: null,
-                'sort_order'=>$i,
-            ]);
+        $db->beginTransaction();
+        try {
+            $db->prepare('DELETE FROM content_products WHERE content_id=:id')->execute(['id'=>$id]);
+            $productIds = $data['product_id'] ?? [];
+            foreach ($productIds as $i => $productId) {
+                $productId=(int)$productId;
+                if ($productId < 1) continue;
+                $stmt=$db->prepare('INSERT INTO content_products (content_id,product_id,rank_position,score,best_for_label,recommendation,cta_text,sort_order) VALUES (:content_id,:product_id,:rank,:score,:best_for,:recommendation,:cta,:sort_order)');
+                $stmt->execute([
+                    'content_id'=>$id,'product_id'=>$productId,
+                    'rank'=>($data['rank'][$i] ?? '') !== '' ? (int)$data['rank'][$i] : null,
+                    'score'=>($data['product_score'][$i] ?? '') !== '' ? (float)$data['product_score'][$i] : null,
+                    'best_for'=>trim((string)($data['product_best_for'][$i] ?? '')) ?: null,
+                    'recommendation'=>trim((string)($data['recommendation'][$i] ?? '')) ?: null,
+                    'cta'=>trim((string)($data['cta_text'][$i] ?? '')) ?: null,
+                    'sort_order'=>$i,
+                ]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
         }
         return $id;
     }
