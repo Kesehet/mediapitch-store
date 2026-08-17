@@ -1,4 +1,10 @@
-<?php use MediaPitch\Core\Csrf; ?>
+<?php
+use MediaPitch\Core\Csrf;
+if(empty($success) && isset($_SESSION['_flash']['success']) && is_string($_SESSION['_flash']['success'])){
+    $success=$_SESSION['_flash']['success'];
+    unset($_SESSION['_flash']['success']);
+}
+?>
 <div class="auth-card">
   <div class="auth-logo">MediaPitch <span>CMS</span></div>
   <h1>Sign in</h1>
