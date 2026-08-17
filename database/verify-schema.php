@@ -10,7 +10,7 @@ $db=Database::connection();
 $requiredTables=[
     'users','categories','brands','products','specification_definitions','product_specifications',
     'content','content_products','affiliate_clicks','settings','redirects','media',
-    'search_queries','admin_audit_log','password_resets','tags','content_tags','schema_migrations',
+    'search_queries','admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
 ];
 $requiredColumns=[
     'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
