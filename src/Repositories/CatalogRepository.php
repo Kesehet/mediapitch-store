@@ -102,10 +102,12 @@ final class CatalogRepository
         $stmt = Database::connection()->prepare(
             'SELECT id, title, display_title, slug, main_image_url, price, currency, custom_score, best_for_label
              FROM products
-             WHERE active = 1 AND (title LIKE :q OR display_title LIKE :q OR short_description LIKE :q)
+             WHERE active = 1 AND (title LIKE :q1 OR display_title LIKE :q2 OR short_description LIKE :q3)
              ORDER BY custom_score DESC, title ASC LIMIT :limit'
         );
-        $stmt->bindValue(':q', $like);
+        $stmt->bindValue(':q1', $like);
+        $stmt->bindValue(':q2', $like);
+        $stmt->bindValue(':q3', $like);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
