@@ -12,9 +12,9 @@ This file is the source of truth for work landing on `main`.
 - Production branch: `main`
 - Production URL: `https://store.mediapitch.in/`
 - Production `/health`: DB connection confirmed OK from the user's browser
-- Recent PHP syntax GitHub Actions: passing
-- Deployment DB flow: schema -> retry-safe migrations -> non-destructive seeds -> optional bootstrap-admin recovery
-- Bootstrap admin recovery uses `BOOTSTRAP_ADMIN_PASSWORD` only before first successful login
+- CMS Admin API v1 is live and authenticated
+- Deployment DB flow: schema -> retry-safe repair migrations -> schema verification -> non-destructive seeds -> bootstrap-admin sync
+- Production schema self-heal/repair path exists for previously incomplete deployments
 - Public titles use `|` separators
 
 ## Foundation / deployment
@@ -22,12 +22,15 @@ This file is the source of truth for work landing on `main`.
 - [x] Root/public routing compatibility and `/health`
 - [x] GitHub Actions PHP lint
 - [x] Schema bootstrap + retry-safe migrations
+- [x] Comprehensive repair migrations for incomplete production schema
+- [x] Schema verification before seeding
 - [x] Non-destructive seeds
-- [x] Bootstrap admin + safe pre-first-login recovery
-- [x] Composer DB deployment hook
+- [x] Environment-driven bootstrap administrator recovery
+- [x] Composer DB deployment hook fails loudly on production DB/migration failure
 - [x] Dev/deploy/release/backup/rollback docs
-- [!] Verify latest production deployment output
-- [!] Run full production CRUD smoke test
+- [x] Smoke test checks migration-owned tables and critical columns
+- [!] Run latest `composer deploy-db` / `composer smoke-test` on production and retain successful output
+- [!] Run full production admin CRUD smoke test
 
 ## Users / roles / security
 - [x] Administrator / Editor / Writer / SEO Manager permissions
@@ -38,6 +41,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Timed password reveal controls
 - [x] CSP/security headers + HTML sanitization
 - [x] Audit log and major mutation coverage
+- [x] Bootstrap login recovery tolerates legacy production user schemas
 
 ## Catalog
 - [x] Nested categories + filters/pagination/breadcrumbs/redirects
@@ -47,6 +51,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Product gallery, specifications and public product page/schema
 - [x] Bulk actions + validated CSV import/export
 - [x] Product change history
+- [x] Product Amazon override flags persist only after successful product save
 
 ## Buying guides / blog / editorial
 - [x] Guide CRUD/scheduling/SEO/product ranking
@@ -55,6 +60,7 @@ This file is the source of truth for work landing on `main`.
 - [x] Blog CRUD/scheduling/SEO/media/schema
 - [x] Safe rich-text toolbar + product embeds
 - [x] Blog tags + public display + BlogPosting keywords
+- [x] Blog tag handling works without requiring ext-mbstring
 - [x] Searchable internal-link editor helper
 
 ## Comparisons / reviews
@@ -85,6 +91,22 @@ This file is the source of truth for work landing on `main`.
 - [x] Live SEO preview
 - [x] Searchable internal-link editor helper
 
+## CMS Admin API / agent control
+- [x] Authenticated `/api/v1` control surface
+- [x] Bearer and X-API-Key authentication
+- [x] Optional query-key + GET command mode for constrained clients
+- [x] Idempotent GET writes via `request_id`
+- [x] Product/category/brand/guide reads and writes
+- [x] Blog reads and `blog.save`
+- [x] Review reads and `review.save`
+- [x] Comparison reads and `comparison.save`
+- [x] Redirect reads and `redirect.save`
+- [x] Existing-record API updates preserve omitted editable fields
+- [x] No raw SQL or arbitrary command endpoint
+- [x] API writes are audited
+- [ ] Add Media, specifications, merchandising/site settings and Amazon actions to API when direct agent operation needs them
+- [ ] Replace query-string API-key mode with a safer agent-compatible transport when an arbitrary authenticated HTTP connector is available
+
 ## Amazon Creators API
 - [x] Optional integration; manual CMS remains independent
 - [x] OAuth/encrypted credentials/test/token reuse
@@ -95,23 +117,31 @@ This file is the source of truth for work landing on `main`.
 - [x] One-hour offer-price freshness enforcement
 - [x] Hourly/daily CLI refresh path + deployment cron documentation
 - [x] Fixed Amazon pricing/availability disclosure + price Details links
+- [x] Marketplace-neutral public Amazon pricing disclosure
+- [x] Multiple encrypted marketplace profiles + active-profile admin UI
+- [x] Marketplace-aware ASIN import/validation
+- [x] Scheduled refresh iterates every enabled configured marketplace
+- [x] Legacy unscoped Amazon products are only auto-claimed when exactly one configured marketplace exists
 - [x] Associates/Creators API implementation guardrails documented from current official Amazon requirements
 - [!] Configure/verify production Amazon refresh cron if Amazon integration is enabled
-- [ ] Multiple marketplaces (lower priority)
+- [!] Verify each intended marketplace with real Creators API credentials before enabling it in production
 
 ## Storefront
 - [x] Responsive layout + homepage merchandising/settings
 - [x] Mobile nav, skip links, focus states, reduced motion
-- [ ] Final visual QA against live MediaPitch branding
+- [!] Final visual QA against live MediaPitch branding
 
-## Lower-priority / future
+## Optional / future scope
 - [ ] Newsletter / personalization / alerts
 - [ ] Additional affiliate networks
-- [ ] AI-assisted product/guide/scoring/content workflows
+- [ ] AI-assisted product/guide/scoring/content workflows beyond the admin API control surface
+- [ ] S3/R2 media storage adapter if local storage stops being sufficient
 
 ## Immediate execution queue
-1. [!] Verify latest production deployment/bootstrap recovery output
-2. [!] Run full production admin CRUD smoke test
-3. [!] Configure/verify hourly Amazon refresh cron if integration is enabled
-4. [ ] Final visual QA on live storefront/admin
-5. [ ] Multiple Amazon marketplaces (lower priority)
+1. [!] Deploy latest `main`, run `composer deploy-db`, then `composer smoke-test`
+2. [!] Run live admin CRUD smoke test across Products, Categories, Brands, Media, Blog, Guides, Reviews, Comparisons, Audit and Settings
+3. [!] Verify CMS Admin API expanded read/write endpoints on production
+4. [!] Configure/verify Amazon refresh cron and real marketplace credentials if Amazon integration is enabled
+5. [!] Final public/admin visual QA
+
+Code-side MVP is effectively complete once the latest CI pass is green. Remaining immediate items are production verification rather than major feature construction.
