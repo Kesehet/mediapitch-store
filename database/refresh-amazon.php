@@ -17,6 +17,13 @@ try {
         exit(0);
     }
 
+    $configured=array_values(array_filter($enabled,static fn(array $profile):bool=>
+        trim((string)($profile['credential_id']??''))!=='' &&
+        trim((string)($profile['credential_secret']??''))!=='' &&
+        trim((string)($profile['partner_tag']??''))!==''
+    ));
+    $allowLegacyUnscoped=count($configured)===1;
+
     $limitPerProfile=max(1,min(500,(int)($argv[1]??100)));
     $refresh=new AmazonBulkRefresh();
     $grand=['profiles'=>0,'selected'=>0,'refreshed'=>0,'missing'=>0,'errors'=>0];
@@ -29,6 +36,7 @@ try {
             continue;
         }
 
+        $settings['allow_legacy_unscoped']=$allowLegacyUnscoped;
         $remaining=$limitPerProfile;
         $totals=['selected'=>0,'refreshed'=>0,'missing'=>0,'errors'=>0];
         $grand['profiles']++;
@@ -54,6 +62,9 @@ try {
         ));
     }
 
+    if(count($configured)>1){
+        fwrite(STDOUT,"Legacy Amazon products without api_marketplace were intentionally skipped because multiple marketplaces are enabled.\n");
+    }
     fwrite(STDOUT,sprintf(
         "Amazon multi-market refresh complete: profiles=%d selected=%d refreshed=%d missing=%d errors=%d\n",
         $grand['profiles'],$grand['selected'],$grand['refreshed'],$grand['missing'],$grand['errors']
