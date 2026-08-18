@@ -44,8 +44,6 @@ final class ProductAuthoring
                 $sql="SELECT id,title FROM products WHERE asin=:asin AND (api_marketplace=:marketplace OR api_marketplace IS NULL OR api_marketplace='')";
                 $params['marketplace']=$currentMarketplace;
             }else{
-                // Manual/non-marketplace products keep conservative global ASIN
-                // uniqueness because there is no locale identity to distinguish them.
                 $sql='SELECT id,title FROM products WHERE asin=:asin';
             }
             if($productId){$sql.=' AND id<>:id';$params['id']=$productId;}
@@ -59,7 +57,6 @@ final class ProductAuthoring
             $data['asin']=$asin;
         }
 
-        if($productId)(new ProductOverrides())->save($productId,$data['amazon_override']??[]);
         $data['title']=$title;$data['slug']=$slug;return $data;
     }
 
