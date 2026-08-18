@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace MediaPitch\Api;
 
+use MediaPitch\Amazon\AmazonBulkRefresh;
+use MediaPitch\Amazon\AmazonProductImporter;
+use MediaPitch\Amazon\CreatorsApiClient;
 use MediaPitch\Core\Audit;
 use MediaPitch\Core\Database;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ComparisonRepository;
 use MediaPitch\Repositories\ContentRepository;
+use MediaPitch\Repositories\MediaRepository;
+use MediaPitch\Repositories\MerchandisingRepository;
 use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\ReviewRepository;
+use MediaPitch\Repositories\SettingsRepository;
 use PDO;
 use Throwable;
 
@@ -38,7 +44,10 @@ final class AdminApiController
                     'version'=>'v1',
                     'database'=>'ok',
                     'get_writes_enabled'=>(bool)env('CMS_API_ALLOW_GET_WRITES', false),
-                    'resources'=>['products','categories','brands','guides','blog','reviews','comparisons','redirects'],
+                    'resources'=>[
+                        'products','categories','brands','guides','blog','reviews','comparisons','redirects',
+                        'media','specifications','site-settings','merchandising','amazon',
+                    ],
                 ]);
             }
 
@@ -90,6 +99,53 @@ final class AdminApiController
                 $this->json(['ok'=>true,'data'=>$row]);
             }
 
+            $media=new MediaRepository();
+            if ($method === 'GET' && $path === '/api/v1/media') {
+                $limit=max(1,min(200,(int)($_GET['limit']??100)));
+                $query=trim((string)($_GET['q']??''));
+                $this->json(['ok'=>true,'data'=>$media->all($limit,$query)]);
+            }
+            if ($method === 'GET' && preg_match('#^/api/v1/media/(\d+)$#', $path, $m)) {
+                $row=$media->find((int)$m[1]);
+                if(!$row)$this->json(['ok'=>false,'error'=>'not_found'],404);
+                $row['usage']=$media->usageForPath((string)$row['file_path']);
+                $this->json(['ok'=>true,'data'=>$row]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/specifications') {
+                $this->json(['ok'=>true,'data'=>$this->repo->specificationDefinitions()]);
+            }
+            if ($method === 'GET' && preg_match('#^/api/v1/specifications/(\d+)$#', $path, $m)) {
+                $row=$this->repo->specificationDefinition((int)$m[1]);
+                if(!$row)$this->json(['ok'=>false,'error'=>'not_found'],404);
+                $this->json(['ok'=>true,'data'=>$row]);
+            }
+
+            $settings=new SettingsRepository();
+            if ($method === 'GET' && $path === '/api/v1/site-settings') {
+                $this->json(['ok'=>true,'data'=>$settings->site()]);
+            }
+
+            $merchandising=new MerchandisingRepository();
+            if ($method === 'GET' && $path === '/api/v1/merchandising') {
+                $this->json(['ok'=>true,'data'=>$merchandising->settings(),'product_options'=>$merchandising->productOptions()]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/amazon/profiles') {
+                $this->json(['ok'=>true,'active_marketplace'=>$settings->activeAmazonMarketplace(),'data'=>$this->safeAmazonProfiles($settings->amazonProfiles())]);
+            }
+            if ($method === 'GET' && $path === '/api/v1/amazon/search') {
+                $query=trim((string)($_GET['q']??''));
+                if($query==='')throw new \InvalidArgumentException('q is required.');
+                $marketplace=trim((string)($_GET['marketplace']??''));
+                $profile=$settings->amazon($marketplace!==''?$marketplace:null);
+                $this->assertAmazonConfigured($profile);
+                $items=(new CreatorsApiClient())->searchItems($profile,$query,10);
+                $previews=[];$importer=new AmazonProductImporter();
+                foreach($items as $item)if(is_array($item))$previews[]=$importer->normalizeForPreview($item);
+                $this->json(['ok'=>true,'marketplace'=>$profile['marketplace'],'data'=>$previews]);
+            }
+
             if ($path === '/api/v1/command' && in_array($method,['GET','POST'],true)) {
                 if ($method === 'GET' && !(bool)env('CMS_API_ALLOW_GET_WRITES', false)) {
                     $this->json(['ok'=>false,'error'=>'get_writes_disabled'],405);
@@ -135,6 +191,17 @@ final class AdminApiController
             'review.save'=>$this->saveReview($data),
             'comparison.save'=>$this->saveComparison($data),
             'redirect.save'=>$this->saveRedirect($data),
+            'media.alt.save'=>$this->saveMediaAlt($data),
+            'media.assign_category'=>$this->assignCategoryImage($data),
+            'specification.save'=>$this->saveSpecification($data),
+            'specification.archive'=>$this->setSpecificationActive($data,false),
+            'specification.restore'=>$this->setSpecificationActive($data,true),
+            'site-settings.save'=>$this->saveSiteSettings($data),
+            'merchandising.save'=>$this->saveMerchandising($data),
+            'amazon.activate'=>$this->activateAmazonMarketplace($data),
+            'amazon.test'=>$this->testAmazon($data),
+            'amazon.refresh'=>$this->refreshAmazon($data),
+            'amazon.import'=>$this->importAmazon($data),
             default=>throw new \InvalidArgumentException('Unsupported op.'),
         };
 
@@ -272,6 +339,129 @@ final class AdminApiController
         return ['id'=>$saved,'redirect'=>$saved?$repo->find($saved):null];
     }
 
+    private function saveMediaAlt(array $data): array
+    {
+        $id=(int)($data['id']??0);if($id<1)throw new \InvalidArgumentException('id is required.');
+        $repo=new MediaRepository();$item=$repo->find($id);if(!$item)throw new \InvalidArgumentException('Media item not found.');
+        $alt=trim((string)($data['alt_text']??''));
+        $stmt=Database::connection()->prepare('UPDATE media SET alt_text=:alt_text WHERE id=:id');
+        $stmt->execute(['alt_text'=>$alt!==''?substr($alt,0,500):null,'id'=>$id]);
+        Audit::record('api.media.alt.save','media',$id,'Updated media alt text via CMS API');
+        return ['id'=>$id,'media'=>$repo->find($id)];
+    }
+
+    private function assignCategoryImage(array $data): array
+    {
+        $categoryId=(int)($data['category_id']??0);$imageUrl=trim((string)($data['image_url']??''));
+        if($categoryId<1||$imageUrl==='')throw new \InvalidArgumentException('category_id and image_url are required.');
+        if(!str_starts_with($imageUrl,'/')&&!filter_var($imageUrl,FILTER_VALIDATE_URL))throw new \InvalidArgumentException('image_url must be a site path or valid URL.');
+        if(!$this->repo->category($categoryId))throw new \InvalidArgumentException('Category not found.');
+        $stmt=Database::connection()->prepare('UPDATE categories SET image_url=:image_url WHERE id=:id');$stmt->execute(['image_url'=>$imageUrl,'id'=>$categoryId]);
+        Audit::record('api.category.image.assign','category',$categoryId,'Assigned category image via CMS API',['image_url'=>$imageUrl]);
+        return ['category_id'=>$categoryId,'image_url'=>$imageUrl];
+    }
+
+    private function saveSpecification(array $data): array
+    {
+        $id=!empty($data['id'])?(int)$data['id']:null;
+        if($id){
+            $existing=$this->repo->specificationDefinition($id);if(!$existing)throw new \InvalidArgumentException('Specification not found.');
+            if(!array_key_exists('options',$data)){
+                $options=json_decode((string)($existing['options_json']??''),true);$existing['options']=is_array($options)?implode("\n",array_map('strval',$options)):'';
+            }
+            $data=array_replace($existing,$data);
+        }
+        if(trim((string)($data['name']??''))==='')throw new \InvalidArgumentException('name is required.');
+        if(trim((string)($data['slug']??''))==='')$data['slug']=$this->slug((string)$data['name']);
+        $saved=$this->repo->saveSpecificationDefinition($data,$id);
+        Audit::record('api.specification.save','specification',$saved,'Saved specification via CMS API');
+        return ['id'=>$saved,'specification'=>$this->repo->specificationDefinition($saved)];
+    }
+
+    private function setSpecificationActive(array $data,bool $active): array
+    {
+        $id=(int)($data['id']??0);if($id<1)throw new \InvalidArgumentException('id is required.');
+        if(!$this->repo->specificationDefinition($id))throw new \InvalidArgumentException('Specification not found.');
+        $stmt=Database::connection()->prepare('UPDATE specification_definitions SET active=:active WHERE id=:id');$stmt->execute(['active'=>$active?1:0,'id'=>$id]);
+        Audit::record($active?'api.specification.restore':'api.specification.archive','specification',$id,$active?'Restored specification via CMS API':'Archived specification via CMS API');
+        return ['id'=>$id,'active'=>$active];
+    }
+
+    private function saveSiteSettings(array $data): array
+    {
+        $repo=new SettingsRepository();$merged=array_replace($repo->site(),$data);$repo->saveSite($merged);
+        Audit::record('api.settings.site.save','settings',null,'Updated website settings via CMS API');
+        return $repo->site();
+    }
+
+    private function saveMerchandising(array $data): array
+    {
+        $repo=new MerchandisingRepository();$merged=array_replace($repo->settings(),$data);$repo->save($merged);
+        Audit::record('api.merchandising.save','settings',null,'Updated homepage merchandising via CMS API');
+        return $repo->settings();
+    }
+
+    private function activateAmazonMarketplace(array $data): array
+    {
+        $marketplace=trim((string)($data['marketplace']??''));if($marketplace==='')throw new \InvalidArgumentException('marketplace is required.');
+        $repo=new SettingsRepository();$repo->setActiveAmazonMarketplace($marketplace);
+        Audit::record('api.amazon.activate','amazon',null,'Activated Amazon marketplace via CMS API',['marketplace'=>$repo->activeAmazonMarketplace()]);
+        return ['active_marketplace'=>$repo->activeAmazonMarketplace()];
+    }
+
+    private function testAmazon(array $data): array
+    {
+        $repo=new SettingsRepository();$marketplace=trim((string)($data['marketplace']??''));$profile=$repo->amazon($marketplace!==''?$marketplace:null);$this->assertAmazonConfigured($profile);
+        try{
+            $result=(new CreatorsApiClient())->testCredentials($profile);$stamp=gmdate('Y-m-d H:i:s');$repo->setAmazonStatus($stamp,null,(string)$profile['marketplace']);
+            Audit::record('api.amazon.test','amazon',null,'Amazon authentication test succeeded via CMS API',['marketplace'=>$profile['marketplace'],'expires_in'=>(int)($result['expires_in']??0)]);
+            return ['marketplace'=>$profile['marketplace'],'success'=>true,'expires_in'=>(int)($result['expires_in']??0)];
+        }catch(Throwable $e){$repo->setAmazonStatus(null,substr($e->getMessage(),0,1000),(string)$profile['marketplace']);throw $e;}
+    }
+
+    private function refreshAmazon(array $data): array
+    {
+        $repo=new SettingsRepository();$marketplace=trim((string)($data['marketplace']??''));$profile=$repo->amazon($marketplace!==''?$marketplace:null);$this->assertAmazonConfigured($profile);
+        $limit=max(1,min(100,(int)($data['limit']??50)));$result=(new AmazonBulkRefresh())->refresh($profile,$limit,true);
+        $repo->setAmazonStatus(gmdate('Y-m-d H:i:s'),empty($result['errors'])?null:'Some products failed to refresh.',(string)$profile['marketplace']);
+        Audit::record('api.amazon.refresh','amazon',null,'Refreshed Amazon products via CMS API',['marketplace'=>$profile['marketplace'],'selected'=>(int)$result['selected'],'refreshed'=>(int)$result['refreshed'],'missing_count'=>count($result['missing']??[]),'error_count'=>count($result['errors']??[])]);
+        return $result;
+    }
+
+    private function importAmazon(array $data): array
+    {
+        $asin=strtoupper(trim((string)($data['asin']??'')));if(!preg_match('/^[A-Z0-9]{10}$/',$asin))throw new \InvalidArgumentException('asin must contain exactly 10 letters/numbers.');
+        $categoryId=!empty($data['category_id'])?(int)$data['category_id']:null;$marketplace=trim((string)($data['marketplace']??''));
+        $repo=new SettingsRepository();$profile=$repo->amazon($marketplace!==''?$marketplace:null);$this->assertAmazonConfigured($profile);
+        $items=(new CreatorsApiClient())->getItems($profile,[$asin]);if(!$items)throw new \InvalidArgumentException('Amazon did not return that ASIN.');
+        $id=(new AmazonProductImporter())->import($items[0],$profile,$categoryId);$repo->setAmazonStatus(gmdate('Y-m-d H:i:s'),null,(string)$profile['marketplace']);
+        Audit::record('api.amazon.import','product',$id,'Imported/refreshed Amazon product via CMS API',['asin'=>$asin,'category_id'=>$categoryId,'marketplace'=>$profile['marketplace']]);
+        return ['id'=>$id,'asin'=>$asin,'marketplace'=>$profile['marketplace'],'product'=>$this->filterRow($this->repo->product($id)??[])];
+    }
+
+    private function assertAmazonConfigured(array $profile): void
+    {
+        if(empty($profile['enabled']))throw new \InvalidArgumentException('Amazon marketplace profile is disabled.');
+        if(trim((string)($profile['credential_id']??''))===''||trim((string)($profile['credential_secret']??''))===''||trim((string)($profile['partner_tag']??''))==='')throw new \InvalidArgumentException('Amazon marketplace profile is incomplete.');
+    }
+
+    private function safeAmazonProfiles(array $profiles): array
+    {
+        $safe=[];
+        foreach($profiles as $profile){
+            $safe[]=[
+                'enabled'=>!empty($profile['enabled']),
+                'marketplace'=>(string)($profile['marketplace']??''),
+                'credential_version'=>(string)($profile['credential_version']??''),
+                'credentials_configured'=>!empty($profile['credentials_configured']),
+                'active_profile'=>!empty($profile['active_profile']),
+                'last_success'=>(string)($profile['last_success']??''),
+                'last_error'=>(string)($profile['last_error']??''),
+            ];
+        }
+        return $safe;
+    }
+
     private function apiAuthorId(): int
     {
         $configured=(int)env('CMS_API_AUTHOR_ID',0);
@@ -347,7 +537,7 @@ final class AdminApiController
     }
 
     private function filterRows(array $rows): array{return array_map(fn(array $r)=>$this->filterRow($r),$rows);}
-    private function filterRow(array $row): array{foreach(['password_hash','credential_secret','access_token'] as $blocked)unset($row[$blocked]);return $row;}
+    private function filterRow(array $row): array{foreach(['password_hash','credential_secret','credential_id','access_token'] as $blocked)unset($row[$blocked]);return $row;}
     private function slug(string $value): string{$value=strtolower(trim($value));$value=preg_replace('/[^a-z0-9]+/','-',$value)??'';return trim($value,'-') ?: 'item-'.time();}
     private function base64UrlDecode(string $value): string{$value=strtr($value,'-_','+/');$pad=strlen($value)%4;if($pad)$value.=str_repeat('=',4-$pad);$decoded=base64_decode($value,true);if($decoded===false)throw new \InvalidArgumentException('Invalid base64url data.');return $decoded;}
     private function json(array $payload,int $status=200): never{http_response_code($status);echo json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;}
