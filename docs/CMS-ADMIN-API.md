@@ -1,6 +1,6 @@
 # MediaPitch CMS Admin API
 
-The CMS exposes a small authenticated API at `/api/v1` for trusted automation and AI-assisted administration.
+The CMS exposes an authenticated API at `/api/v1` for trusted automation and AI-assisted administration.
 
 ## Authentication
 
@@ -40,6 +40,14 @@ GET /api/v1/categories
 GET /api/v1/brands
 GET /api/v1/guides
 GET /api/v1/guides/{id}
+GET /api/v1/blog
+GET /api/v1/blog/{id}
+GET /api/v1/reviews
+GET /api/v1/reviews/{id}
+GET /api/v1/comparisons
+GET /api/v1/comparisons/{id}
+GET /api/v1/redirects
+GET /api/v1/redirects/{id}
 ```
 
 All responses are JSON and use `Cache-Control: no-store`.
@@ -74,8 +82,14 @@ Supported operations in v1:
 - `category.restore`
 - `brand.save`
 - `guide.save`
+- `blog.save`
+- `review.save`
+- `comparison.save`
+- `redirect.save`
 
-`id` in `data` updates an existing record. Without `id`, the operation creates a record. For product/guide updates, first GET the existing object and send the complete editable payload so omitted fields are not unintentionally cleared.
+`id` in `data` updates an existing record. Without `id`, the operation creates a record.
+
+Existing-record updates are patch-safe: the API loads the stored record first and preserves omitted editable fields. Product updates also preserve current specification values unless replacements are supplied. Guide updates preserve existing ranked products unless new product arrays are supplied.
 
 ## GET command mode
 
@@ -107,6 +121,7 @@ Every GET write requires a unique `request_id`. Completed request IDs are stored
 - API responses never intentionally expose password hashes, credential secrets, or access tokens.
 - Writes are added to the CMS audit log when audit storage is available.
 - Newly created products default to inactive unless `active` is explicitly supplied.
+- Existing record updates preserve omitted fields rather than treating omissions as deletion requests.
 - GET writes and query-string authentication are opt-in.
 - Keep `CMS_API_KEY` out of Git, screenshots and public URLs.
 
@@ -116,7 +131,9 @@ Every GET write requires a unique `request_id`. Completed request IDs are stored
 CMS_API_KEY=<64-hex-random-value>
 CMS_API_ALLOW_QUERY_KEY=true
 CMS_API_ALLOW_GET_WRITES=true
-CMS_API_AUTHOR_ID=1
+CMS_API_AUTHOR_ID=0
 ```
+
+`CMS_API_AUTHOR_ID=0` automatically selects the first active administrator/editor for authored content. Set a specific user ID when attribution should always go to one CMS user.
 
 Once a client capable of Bearer-authenticated POST is available, query-string authentication and GET writes can be disabled again.
