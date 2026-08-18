@@ -11,6 +11,8 @@ use RuntimeException;
 
 final class ProductAuthoring
 {
+    private static mixed $pendingOverrides = null;
+
     public function prepare(array $data, ?int $productId = null): array
     {
         $title=trim((string)($data['title']??''));
@@ -57,7 +59,16 @@ final class ProductAuthoring
             $data['asin']=$asin;
         }
 
+        self::$pendingOverrides=$data['amazon_override']??[];
         $data['title']=$title;$data['slug']=$slug;return $data;
+    }
+
+    public static function persistPendingOverrides(int $productId): void
+    {
+        if(self::$pendingOverrides===null)return;
+        $submitted=self::$pendingOverrides;
+        self::$pendingOverrides=null;
+        (new ProductOverrides())->save($productId,$submitted);
     }
 
     public function archive(int $productId): void
