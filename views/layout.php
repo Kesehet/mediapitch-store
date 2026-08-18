@@ -7,7 +7,7 @@ $siteSettings=$siteSettings??[];
 $siteName=(string)($siteSettings['name']??'MediaPitch Store');
 $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
 $affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.');
-$amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on Amazon.in at the time of purchase will apply to the purchase of the product.';
+$amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on the relevant Amazon marketplace at the time of purchase will apply to the purchase of the product.';
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
     ?? ($post['featured_image_url'] ?? null)
