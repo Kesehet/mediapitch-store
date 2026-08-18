@@ -24,5 +24,6 @@ final class ProductGallery
         if(count($urls)>20)throw new InvalidArgumentException('A product gallery can contain up to 20 images.');
         $stmt=Database::connection()->prepare('UPDATE products SET gallery_json=:gallery WHERE id=:id');
         $stmt->execute(['gallery'=>$urls?json_encode($urls,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE):null,'id'=>$productId]);
+        ProductAuthoring::persistPendingOverrides($productId);
     }
 }
