@@ -39,7 +39,7 @@ try{
     $requiredTables=[
         'users','categories','brands','products','content','content_products','product_specifications',
         'specification_definitions','settings','affiliate_clicks','redirects','media','search_queries',
-        'admin_audit_log','password_resets','tags','content_tags','schema_migrations',
+        'admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
     ];
     foreach($requiredTables as $table){
         try{$db->query('SELECT 1 FROM `'.$table.'` LIMIT 1');$check('Table '.$table,true);}catch(Throwable $e){$check('Table '.$table,false,substr($e->getMessage(),0,160));}
