@@ -127,7 +127,7 @@ final class ContentRepository
         $insertTag=$db->prepare('INSERT INTO tags (name,slug) VALUES (:name,:slug)');
         $link=$db->prepare('INSERT IGNORE INTO content_tags (content_id,tag_id) VALUES (:content_id,:tag_id)');
         foreach($names as $name){
-            $name=mb_substr($name,0,100);
+            $name=function_exists('mb_substr')?mb_substr($name,0,100):substr($name,0,100);
             $slug=$this->tagSlug($name);if($slug==='')continue;
             $find->execute(['slug'=>$slug]);$tagId=(int)($find->fetchColumn()?:0);
             if(!$tagId){$insertTag->execute(['name'=>$name,'slug'=>$slug]);$tagId=(int)$db->lastInsertId();}
