@@ -14,10 +14,12 @@ final class AmazonBulkRefresh
         $limit=max(1,min(100,$limit));
         $marketplace=trim((string)($settings['marketplace']??''));
         if($marketplace==='')throw new \InvalidArgumentException('Amazon marketplace is required for product refresh.');
+        $allowLegacyUnscoped=!empty($settings['allow_legacy_unscoped']);
 
         $sql="SELECT id,asin,category_id,last_synced_at,api_marketplace FROM products
               WHERE asin IS NOT NULL AND asin<>'' AND source IN ('amazon_api','hybrid')
-                AND (api_marketplace=:marketplace OR api_marketplace IS NULL OR api_marketplace='')";
+                AND api_marketplace=:marketplace";
+        if($allowLegacyUnscoped)$sql.=" OR (asin IS NOT NULL AND asin<>'' AND source IN ('amazon_api','hybrid') AND (api_marketplace IS NULL OR api_marketplace=''))";
         if($staleOnly)$sql.=" AND (last_synced_at IS NULL OR last_synced_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 55 MINUTE))";
         $sql.=' ORDER BY COALESCE(last_synced_at,\'1970-01-01 00:00:00\') ASC,id ASC LIMIT :limit';
         $stmt=Database::connection()->prepare($sql);
