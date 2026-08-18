@@ -12,7 +12,7 @@ This file is the source of truth for work landing on `main`.
 - Production branch: `main`
 - Production URL: `https://store.mediapitch.in/`
 - Production `/health`: DB connection confirmed OK from the user's browser
-- CMS Admin API v1 is live and authenticated
+- CMS Admin API v1 is live and authenticated; full control surface is implemented on `main`
 - Deployment DB flow: schema -> retry-safe repair migrations -> schema verification -> non-destructive seeds -> bootstrap-admin sync
 - Production schema self-heal/repair path exists for previously incomplete deployments
 - Public titles use `|` separators
@@ -101,10 +101,16 @@ This file is the source of truth for work landing on `main`.
 - [x] Review reads and `review.save`
 - [x] Comparison reads and `comparison.save`
 - [x] Redirect reads and `redirect.save`
+- [x] Media reads, alt-text updates and category-image assignment
+- [x] Specification reads/save/archive/restore
+- [x] Site settings reads and patch-safe save
+- [x] Homepage merchandising reads and patch-safe save
+- [x] Safe Amazon profile/status reads, search, activate, test, refresh and ASIN import
+- [x] Amazon credentials never returned by the API and credential management stays in administrator UI
 - [x] Existing-record API updates preserve omitted editable fields
 - [x] No raw SQL or arbitrary command endpoint
 - [x] API writes are audited
-- [ ] Add Media, specifications, merchandising/site settings and Amazon actions to API when direct agent operation needs them
+- [!] Verify expanded API endpoints after latest `main` is deployed to production
 - [ ] Replace query-string API-key mode with a safer agent-compatible transport when an arbitrary authenticated HTTP connector is available
 
 ## Amazon Creators API
@@ -136,12 +142,13 @@ This file is the source of truth for work landing on `main`.
 - [ ] Additional affiliate networks
 - [ ] AI-assisted product/guide/scoring/content workflows beyond the admin API control surface
 - [ ] S3/R2 media storage adapter if local storage stops being sufficient
+- [ ] Agent-compatible authenticated HTTP transport that can replace temporary query-key GET mode
 
 ## Immediate execution queue
 1. [!] Deploy latest `main`, run `composer deploy-db`, then `composer smoke-test`
-2. [!] Run live admin CRUD smoke test across Products, Categories, Brands, Media, Blog, Guides, Reviews, Comparisons, Audit and Settings
-3. [!] Verify CMS Admin API expanded read/write endpoints on production
+2. [!] Verify the expanded CMS Admin API endpoints/commands on production
+3. [!] Run live admin CRUD smoke test across Products, Categories, Brands, Media, Blog, Guides, Reviews, Comparisons, Audit and Settings
 4. [!] Configure/verify Amazon refresh cron and real marketplace credentials if Amazon integration is enabled
 5. [!] Final public/admin visual QA
 
-Code-side MVP is effectively complete once the latest CI pass is green. Remaining immediate items are production verification rather than major feature construction.
+**Code-side MediaPitch Store v1 is complete.** Remaining immediate items are production deployment/sign-off checks rather than missing MVP implementation.
