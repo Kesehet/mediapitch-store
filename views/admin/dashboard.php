@@ -1,3 +1,7 @@
+<?php if(!empty($_GET['help'])): ?>
+<link rel="stylesheet" href="/assets/admin-help.css">
+<?php require __DIR__.'/help.php'; return; ?>
+<?php endif; ?>
 <section class="stat-grid">
 <?php foreach ([['Products',$counts['products'] ?? 0],['Manual products',$counts['manual_products'] ?? 0],['Amazon API products',$counts['api_products'] ?? 0],['Published guides',$counts['guides'] ?? 0],['Draft content',$counts['drafts'] ?? 0],['Amazon clicks',$counts['clicks'] ?? 0]] as [$label,$value]): ?>
 <div class="stat-card"><span><?= e($label) ?></span><strong><?= number_format((int)$value) ?></strong></div><?php endforeach; ?>
