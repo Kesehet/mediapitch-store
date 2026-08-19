@@ -91,6 +91,17 @@ This file is the source of truth for work landing on `main`.
 - [x] Live SEO preview
 - [x] Searchable internal-link editor helper
 
+## CMS documentation / user help
+- [x] Dedicated Documentation tab in the authenticated CMS sidebar
+- [x] Searchable user-facing handbook
+- [x] Role-aware help: only explains features the logged-in role can access
+- [x] Step-by-step workflows for Products, Categories, Brands, Specifications, Media and Homepage Picks
+- [x] Step-by-step workflows for Blog, Buying Guides, Reviews and Comparisons
+- [x] Administrator help for Redirects, Website Settings, Amazon, Users, Analytics and Audit Log
+- [x] Plain-language SEO field guide, publishing checklist and troubleshooting section
+- [x] Visual UI walkthrough diagrams for Product, Blog, Guide and Amazon workflows
+- [!] Add/replace with real production CMS screenshots after latest build is deployed and visually verified
+
 ## CMS Admin API / agent control
 - [x] Authenticated `/api/v1` control surface
 - [x] Bearer and X-API-Key authentication
@@ -146,9 +157,10 @@ This file is the source of truth for work landing on `main`.
 
 ## Immediate execution queue
 1. [!] Deploy latest `main`, run `composer deploy-db`, then `composer smoke-test`
-2. [!] Verify the expanded CMS Admin API endpoints/commands on production
-3. [!] Run live admin CRUD smoke test across Products, Categories, Brands, Media, Blog, Guides, Reviews, Comparisons, Audit and Settings
-4. [!] Configure/verify Amazon refresh cron and real marketplace credentials if Amazon integration is enabled
-5. [!] Final public/admin visual QA
+2. [!] Verify the Documentation tab and capture real CMS screenshots for the handbook
+3. [!] Verify the expanded CMS Admin API endpoints/commands on production
+4. [!] Run live admin CRUD smoke test across Products, Categories, Brands, Media, Blog, Guides, Reviews, Comparisons, Audit and Settings
+5. [!] Configure/verify Amazon refresh cron and real marketplace credentials if Amazon integration is enabled
+6. [!] Final public/admin visual QA
 
 **Code-side MediaPitch Store v1 is complete.** Remaining immediate items are production deployment/sign-off checks rather than missing MVP implementation.
