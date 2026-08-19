@@ -4,8 +4,9 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\Database;
 use MediaPitch\Services\ProductOverrides;
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '/admin';
+$helpMode = $currentPath==='/admin' && !empty($_GET['help']);
 $adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/admin.css');
-$browserTitle = str_replace(' — ', ' | ', ($pageTitle ?? 'Admin') . ' | MediaPitch');
+$browserTitle = str_replace(' — ', ' | ', ($helpMode ? 'Documentation' : ($pageTitle ?? 'Admin')) . ' | MediaPitch');
 $canCatalog=Auth::canManageProducts();
 $canContent=Auth::canEditContent();
 $canMedia=Auth::canUploadMedia();
@@ -36,7 +37,8 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
   <nav>
-    <a class="<?= $currentPath==='/admin'?'active':'' ?>" href="<?= e(url('admin')) ?>">Dashboard</a>
+    <a class="<?= $currentPath==='/admin'&&!$helpMode?'active':'' ?>" href="<?= e(url('admin')) ?>">Dashboard</a>
+    <a class="<?= $helpMode?'active':'' ?>" href="<?= e(url('admin').'?help=1') ?>">Documentation</a>
     <?php if($canCatalog):?>
       <a class="<?= str_starts_with($currentPath,'/admin/products')?'active':'' ?>" href="<?= e(url('admin/products')) ?>">Products</a>
       <a class="<?= str_starts_with($currentPath,'/admin/merchandising')?'active':'' ?>" href="<?= e(url('admin/merchandising')) ?>">Homepage Picks</a>
@@ -63,7 +65,7 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
     <form method="post" action="<?= e(url('admin/logout')) ?>"><?= Csrf::field() ?><button class="link-button">Sign out</button></form>
   </div>
 </aside>
-<main class="admin-main"><header class="admin-top"><h1><?= e($pageTitle ?? 'Admin') ?></h1><a href="<?= e(url()) ?>" target="_blank" rel="noopener">View site ↗</a></header>
+<main class="admin-main"><header class="admin-top"><h1><?= e($helpMode ? 'Documentation' : ($pageTitle ?? 'Admin')) ?></h1><a href="<?= e(url()) ?>" target="_blank" rel="noopener">View site ↗</a></header>
 <?php if (!empty($success)): ?><div class="flash success"><?= e($success) ?></div><?php endif; ?>
 <?php if (!empty($error)): ?><div class="flash error"><?= e($error) ?></div><?php endif; ?>
 <?= $content ?>
