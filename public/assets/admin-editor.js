@@ -2,46 +2,37 @@ document.addEventListener('DOMContentLoaded',()=>{
   const escapeHtml=value=>String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
   const richTextareas=[...document.querySelectorAll('textarea[name="body"],textarea[name="full_description"]')];
 
-  const cleanWordHtml=html=>{
-    const parser=new DOMParser();
-    const doc=parser.parseFromString('<div id="mp-word-root">'+html+'</div>','text/html');
-    const root=doc.getElementById('mp-word-root');
-    if(!root)return html;
+  const officeTextToHtml=text=>{
+    const lines=String(text||'').replace(/\r\n?/g,'\n').split('\n');
+    let html='';
+    let listType=null;
+    const closeList=()=>{if(listType){html+='</'+listType+'>';listType=null;}};
 
-    root.querySelectorAll('style,meta,link,xml,script').forEach(node=>node.remove());
-    root.querySelectorAll('*').forEach(node=>{
-      [...node.attributes].forEach(attr=>{
-        const name=attr.name.toLowerCase();
-        const value=attr.value;
-        if(name==='style'||name==='class'||name.startsWith('xmlns')||name.startsWith('data-')||name.startsWith('o:')||name.startsWith('w:')){
-          node.removeAttribute(attr.name);
-          return;
-        }
-        if(name==='id'&&/^_?toc|^_?ref|^mso/i.test(value))node.removeAttribute(attr.name);
-      });
-    });
+    lines.forEach(raw=>{
+      const line=raw.trim();
+      if(!line){closeList();return;}
 
-    const blockSelector='p,div,li,h1,h2,h3,h4,h5,h6,blockquote,td,th';
-    root.querySelectorAll(blockSelector).forEach(block=>{
-      let changed=true;
-      while(changed){
-        changed=false;
-        const meaningful=[...block.childNodes].filter(node=>!(node.nodeType===Node.TEXT_NODE&&!node.textContent.trim()));
-        if(meaningful.length===1&&meaningful[0].nodeType===Node.ELEMENT_NODE&&/^(STRONG|B)$/.test(meaningful[0].tagName)){
-          const wrapper=meaningful[0];
-          while(wrapper.firstChild)block.insertBefore(wrapper.firstChild,wrapper);
-          wrapper.remove();
-          changed=true;
-        }
+      const bullet=line.match(/^[\u2022\u00b7\u25cf\u25e6\u25aa\u25ab\u25a0\u25a1\-*]\s+(.+)$/);
+      const numbered=line.match(/^\d+[.)]\s+(.+)$/);
+      if(bullet){
+        if(listType!=='ul'){closeList();html+='<ul>';listType='ul';}
+        html+='<li>'+escapeHtml(bullet[1])+'</li>';
+        return;
       }
-    });
+      if(numbered){
+        if(listType!=='ol'){closeList();html+='<ol>';listType='ol';}
+        html+='<li>'+escapeHtml(numbered[1])+'</li>';
+        return;
+      }
 
-    root.querySelectorAll('span').forEach(span=>{
-      if(!span.attributes.length)span.replaceWith(...span.childNodes);
+      closeList();
+      html+='<p>'+escapeHtml(line)+'</p>';
     });
-
-    return root.innerHTML;
+    closeList();
+    return html;
   };
+
+  const isOfficeHtml=html=>/(class=(['"])?Mso|mso-|urn:schemas-microsoft-com|Microsoft Word|xmlns:o=|xmlns:w=|<o:p>|<w:)/i.test(String(html||''));
 
   if(richTextareas.length){
     if(typeof window.Jodit==='undefined'){
@@ -57,8 +48,6 @@ document.addEventListener('DOMContentLoaded',()=>{
           toolbarAdaptive:false,
           toolbarSticky:true,
           spellcheck:true,
-          // Word/Excel paste should keep useful document structure without carrying
-          // Microsoft Office font, weight, size and other inline styling into the CMS.
           askBeforePasteFromWord:false,
           processPasteFromWord:true,
           defaultActionOnPasteFromWord:'insert_clear_html',
@@ -80,21 +69,23 @@ document.addEventListener('DOMContentLoaded',()=>{
           placeholder:textarea.name==='body'?'Write or paste your content here…':'Write or paste the full product description here…'
         });
 
-        // Word sometimes represents normal paragraphs as <p><strong>whole paragraph</strong></p>.
-        // Intercept Office HTML before Jodit handles it, remove Office-only attributes and
-        // unwrap only strong/b tags that cover an entire block. Genuine inline bold remains.
-        editor.editor.addEventListener('paste',event=>{
-          const clipboard=event.clipboardData;
+        // Microsoft Word clipboard HTML can encode ordinary text as bold/strong.
+        // For Word only, bypass Office HTML completely and rebuild clean semantic
+        // paragraphs/lists from the clipboard text payload. This guarantees Word
+        // cannot inject whole-document <strong> wrappers into stored CMS content.
+        editor.e.on('beforePaste',event=>{
+          const clipboard=event&&event.clipboardData;
           if(!clipboard)return;
           const html=clipboard.getData('text/html');
-          if(!html)return;
-          const isOffice=/(class=(['"])?Mso|mso-|urn:schemas-microsoft-com|Microsoft Word|xmlns:o=|xmlns:w=)/i.test(html);
-          if(!isOffice)return;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          editor.s.insertHTML(cleanWordHtml(html));
+          if(!html||!isOfficeHtml(html))return;
+          const text=clipboard.getData('text/plain');
+          if(!text)return;
+          if(typeof event.preventDefault==='function')event.preventDefault();
+          if(typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
+          editor.s.insertHTML(officeTextToHtml(text));
           editor.synchronizeValues();
-        },true);
+          return false;
+        });
 
         const actions=document.createElement('div');
         actions.className='mp-editor-actions';
@@ -146,7 +137,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         const help=document.createElement('span');
         help.className='mp-editor-help';
-        help.textContent='Paste directly from Microsoft Word or Excel. Office-specific styling and accidental whole-paragraph bold wrappers are cleaned automatically.';
+        help.textContent='Microsoft Word paste is normalized to clean paragraphs and lists so Office formatting cannot create accidental bold content. Apply rich formatting in the editor after pasting when needed.';
         actions.appendChild(help);
         editor.container.insertAdjacentElement('afterend',actions);
       });
