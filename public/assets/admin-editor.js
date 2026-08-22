@@ -16,8 +16,11 @@ document.addEventListener('DOMContentLoaded',()=>{
           toolbarAdaptive:false,
           toolbarSticky:true,
           spellcheck:true,
-          askBeforePasteFromWord:true,
+          // Word/Excel paste should keep useful document structure without carrying
+          // Microsoft Office font, weight, size and other inline styling into the CMS.
+          askBeforePasteFromWord:false,
           processPasteFromWord:true,
+          defaultActionOnPasteFromWord:'insert_clear_html',
           defaultActionOnPaste:'insert_as_html',
           buttons:[
             'source','|','undo','redo','|','bold','italic','underline','strikethrough','|',
@@ -86,7 +89,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         const help=document.createElement('span');
         help.className='mp-editor-help';
-        help.textContent='Paste directly from Microsoft Word or Excel. Jodit will offer to keep formatting, clean Word markup, or paste as plain text.';
+        help.textContent='Paste directly from Microsoft Word or Excel. Office-specific fonts, sizes and styling are cleaned automatically while normal document structure is retained.';
         actions.appendChild(help);
         editor.container.insertAdjacentElement('afterend',actions);
       });
