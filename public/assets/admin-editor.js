@@ -48,6 +48,10 @@ document.addEventListener('DOMContentLoaded',()=>{
           toolbarAdaptive:false,
           toolbarSticky:true,
           spellcheck:true,
+          // Keep the editable document isolated from CMS form-label CSS. The CMS
+          // deliberately renders labels bold, which must never affect article text.
+          iframe:true,
+          iframeStyle:'html,body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;font-weight:400}body{padding:16px 18px}p,div,li,td,th,blockquote{font-weight:400}strong,b{font-weight:700}h1,h2,h3,h4,h5,h6{font-weight:700;line-height:1.25}a{color:#2563eb}table{border-collapse:collapse;max-width:100%}',
           askBeforePasteFromWord:false,
           processPasteFromWord:true,
           defaultActionOnPasteFromWord:'insert_clear_html',
@@ -69,10 +73,8 @@ document.addEventListener('DOMContentLoaded',()=>{
           placeholder:textarea.name==='body'?'Write or paste your content here…':'Write or paste the full product description here…'
         });
 
-        // Microsoft Word clipboard HTML can encode ordinary text as bold/strong.
-        // For Word only, bypass Office HTML completely and rebuild clean semantic
-        // paragraphs/lists from the clipboard text payload. This guarantees Word
-        // cannot inject whole-document <strong> wrappers into stored CMS content.
+        // Word clipboard HTML is intentionally bypassed. We reconstruct clean
+        // paragraphs/lists from text/plain so Office cannot inject formatting.
         editor.e.on('beforePaste',event=>{
           const clipboard=event&&event.clipboardData;
           if(!clipboard)return;
@@ -137,7 +139,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         const help=document.createElement('span');
         help.className='mp-editor-help';
-        help.textContent='Microsoft Word paste is normalized to clean paragraphs and lists so Office formatting cannot create accidental bold content. Apply rich formatting in the editor after pasting when needed.';
+        help.textContent='The editor is style-isolated from the CMS. Word paste is normalized to clean paragraphs and lists; apply rich formatting in the editor when needed.';
         actions.appendChild(help);
         editor.container.insertAdjacentElement('afterend',actions);
       });
