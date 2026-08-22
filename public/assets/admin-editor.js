@@ -73,6 +73,20 @@ document.addEventListener('DOMContentLoaded',()=>{
           placeholder:textarea.name==='body'?'Write or paste your content here…':'Write or paste the full product description here…'
         });
 
+        let editorReady=false;
+        setTimeout(()=>{editorReady=true;},0);
+        editor.e.on('change',()=>{
+          editor.synchronizeValues();
+          if(editorReady)textarea.dispatchEvent(new Event('input',{bubbles:true}));
+        });
+        editor.e.on('keydown',event=>{
+          if(!(event.ctrlKey||event.metaKey)||String(event.key).toLowerCase()!=='s')return;
+          event.preventDefault();
+          editor.synchronizeValues();
+          const form=textarea.closest('form');
+          if(form){if(typeof form.requestSubmit==='function')form.requestSubmit();else form.submit();}
+        });
+
         // Word clipboard HTML is intentionally bypassed. We reconstruct clean
         // paragraphs/lists from text/plain so Office cannot inject formatting.
         editor.e.on('beforePaste',event=>{
