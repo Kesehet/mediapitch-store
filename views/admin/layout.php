@@ -5,7 +5,10 @@ use MediaPitch\Core\Database;
 use MediaPitch\Services\ProductOverrides;
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/admin', PHP_URL_PATH) ?: '/admin';
 $helpMode = $currentPath==='/admin' && !empty($_GET['help']);
-$adminCssVersion = (string) @filemtime(dirname(__DIR__, 2) . '/public/assets/admin.css');
+$assetRoot=dirname(__DIR__, 2) . '/public/assets/';
+$adminCssVersion = (string) @filemtime($assetRoot . 'admin.css');
+$adminEditorCssVersion = (string) @filemtime($assetRoot . 'admin-editor.css');
+$adminEditorJsVersion = (string) @filemtime($assetRoot . 'admin-editor.js');
 $browserTitle = str_replace(' — ', ' | ', ($helpMode ? 'Documentation' : ($pageTitle ?? 'Admin')) . ' | MediaPitch');
 $canCatalog=Auth::canManageProducts();
 $canContent=Auth::canEditContent();
@@ -32,7 +35,7 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
   }
 }
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.css"><link rel="stylesheet" href="/assets/admin-editor.css"><script src="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.js" defer></script><script src="/assets/admin-editor.js" defer></script><script src="/assets/product-sync.js" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.css"><link rel="stylesheet" href="/assets/admin-editor.css?v=<?= e($adminEditorCssVersion) ?>"><script src="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.js" defer></script><script src="/assets/admin-editor.js?v=<?= e($adminEditorJsVersion) ?>" defer></script><script src="/assets/product-sync.js" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
 <body class="admin-body">
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
