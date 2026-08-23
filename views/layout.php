@@ -17,6 +17,10 @@ $ogImage = $ogImage
     ?? ($review['main_image_url'] ?? null)
     ?? ($comparison['featured_image_url'] ?? null)
     ?? ($brand['logo_url'] ?? null);
+$assetVersion=static function(string $relative): string {
+    $path=dirname(__DIR__).'/public/'.ltrim($relative,'/');
+    return is_file($path)?(string)filemtime($path):'1';
+};
 ?>
 <!doctype html>
 <html lang="en">
@@ -40,13 +44,13 @@ $ogImage = $ogImage
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/app.css">
-    <link rel="stylesheet" href="/assets/catalog.css">
-    <link rel="stylesheet" href="/assets/accessibility.css">
-    <link rel="stylesheet" href="/assets/embeds.css">
-    <script src="/assets/search.js" defer></script>
-    <script src="/assets/navigation.js" defer></script>
-    <script src="/assets/amazon-disclosure.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=<?= e($assetVersion('assets/app.css')) ?>">
+    <link rel="stylesheet" href="/assets/catalog.css?v=<?= e($assetVersion('assets/catalog.css')) ?>">
+    <link rel="stylesheet" href="/assets/accessibility.css?v=<?= e($assetVersion('assets/accessibility.css')) ?>">
+    <link rel="stylesheet" href="/assets/embeds.css?v=<?= e($assetVersion('assets/embeds.css')) ?>">
+    <script src="/assets/search.js?v=<?= e($assetVersion('assets/search.js')) ?>" defer></script>
+    <script src="/assets/navigation.js?v=<?= e($assetVersion('assets/navigation.js')) ?>" defer></script>
+    <script src="/assets/amazon-disclosure.js?v=<?= e($assetVersion('assets/amazon-disclosure.js')) ?>" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
