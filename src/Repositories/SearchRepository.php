@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 
 final class SearchRepository
@@ -64,14 +65,13 @@ final class SearchRepository
         $categoryRows=$categories->fetchAll(PDO::FETCH_ASSOC);
 
         $contentCategorySql=$categoryId!==null?' AND category_id=:category_id':'';
+        $visibility=ContentVisibility::sql('');
         $content=$db->prepare(
             "SELECT id,type,title,slug,excerpt,featured_image_url,published_at
              FROM content
-             WHERE type IN ('buying_guide','comparison','blog','review')
-               AND status IN ('published','scheduled')
-               AND published_at IS NOT NULL AND published_at<=UTC_TIMESTAMP()".$contentCategorySql."
+             WHERE type IN ('buying_guide','comparison','blog','review') AND $visibility".$contentCategorySql."
                AND (title LIKE :q1 OR excerpt LIKE :q2 OR body LIKE :q3)
-             ORDER BY published_at DESC LIMIT 24"
+             ORDER BY COALESCE(published_at,created_at) DESC LIMIT 24"
         );
         if($categoryId!==null)$content->bindValue(':category_id',$categoryId,PDO::PARAM_INT);
         $content->bindValue(':q1',$like);$content->bindValue(':q2',$like);$content->bindValue(':q3',$like);$content->execute();
@@ -130,6 +130,7 @@ final class SearchRepository
         $limit=max(3,min(12,$limit));
         $like='%'.$query.'%';
         $db=Database::connection();
+        $visibility=ContentVisibility::sql('');
         $stmt=$db->prepare(
             "SELECT label,url,type FROM (
                 SELECT COALESCE(display_title,title) AS label,CONCAT('/product/',slug) AS url,'Product' AS type,updated_at AS sort_date
@@ -143,7 +144,7 @@ final class SearchRepository
                     CASE type WHEN 'buying_guide' THEN 'Buying guide' WHEN 'comparison' THEN 'Comparison' WHEN 'review' THEN 'Review' ELSE 'Article' END AS type,
                     updated_at AS sort_date
                 FROM content
-                WHERE type IN ('buying_guide','comparison','review','blog') AND status IN ('published','scheduled') AND published_at IS NOT NULL AND published_at<=UTC_TIMESTAMP() AND title LIKE :t1
+                WHERE type IN ('buying_guide','comparison','review','blog') AND $visibility AND title LIKE :t1
              ) suggestions
              ORDER BY sort_date DESC LIMIT :limit"
         );
