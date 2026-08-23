@@ -1,4 +1,4 @@
-<?php use MediaPitch\Core\Csrf; $c=$comparison??[]; $selected=array_map(static fn($r)=>(int)$r['product_id'],$c['products']??[]); ?>
+<?php use MediaPitch\Core\Csrf; use MediaPitch\Services\ContentVisibility; $c=$comparison??[]; $selected=array_map(static fn($r)=>(int)$r['product_id'],$c['products']??[]); ?>
 <form method="post" action="<?= e(url('admin/comparisons/save')) ?>" class="panel form-panel"><?= Csrf::field() ?><?php if(!empty($c['id'])):?><input type="hidden" name="id" value="<?= (int)$c['id'] ?>"><?php endif;?>
 <div class="form-grid">
 <label class="span-2">Title<input name="title" required value="<?= e($c['title']??'') ?>"></label>
@@ -16,7 +16,7 @@
 </div><button type="button" class="secondary-button" id="add-product">Add product</button></div>
 <div class="form-grid" style="margin-top:1rem">
 <label>Status<select name="status"><option value="draft" <?= ($c['status']??'draft')==='draft'?'selected':'' ?>>Draft</option><option value="scheduled" <?= ($c['status']??'')==='scheduled'?'selected':'' ?>>Scheduled</option><option value="published" <?= ($c['status']??'')==='published'?'selected':'' ?>>Published</option></select></label>
-<label>Publish date/time<input type="datetime-local" name="published_at" value="<?= !empty($c['published_at'])?e(date('Y-m-d\TH:i',strtotime((string)$c['published_at']))):'' ?>"></label>
+<label>Publish date/time <small><?= e(ContentVisibility::editorialTimezone()->getName()) ?></small><input type="datetime-local" name="published_at" value="<?= e(ContentVisibility::publishAtForInput($c['published_at'] ?? null)) ?>"></label>
 <label class="span-2">SEO title<input name="seo_title" value="<?= e($c['seo_title']??'') ?>"></label>
 <label class="span-2">Meta description<textarea name="meta_description" rows="3"><?= e($c['meta_description']??'') ?></textarea></label>
 <label class="span-2">Canonical URL<input type="url" name="canonical_url" value="<?= e($c['canonical_url']??'') ?>"></label>
