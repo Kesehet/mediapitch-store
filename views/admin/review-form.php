@@ -1,4 +1,4 @@
-<?php use MediaPitch\Core\Csrf; $r=$review ?? []; ?>
+<?php use MediaPitch\Core\Csrf; use MediaPitch\Services\ContentVisibility; $r=$review ?? []; ?>
 <form method="post" action="<?= e(url('admin/reviews/save')) ?>" class="panel form-panel">
 <?= Csrf::field() ?><?php if(!empty($r['id'])):?><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><?php endif;?>
 <div class="form-grid">
@@ -12,7 +12,7 @@
 <label class="span-2">Summary<textarea name="excerpt" rows="4"><?= e($r['excerpt'] ?? '') ?></textarea></label>
 <label class="span-2">Review body <small>HTML supported for now</small><textarea name="body" rows="16"><?= e($r['body'] ?? '') ?></textarea></label>
 <label>Status<select name="status"><option value="draft" <?= ($r['status']??'draft')==='draft'?'selected':'' ?>>Draft</option><option value="scheduled" <?= ($r['status']??'')==='scheduled'?'selected':'' ?>>Scheduled</option><option value="published" <?= ($r['status']??'')==='published'?'selected':'' ?>>Published</option></select></label>
-<label>Publish date<input type="datetime-local" name="published_at" value="<?= !empty($r['published_at'])?e(date('Y-m-d\TH:i',strtotime((string)$r['published_at']))):'' ?>"></label>
+<label>Publish date <small><?= e(ContentVisibility::editorialTimezone()->getName()) ?></small><input type="datetime-local" name="published_at" value="<?= e(ContentVisibility::publishAtForInput($r['published_at'] ?? null)) ?>"></label>
 <label class="span-2">SEO title<input name="seo_title" value="<?= e($r['seo_title'] ?? '') ?>"></label>
 <label class="span-2">Meta description<textarea name="meta_description" rows="3"><?= e($r['meta_description'] ?? '') ?></textarea></label>
 <label class="span-2">Canonical URL<input type="url" name="canonical_url" value="<?= e($r['canonical_url'] ?? '') ?>"></label>
