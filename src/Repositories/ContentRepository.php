@@ -92,9 +92,9 @@ final class ContentRepository
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.type='blog' AND c.status IN ('published','scheduled')
-               AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()
-             ORDER BY c.published_at DESC LIMIT :limit OFFSET :offset"
+             WHERE c.type='blog'
+               AND (c.status='published' OR (c.status='scheduled' AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()))
+             ORDER BY COALESCE(c.published_at,c.created_at) DESC LIMIT :limit OFFSET :offset"
         );
         $stmt->bindValue(':limit',$limit,PDO::PARAM_INT);$stmt->bindValue(':offset',$offset,PDO::PARAM_INT);$stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -107,8 +107,9 @@ final class ContentRepository
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.slug=:slug AND c.type='blog' AND c.status IN ('published','scheduled')
-               AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP() LIMIT 1"
+             WHERE c.slug=:slug AND c.type='blog'
+               AND (c.status='published' OR (c.status='scheduled' AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()))
+             LIMIT 1"
         );
         $stmt->execute(['slug'=>$slug]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)return null;
