@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 
 final class CatalogRepository
@@ -130,11 +131,11 @@ final class CatalogRepository
         ];
         $category['pagination']=['page'=>$page,'pages'=>$pages,'total'=>$total,'per_page'=>$perPage];
 
+        $visibility=ContentVisibility::sql('');
         $content=$db->prepare(
             "SELECT id,type,title,slug,excerpt,featured_image_url,published_at
-             FROM content WHERE category_id=:category_id AND status IN ('published','scheduled')
-             AND published_at IS NOT NULL AND published_at<=UTC_TIMESTAMP()
-             ORDER BY published_at DESC"
+             FROM content WHERE category_id=:category_id AND $visibility
+             ORDER BY COALESCE(published_at,created_at) DESC"
         );
         $content->execute(['category_id'=>$category['id']]);
         $category['guides']=[];
@@ -164,10 +165,11 @@ final class CatalogRepository
 
     public function latestContent(string $type, int $limit = 6): array
     {
+        $visibility=ContentVisibility::sql('');
         $stmt = Database::connection()->prepare(
-            'SELECT id, title, slug, excerpt, featured_image_url, published_at FROM content
-             WHERE type = :type AND status = \'published\' AND (published_at IS NULL OR published_at <= UTC_TIMESTAMP())
-             ORDER BY COALESCE(published_at, created_at) DESC LIMIT :limit'
+            "SELECT id, title, slug, excerpt, featured_image_url, published_at FROM content
+             WHERE type = :type AND $visibility
+             ORDER BY COALESCE(published_at, created_at) DESC LIMIT :limit"
         );
         $stmt->bindValue(':type', $type);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -212,8 +214,9 @@ final class CatalogRepository
 
     public function buyingGuideBySlug(string $slug): ?array
     {
+        $visibility=ContentVisibility::sql('');
         $stmt = Database::connection()->prepare(
-            'SELECT * FROM content WHERE slug = :slug AND type = \'buying_guide\' AND status = \'published\' LIMIT 1'
+            "SELECT * FROM content WHERE slug = :slug AND type = 'buying_guide' AND $visibility LIMIT 1"
         );
         $stmt->execute(['slug' => $slug]);
         $guide = $stmt->fetch();
@@ -264,9 +267,9 @@ final class CatalogRepository
             'content_id' => $contentId,
             'rank_position' => $rank,
             'cta_location' => $ctaLocation,
-            'referring_url' => $referrer,
-            'user_agent' => $userAgent,
-            'campaign' => $campaign,
+            'referrer'=>$referrer,
+            'user_agent'=>$userAgent,
+            'campaign'=>$campaign,
         ]);
     }
 }
