@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 
 final class ContentRepository
@@ -37,7 +38,7 @@ final class ContentRepository
     {
         $db = Database::connection();
         $status = in_array(($data['status'] ?? 'draft'), ['draft','scheduled','published'], true) ? (string)$data['status'] : 'draft';
-        $publishedAt = !empty($data['published_at']) ? date('Y-m-d H:i:s', strtotime((string)$data['published_at'])) : null;
+        $publishedAt = ContentVisibility::publishAtFromInput($data['published_at'] ?? null);
         if ($status === 'published' && !$publishedAt) $publishedAt = gmdate('Y-m-d H:i:s');
         if ($status === 'scheduled' && !$publishedAt) $status = 'draft';
 
@@ -86,14 +87,14 @@ final class ContentRepository
 
     public function publishedPosts(int $limit = 20, int $offset = 0): array
     {
+        $visibility=ContentVisibility::sql('c');
         $stmt = Database::connection()->prepare(
             "SELECT c.id,c.title,c.slug,c.excerpt,c.body,c.featured_image_url,c.published_at,c.seo_title,c.meta_description,
                     cat.name AS category_name,cat.slug AS category_slug,u.name AS author_name
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.type='blog'
-               AND (c.status='published' OR (c.status='scheduled' AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()))
+             WHERE c.type='blog' AND $visibility
              ORDER BY COALESCE(c.published_at,c.created_at) DESC LIMIT :limit OFFSET :offset"
         );
         $stmt->bindValue(':limit',$limit,PDO::PARAM_INT);$stmt->bindValue(':offset',$offset,PDO::PARAM_INT);$stmt->execute();
@@ -102,14 +103,13 @@ final class ContentRepository
 
     public function publishedPostBySlug(string $slug): ?array
     {
+        $visibility=ContentVisibility::sql('c');
         $stmt = Database::connection()->prepare(
             "SELECT c.*,cat.name AS category_name,cat.slug AS category_slug,u.name AS author_name
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.slug=:slug AND c.type='blog'
-               AND (c.status='published' OR (c.status='scheduled' AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()))
-             LIMIT 1"
+             WHERE c.slug=:slug AND c.type='blog' AND $visibility LIMIT 1"
         );
         $stmt->execute(['slug'=>$slug]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)return null;
