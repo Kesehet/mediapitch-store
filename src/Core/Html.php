@@ -62,7 +62,9 @@ final class Html
                 }
                 if($tag==='a'){
                     $href=trim($child->getAttribute('href'));
-                    if($href!==''&&!preg_match('#^(https?://|/|#|mailto:)#i',$href))$child->removeAttribute('href');
+                    // Keep normal web, root-relative, fragment, email and phone links.
+                    // Reject script/data/file style schemes even if pasted from rich editors.
+                    if($href!==''&&!preg_match('#^(https?://|//|/|#|mailto:|tel:)#i',$href))$child->removeAttribute('href');
                     if(strtolower($child->getAttribute('target'))==='_blank')$child->setAttribute('rel','noopener noreferrer');
                 }
                 self::cleanNode($child);
