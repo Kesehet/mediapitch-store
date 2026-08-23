@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -27,7 +28,8 @@ try{
     foreach($db->query("SELECT slug,updated_at FROM products WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/product/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
-    foreach($db->query("SELECT type,slug,updated_at FROM content WHERE status IN ('published','scheduled') AND robots_index=1 AND published_at IS NOT NULL AND published_at<=UTC_TIMESTAMP() ORDER BY updated_at DESC")->fetchAll() as $row){
+    $visibility=ContentVisibility::sql('');
+    foreach($db->query("SELECT type,slug,updated_at FROM content WHERE $visibility AND robots_index=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $prefix=match($row['type']){
             'buying_guide'=>'guide',
             'comparison'=>'compare',
