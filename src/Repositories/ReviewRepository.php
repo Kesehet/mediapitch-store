@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 
 final class ReviewRepository
@@ -39,7 +40,7 @@ final class ReviewRepository
         $score=($data['score'] ?? '')!=='' ? (float)$data['score'] : null;
         if($score!==null && ($score<0 || $score>10)) throw new \InvalidArgumentException('Review score must be between 0 and 10.');
         $status=in_array(($data['status']??'draft'),['draft','scheduled','published'],true)?(string)$data['status']:'draft';
-        $publishedAt=!empty($data['published_at'])?date('Y-m-d H:i:s',strtotime((string)$data['published_at'])):null;
+        $publishedAt=ContentVisibility::publishAtFromInput($data['published_at'] ?? null);
         if($status==='published'&&!$publishedAt)$publishedAt=gmdate('Y-m-d H:i:s');
         if($status==='scheduled'&&!$publishedAt)$status='draft';
         $params=[
@@ -72,11 +73,12 @@ final class ReviewRepository
     public function publishedBySlug(string $slug): ?array
     {
         $db=Database::connection();
+        $visibility=ContentVisibility::sql('c');
         $stmt=$db->prepare(
             "SELECT c.*,cp.score AS review_score,p.id AS product_id,p.category_id AS product_category_id,p.title AS product_title,p.display_title,p.slug AS product_slug,p.main_image_url,p.price,p.currency,p.affiliate_url,b.name AS brand_name,u.name AS author_name
              FROM content c JOIN content_products cp ON cp.content_id=c.id JOIN products p ON p.id=cp.product_id AND p.active=1
              LEFT JOIN brands b ON b.id=p.brand_id LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.type='review' AND c.slug=:slug AND c.status IN ('published','scheduled') AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP() LIMIT 1"
+             WHERE c.type='review' AND c.slug=:slug AND $visibility LIMIT 1"
         );
         $stmt->execute(['slug'=>$slug]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)return null;
