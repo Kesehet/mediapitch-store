@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 
 final class RelatedContentRepository
@@ -27,12 +28,11 @@ final class RelatedContentRepository
             $products=$stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
+        $visibility=ContentVisibility::sql('c');
         $guides=$db->prepare(
             "SELECT DISTINCT c.id,c.title,c.slug,c.excerpt,c.featured_image_url,c.published_at
              FROM content c JOIN content_products cp ON cp.content_id=c.id
-             WHERE cp.product_id=:product_id AND c.type='buying_guide'
-               AND c.status IN ('published','scheduled')
-               AND (c.published_at IS NULL OR c.published_at<=UTC_TIMESTAMP())
+             WHERE cp.product_id=:product_id AND c.type='buying_guide' AND $visibility
              ORDER BY COALESCE(c.published_at,c.created_at) DESC LIMIT :limit"
         );
         $guides->bindValue(':product_id',$productId,PDO::PARAM_INT);
@@ -45,13 +45,12 @@ final class RelatedContentRepository
     public function forContent(int $contentId, ?int $categoryId, int $limit = 6): array
     {
         if(!$categoryId)return [];
+        $visibility=ContentVisibility::sql('c');
         $stmt=Database::connection()->prepare(
             "SELECT c.id,c.type,c.title,c.slug,c.excerpt,c.featured_image_url,c.published_at
              FROM content c
              WHERE c.category_id=:category_id AND c.id<>:content_id
-               AND c.type IN ('buying_guide','blog','comparison','review')
-               AND c.status IN ('published','scheduled')
-               AND (c.published_at IS NULL OR c.published_at<=UTC_TIMESTAMP())
+               AND c.type IN ('buying_guide','blog','comparison','review') AND $visibility
              ORDER BY COALESCE(c.published_at,c.created_at) DESC LIMIT :limit"
         );
         $stmt->bindValue(':category_id',$categoryId,PDO::PARAM_INT);
