@@ -2,38 +2,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   const escapeHtml=value=>String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[char]));
   const richTextareas=[...document.querySelectorAll('textarea[name="body"],textarea[name="full_description"]')];
 
-  const officeTextToHtml=text=>{
-    const lines=String(text||'').replace(/\r\n?/g,'\n').split('\n');
-    let html='';
-    let listType=null;
-    const closeList=()=>{if(listType){html+='</'+listType+'>';listType=null;}};
-
-    lines.forEach(raw=>{
-      const line=raw.trim();
-      if(!line){closeList();return;}
-
-      const bullet=line.match(/^[\u2022\u00b7\u25cf\u25e6\u25aa\u25ab\u25a0\u25a1\-*]\s+(.+)$/);
-      const numbered=line.match(/^\d+[.)]\s+(.+)$/);
-      if(bullet){
-        if(listType!=='ul'){closeList();html+='<ul>';listType='ul';}
-        html+='<li>'+escapeHtml(bullet[1])+'</li>';
-        return;
-      }
-      if(numbered){
-        if(listType!=='ol'){closeList();html+='<ol>';listType='ol';}
-        html+='<li>'+escapeHtml(numbered[1])+'</li>';
-        return;
-      }
-
-      closeList();
-      html+='<p>'+escapeHtml(line)+'</p>';
-    });
-    closeList();
-    return html;
-  };
-
-  const isOfficeHtml=html=>/(class=(['"])?Mso|mso-|urn:schemas-microsoft-com|Microsoft Word|xmlns:o=|xmlns:w=|<o:p>|<w:)/i.test(String(html||''));
-
   if(richTextareas.length){
     if(typeof window.Jodit==='undefined'){
       console.error('Jodit failed to load; rich text fields remain available as plain textareas.');
@@ -51,9 +19,11 @@ document.addEventListener('DOMContentLoaded',()=>{
           // Keep the editable document isolated from CMS form-label CSS. The CMS
           // deliberately renders labels bold, which must never affect article text.
           iframe:true,
-          iframeStyle:'html,body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;font-weight:400}body{padding:16px 18px}p,div,li,td,th,blockquote{font-weight:400}strong,b{font-weight:700}h1,h2,h3,h4,h5,h6{font-weight:700;line-height:1.25}a{color:#2563eb}table{border-collapse:collapse;max-width:100%}',
+          iframeStyle:'html,body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.65;font-weight:400}body{padding:16px 18px}p,div,li,td,th,blockquote{font-weight:400}strong,b{font-weight:700}h1,h2,h3,h4,h5,h6{font-weight:700;line-height:1.25}a{color:#2563eb;text-decoration:underline}table{border-collapse:collapse;max-width:100%}',
           askBeforePasteFromWord:false,
           processPasteFromWord:true,
+          // Let Jodit's Office cleaner retain semantic HTML such as hyperlinks,
+          // headings and lists while removing Word-specific styling/markup.
           defaultActionOnPasteFromWord:'insert_clear_html',
           defaultActionOnPaste:'insert_as_html',
           buttons:[
@@ -75,32 +45,27 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         let editorReady=false;
         setTimeout(()=>{editorReady=true;},0);
-        editor.e.on('change',()=>{
+        const syncEditor=()=>{
           editor.synchronizeValues();
           if(editorReady)textarea.dispatchEvent(new Event('input',{bubbles:true}));
-        });
+        };
+        editor.e.on('change',syncEditor);
+
+        // A WYSIWYG iframe is not itself submitted with the form. Always force a
+        // final synchronization immediately before submission so links and other
+        // edits visible in Jodit cannot be lost because a change event was delayed.
+        const form=textarea.closest('form');
+        if(form){
+          form.addEventListener('submit',()=>{
+            editor.synchronizeValues();
+          },{capture:true});
+        }
+
         editor.e.on('keydown',event=>{
           if(!(event.ctrlKey||event.metaKey)||String(event.key).toLowerCase()!=='s')return;
           event.preventDefault();
           editor.synchronizeValues();
-          const form=textarea.closest('form');
           if(form){if(typeof form.requestSubmit==='function')form.requestSubmit();else form.submit();}
-        });
-
-        // Word clipboard HTML is intentionally bypassed. We reconstruct clean
-        // paragraphs/lists from text/plain so Office cannot inject formatting.
-        editor.e.on('beforePaste',event=>{
-          const clipboard=event&&event.clipboardData;
-          if(!clipboard)return;
-          const html=clipboard.getData('text/html');
-          if(!html||!isOfficeHtml(html))return;
-          const text=clipboard.getData('text/plain');
-          if(!text)return;
-          if(typeof event.preventDefault==='function')event.preventDefault();
-          if(typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
-          editor.s.insertHTML(officeTextToHtml(text));
-          editor.synchronizeValues();
-          return false;
         });
 
         const actions=document.createElement('div');
@@ -128,6 +93,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             if(!Number.isInteger(index)||!suggestions[index]){alert('Choose one of the listed result numbers.');return;}
             const item=suggestions[index];
             editor.s.insertHTML('<a href="'+escapeHtml(item.url)+'">'+escapeHtml(item.label)+'</a>');
+            syncEditor();
           }catch(error){
             alert('Internal search is temporarily unavailable. You can still use the editor Link button with a /path URL.');
           }finally{
@@ -147,13 +113,14 @@ document.addEventListener('DOMContentLoaded',()=>{
             if(!id)return;
             if(!/^\d+$/.test(id.trim())){alert('Enter a numeric product ID.');return;}
             editor.s.insertHTML('[product:'+id.trim()+']');
+            syncEditor();
           });
           actions.appendChild(product);
         }
 
         const help=document.createElement('span');
         help.className='mp-editor-help';
-        help.textContent='The editor is style-isolated from the CMS. Word paste is normalized to clean paragraphs and lists; apply rich formatting in the editor when needed.';
+        help.textContent='Word paste keeps useful structure and hyperlinks while Office-specific formatting is cleaned automatically.';
         actions.appendChild(help);
         editor.container.insertAdjacentElement('afterend',actions);
       });
