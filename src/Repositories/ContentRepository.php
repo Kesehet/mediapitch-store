@@ -92,7 +92,7 @@ final class ContentRepository
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.type='blog' AND c.status IN ('published','scheduled') AND c.robots_index=1
+             WHERE c.type='blog' AND c.status IN ('published','scheduled')
                AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP()
              ORDER BY c.published_at DESC LIMIT :limit OFFSET :offset"
         );
