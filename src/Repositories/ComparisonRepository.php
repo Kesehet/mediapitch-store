@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Repositories;
 
 use MediaPitch\Core\Database;
+use MediaPitch\Services\ContentVisibility;
 use PDO;
 use RuntimeException;
 
@@ -45,7 +46,7 @@ final class ComparisonRepository
     {
         $db=Database::connection();
         $status=in_array(($data['status']??'draft'),['draft','scheduled','published'],true)?(string)$data['status']:'draft';
-        $publishedAt=!empty($data['published_at'])?date('Y-m-d H:i:s',strtotime((string)$data['published_at'])):null;
+        $publishedAt=ContentVisibility::publishAtFromInput($data['published_at'] ?? null);
         if($status==='published'&&!$publishedAt)$publishedAt=gmdate('Y-m-d H:i:s');
         if($status==='scheduled'&&!$publishedAt)$status='draft';
 
@@ -105,13 +106,13 @@ final class ComparisonRepository
     public function publishedBySlug(string $slug): ?array
     {
         $db=Database::connection();
+        $visibility=ContentVisibility::sql('c');
         $stmt=$db->prepare(
             "SELECT c.*,cat.name AS category_name,cat.slug AS category_slug,u.name AS author_name
              FROM content c
              LEFT JOIN categories cat ON cat.id=c.category_id
              LEFT JOIN users u ON u.id=c.author_id
-             WHERE c.slug=:slug AND c.type='comparison' AND c.status IN ('published','scheduled')
-               AND c.published_at IS NOT NULL AND c.published_at<=UTC_TIMESTAMP() LIMIT 1"
+             WHERE c.slug=:slug AND c.type='comparison' AND $visibility LIMIT 1"
         );
         $stmt->execute(['slug'=>$slug]);
         $comparison=$stmt->fetch(PDO::FETCH_ASSOC);
