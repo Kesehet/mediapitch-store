@@ -1,8 +1,9 @@
 <?php
 $pageTitle = str_replace(' — ', ' | ', $pageTitle ?? 'MediaPitch Store');
 $metaDescription = $metaDescription ?? 'Independent product recommendations and buying guides.';
-$robotsIndex = $robotsIndex ?? true;
-$canonicalUrl = $canonicalUrl ?? null;
+$currentPublicPath=parse_url($_SERVER['REQUEST_URI'] ?? '/',PHP_URL_PATH) ?: '/';
+$robotsIndex = $robotsIndex ?? ($currentPublicPath!=='/search');
+$canonicalUrl = $canonicalUrl ?? ($currentPublicPath!=='/search' ? url(ltrim($currentPublicPath,'/')) : null);
 $siteSettings=$siteSettings??[];
 $siteName=(string)($siteSettings['name']??'MediaPitch Store');
 $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
@@ -24,8 +25,9 @@ $ogImage = $ogImage
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($pageTitle) ?></title>
     <meta name="description" content="<?= e($metaDescription) ?>">
-    <meta name="robots" content="<?= $robotsIndex ? 'index,follow' : 'noindex,follow' ?>">
+    <meta name="robots" content="<?= $robotsIndex ? 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' : 'noindex,follow' ?>">
     <?php if ($canonicalUrl): ?><link rel="canonical" href="<?= e($canonicalUrl) ?>"><?php endif; ?>
+    <meta property="og:site_name" content="<?= e($siteName) ?>">
     <meta property="og:title" content="<?= e($pageTitle) ?>">
     <meta property="og:description" content="<?= e($metaDescription) ?>">
     <meta property="og:type" content="website">
