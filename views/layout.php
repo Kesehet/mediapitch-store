@@ -10,6 +10,15 @@ $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comp
 $affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.');
 $googleTagId=strtoupper(trim((string)($siteSettings['google_tag_id']??'')));
 if($googleTagId!==''&&!preg_match('/^(?:AW-\d+|G-[A-Z0-9]+|GT-[A-Z0-9]+|DC-\d+)$/',$googleTagId))$googleTagId='';
+$googleLabel=static function(mixed $value): string {
+    $value=trim((string)$value;
+    return $value!==''&&preg_match('/^[A-Za-z0-9_-]{1,100}$/',$value)?$value:'';
+};
+$googleAdsLabels=[
+    'affiliateClick'=>$googleLabel($siteSettings['google_ads_affiliate_label']??''),
+    'productView'=>$googleLabel($siteSettings['google_ads_product_view_label']??''),
+    'search'=>$googleLabel($siteSettings['google_ads_search_label']??''),
+];
 $amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on the relevant Amazon marketplace at the time of purchase will apply to the purchase of the product.';
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
@@ -50,7 +59,9 @@ $assetVersion=static function(string $relative): string {
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', <?= json_encode($googleTagId, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>);
+      window.MediaPitchTracking = <?= json_encode(['tagId'=>$googleTagId,'labels'=>$googleAdsLabels], JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
     </script>
+    <script src="/assets/google-events.js?v=<?= e($assetVersion('assets/google-events.js')) ?>" defer></script>
     <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
