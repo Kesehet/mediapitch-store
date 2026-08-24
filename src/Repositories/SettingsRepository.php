@@ -22,6 +22,9 @@ final class SettingsRepository
             'name'=>$values['name']??'MediaPitch Store','tagline'=>$values['tagline']??'Independent buying guides, comparisons and product discovery.',
             'affiliate_disclosure'=>$values['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.',
             'google_tag_id'=>$values['google_tag_id']??self::DEFAULT_GOOGLE_TAG_ID,
+            'google_ads_affiliate_label'=>$values['google_ads_affiliate_label']??'',
+            'google_ads_product_view_label'=>$values['google_ads_product_view_label']??'',
+            'google_ads_search_label'=>$values['google_ads_search_label']??'',
             'home_categories'=>($values['home_categories']??'1')==='1','home_guides'=>($values['home_guides']??'1')==='1','home_comparisons'=>($values['home_comparisons']??'1')==='1','home_products'=>($values['home_products']??'1')==='1','home_articles'=>($values['home_articles']??'1')==='1',
         ];
     }
@@ -33,7 +36,23 @@ final class SettingsRepository
         if($googleTagId!==''&&!preg_match('/^(?:AW-\d+|G-[A-Z0-9]+|GT-[A-Z0-9]+|DC-\d+)$/',$googleTagId)){
             throw new InvalidArgumentException('Google tag ID is invalid. Use an ID such as AW-123456789, G-XXXXXXXXXX or GT-XXXXXXXXXX.');
         }
-        $values=['name'=>substr($name,0,150),'tagline'=>substr(trim((string)($data['tagline']??'')),0,500),'affiliate_disclosure'=>substr(trim((string)($data['affiliate_disclosure']??'')),0,1500),'google_tag_id'=>$googleTagId,'home_categories'=>!empty($data['home_categories'])?'1':'0','home_guides'=>!empty($data['home_guides'])?'1':'0','home_comparisons'=>!empty($data['home_comparisons'])?'1':'0','home_products'=>!empty($data['home_products'])?'1':'0','home_articles'=>!empty($data['home_articles'])?'1':'0'];
+        $affiliateLabel=$this->normalizeConversionLabel((string)($data['google_ads_affiliate_label']??''),'Affiliate click');
+        $productViewLabel=$this->normalizeConversionLabel((string)($data['google_ads_product_view_label']??''),'Product view');
+        $searchLabel=$this->normalizeConversionLabel((string)($data['google_ads_search_label']??''),'Site search');
+        $values=[
+            'name'=>substr($name,0,150),
+            'tagline'=>substr(trim((string)($data['tagline']??'')),0,500),
+            'affiliate_disclosure'=>substr(trim((string)($data['affiliate_disclosure']??'')),0,1500),
+            'google_tag_id'=>$googleTagId,
+            'google_ads_affiliate_label'=>$affiliateLabel,
+            'google_ads_product_view_label'=>$productViewLabel,
+            'google_ads_search_label'=>$searchLabel,
+            'home_categories'=>!empty($data['home_categories'])?'1':'0',
+            'home_guides'=>!empty($data['home_guides'])?'1':'0',
+            'home_comparisons'=>!empty($data['home_comparisons'])?'1':'0',
+            'home_products'=>!empty($data['home_products'])?'1':'0',
+            'home_articles'=>!empty($data['home_articles'])?'1':'0'
+        ];
         foreach($values as $key=>$value)$this->put('site.'.$key,$value,false);
     }
 
@@ -136,6 +155,15 @@ final class SettingsRepository
         $marketplace=strtolower(trim($marketplace));if($marketplace==='')return '';
         if(str_contains($marketplace,'://'))$marketplace=(string)(parse_url($marketplace,PHP_URL_HOST)?:'');$marketplace=trim(explode('/',$marketplace,2)[0]);$marketplace=preg_replace('/:\d+$/','',$marketplace)??'';
         if($marketplace===''||strlen($marketplace)>100||!preg_match('/^[a-z0-9.-]+$/',$marketplace))throw new InvalidArgumentException('Amazon marketplace must be a valid hostname, for example www.amazon.in.');return $marketplace;
+    }
+
+    private function normalizeConversionLabel(string $label,string $name): string
+    {
+        $label=trim($label);
+        if($label!==''&&!preg_match('/^[A-Za-z0-9_-]{1,100}$/',$label)){
+            throw new InvalidArgumentException($name.' conversion label is invalid. Paste only the label portion that appears after the slash in AW-123456789/LABEL.');
+        }
+        return $label;
     }
 
     private function put(string $key,string $value,bool $encrypted): void
