@@ -8,6 +8,8 @@ $siteSettings=$siteSettings??[];
 $siteName=(string)($siteSettings['name']??'MediaPitch Store');
 $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
 $affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amazon Associate, MediaPitch may earn from qualifying purchases. Product availability and prices can change on Amazon.');
+$googleTagId=strtoupper(trim((string)($siteSettings['google_tag_id']??'')));
+if($googleTagId!==''&&!preg_match('/^(?:AW-\d+|G-[A-Z0-9]+|GT-[A-Z0-9]+|DC-\d+)$/',$googleTagId))$googleTagId='';
 $amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on the relevant Amazon marketplace at the time of purchase will apply to the purchase of the product.';
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
@@ -41,6 +43,15 @@ $assetVersion=static function(string $relative): string {
     <meta name="twitter:title" content="<?= e($pageTitle) ?>">
     <meta name="twitter:description" content="<?= e($metaDescription) ?>">
     <?php if ($ogImage): ?><meta name="twitter:image" content="<?= e($ogImage) ?>"><?php endif; ?>
+    <?php if ($googleTagId !== ''): ?>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= e(rawurlencode($googleTagId)) ?>"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', <?= json_encode($googleTagId, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>);
+    </script>
+    <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
