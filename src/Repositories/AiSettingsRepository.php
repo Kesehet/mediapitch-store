@@ -20,7 +20,6 @@ final class AiSettingsRepository
             'ollama_url'=>$values['ollama_url']??'http://127.0.0.1:11434',
             'model'=>$values['model']??'qwen3:30b',
             'auto_discover'=>($values['auto_discover']??'1')==='1',
-            'max_drafts_per_day'=>max(1,min(20,(int)($values['max_drafts_per_day']??2))),
             'research_depth'=>in_array(($values['research_depth']??'thorough'),['quick','standard','thorough'],true)?$values['research_depth']:'thorough',
             'allow_blog'=>($values['allow_blog']??'1')==='1',
             'allow_guides'=>($values['allow_guides']??'1')==='1',
@@ -44,7 +43,6 @@ final class AiSettingsRepository
             'ollama_url'=>substr($url,0,500),
             'model'=>substr($model,0,150),
             'auto_discover'=>!empty($data['auto_discover'])?'1':'0',
-            'max_drafts_per_day'=>(string)max(1,min(20,(int)($data['max_drafts_per_day']??2))),
             'research_depth'=>$depth,
             'allow_blog'=>!empty($data['allow_blog'])?'1':'0',
             'allow_guides'=>!empty($data['allow_guides'])?'1':'0',
@@ -57,7 +55,6 @@ final class AiSettingsRepository
 
     private function put(string $key,string $value): void
     {
-        $stmt=Database::connection()->prepare('INSERT INTO settings (setting_key,setting_value,encrypted) VALUES (:k,:v,0) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),encrypted=0');
-        $stmt->execute(['k'=>$key,'v'=>$value]);
+        $stmt=Database::connection()->prepare('INSERT INTO settings (setting_key,setting_value,encrypted) VALUES (:k,:v,0) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),encrypted=0');$stmt->execute(['k'=>$key,'v'=>$value]);
     }
 }
