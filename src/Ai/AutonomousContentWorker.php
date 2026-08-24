@@ -19,15 +19,23 @@ final class AutonomousContentWorker
     private function settings(): AiSettingsRepository{return $this->settingsRepo??new AiSettingsRepository();}
     private function jobs(): AiJobRepository{return $this->jobRepo??new AiJobRepository();}
 
-    public function runOnce(): array
+    public function runOnce(string $triggerMode='automatic'): array
     {
         $settings=$this->settings()->get();
         if(empty($settings['enabled']))return ['status'=>'disabled'];
-        $jobs=$this->jobs();
-        if(!$jobs->hasOpenJob()&&!empty($settings['auto_discover'])&&$jobs->completedToday()<(int)$settings['max_drafts_per_day'])$this->discoverAndQueue($settings);
-        $job=$jobs->claimNext();if(!$job)return ['status'=>'idle'];
+        $jobs=$this->jobs();$triggerMode=$triggerMode==='manual'?'manual':'automatic';
+
+        if($triggerMode==='automatic'){
+            if($jobs->automaticRunStartedToday('Asia/Kolkata'))return ['status'=>'daily_limit'];
+            if(!$jobs->hasOpenAutomaticJob()){
+                if(empty($settings['auto_discover']))return ['status'=>'idle'];
+                $this->discoverAndQueue($settings);
+            }
+        }
+
+        $job=$jobs->claimNext($triggerMode);if(!$job)return ['status'=>'idle'];
         try{$contentId=$this->process($job,$settings);return ['status'=>'completed','job_id'=>(int)$job['id'],'content_id'=>$contentId];}
-        catch(Throwable $e){$jobs->fail((int)$job['id'],$e);try{Audit::record('ai.content.failed','ai_job',(int)$job['id'],'Autonomous AI content job failed',['error'=>substr($e->getMessage(),0,1000)]);}catch(Throwable){}return ['status'=>'failed','job_id'=>(int)$job['id'],'error'=>$e->getMessage()];}
+        catch(Throwable $e){$jobs->fail((int)$job['id'],$e);try{Audit::record('ai.content.failed','ai_job',(int)$job['id'],'Autonomous AI content job failed',['error'=>substr($e->getMessage(),0,1000),'trigger_mode'=>$triggerMode]);}catch(Throwable){}return ['status'=>'failed','job_id'=>(int)$job['id'],'error'=>$e->getMessage()];}
     }
 
     private function discoverAndQueue(array $settings): void
@@ -38,7 +46,7 @@ final class AutonomousContentWorker
         $type=(string)($result['content_type']??'blog');
         if($type==='buying_guide'&&empty($settings['allow_guides']))$type='blog';
         if($type==='blog'&&empty($settings['allow_blog']))return;
-        $this->jobs()->queue($topic,$type,['discovery_reason'=>(string)($result['reason']??'')]);
+        $this->jobs()->queue($topic,$type,['discovery_reason'=>(string)($result['reason']??'')],'automatic');
     }
 
     private function process(array $job,array $settings): int
@@ -65,7 +73,7 @@ final class AutonomousContentWorker
         $jobs->setStage($id,'saving_draft');
         $contentId=(new ContentRepository())->savePost(['category_id'=>$categoryId,'title'=>$title,'slug'=>$this->uniqueSlug((string)($draft['slug']??$title)),'excerpt'=>(string)($draft['excerpt']??''),'body'=>$body,'seo_title'=>(string)($draft['seo_title']??''),'meta_description'=>(string)($draft['meta_description']??''),'canonical_url'=>'','robots_index'=>0,'status'=>'draft','published_at'=>'','tags'=>(string)($draft['tags']??'')],$this->authorId((int)($settings['author_id']??0)),null,$type);
         $job['content_id']=$contentId;$job['model']=$client->model();$jobs->complete($id,$contentId,$client->model());
-        Audit::record('ai.content.draft_created','content',$contentId,'AI created an editorial draft for human review',['ai_job_id'=>$id,'topic'=>$topic,'content_type'=>$type,'source_count'=>count($sources),'model'=>$client->model(),'status'=>'draft']);
+        Audit::record('ai.content.draft_created','content',$contentId,'AI created an editorial draft for human review',['ai_job_id'=>$id,'topic'=>$topic,'content_type'=>$type,'source_count'=>count($sources),'model'=>$client->model(),'status'=>'draft','trigger_mode'=>$job['trigger_mode']??'automatic']);
         try{(new NotificationMailer())->sendDraftReady($settings,$draft,$job,$sources);}catch(Throwable $e){Audit::record('ai.content.notification_failed','content',$contentId,'AI draft created but notification email failed',['ai_job_id'=>$id,'error'=>substr($e->getMessage(),0,1000)]);}
         return $contentId;
     }
