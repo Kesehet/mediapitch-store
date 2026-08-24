@@ -7,6 +7,7 @@ RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
 RewriteRule ^robots\.txt$ public/robots.txt [L]
 RewriteRule ^sitemap\.xml$ public/sitemap.php [QSA,L]
 RewriteRule ^api/v1(?:/.*)?$ public/api-v1.php [QSA,L]
+RewriteRule ^admin/settings/ai(?:/.*)?$ public/ai-settings.php [QSA,L]
 
 # Protect repository/application internals and secrets from direct web access.
 RewriteRule ^(?:src|database|views|docs|vendor|\.git|\.github)(?:/|$) - [F,L]
