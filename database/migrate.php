@@ -19,6 +19,41 @@ $applied = array_fill_keys(
     true
 );
 
+/**
+ * Automatic production migrations are append-only.
+ *
+ * Deploys may create missing schema objects or add columns/indexes, but they
+ * must never silently rewrite or remove live production data. Destructive
+ * changes belong in a separately reviewed maintenance script.
+ */
+$assertNonDestructiveMigration = static function (string $sql, string $name): void {
+    $normalized = preg_replace('/\/\*.*?\*\//s', ' ', $sql) ?? $sql;
+    $normalized = preg_replace('/^\s*--.*$/m', ' ', $normalized) ?? $normalized;
+    $normalized = preg_replace('/^\s*#.*$/m', ' ', $normalized) ?? $normalized;
+
+    $forbidden = [
+        '/\bDROP\s+(?:DATABASE|SCHEMA|TABLE|COLUMN|INDEX|KEY|FOREIGN\s+KEY)\b/i' => 'DROP',
+        '/\bTRUNCATE\b/i' => 'TRUNCATE',
+        '/\bDELETE\s+FROM\b/i' => 'DELETE',
+        '/\bUPDATE\s+[A-Za-z0-9_`]+\s+SET\b/i' => 'UPDATE',
+        '/\bREPLACE\s+INTO\b/i' => 'REPLACE',
+        '/\bRENAME\s+TABLE\b/i' => 'RENAME TABLE',
+        '/\bCREATE\s+OR\s+REPLACE\s+TABLE\b/i' => 'CREATE OR REPLACE TABLE',
+        '/\bALTER\s+TABLE\b[\s\S]*?\b(?:CHANGE|MODIFY)\s+(?:COLUMN\s+)?/i' => 'ALTER CHANGE/MODIFY',
+    ];
+
+    foreach ($forbidden as $pattern => $operation) {
+        if (preg_match($pattern, $normalized) === 1) {
+            fwrite(
+                STDERR,
+                "blocked {$name}: destructive operation {$operation} is not allowed in automatic migrations.\n" .
+                "Use an explicitly reviewed maintenance script for destructive production changes.\n"
+            );
+            exit(1);
+        }
+    }
+};
+
 $files = glob(__DIR__ . '/migrations/*.sql') ?: [];
 sort($files, SORT_NATURAL);
 
@@ -33,6 +68,8 @@ foreach ($files as $file) {
     if ($sql === '') {
         continue;
     }
+
+    $assertNonDestructiveMigration($sql, $name);
 
     try {
         // MySQL DDL statements such as CREATE/ALTER TABLE implicitly commit.

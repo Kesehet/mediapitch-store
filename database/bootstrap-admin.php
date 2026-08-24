@@ -10,9 +10,10 @@ require dirname(__DIR__).'/src/bootstrap.php';
 $name=trim((string)env('BOOTSTRAP_ADMIN_NAME','MediaPitch Admin')) ?: 'MediaPitch Admin';
 $email=strtolower(trim((string)env('BOOTSTRAP_ADMIN_EMAIL','admin@mediapitch.in')));
 $password=(string)env('BOOTSTRAP_ADMIN_PASSWORD','');
+$syncExisting=(bool)env('BOOTSTRAP_ADMIN_SYNC_EXISTING',false);
 
 if($password===''){
-    fwrite(STDOUT,"BOOTSTRAP_ADMIN_PASSWORD is not set; administrator credential sync skipped.\n");
+    fwrite(STDOUT,"BOOTSTRAP_ADMIN_PASSWORD is not set; administrator bootstrap skipped.\n");
     exit(0);
 }
 if(!filter_var($email,FILTER_VALIDATE_EMAIL)){
@@ -38,18 +39,15 @@ $hasSecurityColumns=isset($columns['failed_login_count'],$columns['last_failed_l
 
 $db->beginTransaction();
 try{
-    // Prefer the explicitly configured email. If this is an older installation
-    // that only has the historical bootstrap account, reuse that row so changing
-    // BOOTSTRAP_ADMIN_EMAIL changes the login instead of silently creating a
-    // second administrator.
     $stmt=$db->prepare('SELECT id,email FROM users WHERE email=:email LIMIT 1');
     $stmt->execute(['email'=>$email]);
     $user=$stmt->fetch(PDO::FETCH_ASSOC);
 
-    if(!$user){
-        $legacy=$db->prepare("SELECT id,email FROM users WHERE email='admin@mediapitch.in' AND name='MediaPitch Admin' AND role='administrator' LIMIT 1");
-        $legacy->execute();
-        $user=$legacy->fetch(PDO::FETCH_ASSOC) ?: null;
+    if($user && !$syncExisting){
+        $db->commit();
+        fwrite(STDOUT,"Existing administrator preserved: {$email} (user #".(int)$user['id'].").\n");
+        fwrite(STDOUT,"Set BOOTSTRAP_ADMIN_SYNC_EXISTING=true only for an intentional credential recovery.\n");
+        exit(0);
     }
 
     $passwordHash=password_hash($password,PASSWORD_DEFAULT);
@@ -65,7 +63,7 @@ try{
             'id'=>(int)$user['id'],
         ]);
         $id=(int)$user['id'];
-        $action='updated';
+        $action='intentionally synchronized';
     }else{
         if($hasSecurityColumns){
             $insert=$db->prepare("INSERT INTO users (name,email,password_hash,role,active,failed_login_count,last_failed_login_at) VALUES (:name,:email,:password_hash,'administrator',1,0,NULL)");
@@ -79,10 +77,9 @@ try{
 
     $db->commit();
     fwrite(STDOUT,"Bootstrap administrator {$action}: {$email} (user #{$id}).\n");
-    if(!$hasSecurityColumns)fwrite(STDOUT,"User security tracking columns are not present yet; credential sync used legacy-schema compatibility.\n");
-    fwrite(STDOUT,"Credentials were synchronized from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD.\n");
+    if(!$hasSecurityColumns)fwrite(STDOUT,"User security tracking columns are not present yet; bootstrap used legacy-schema compatibility.\n");
 }catch(Throwable $e){
     if($db->inTransaction())$db->rollBack();
-    fwrite(STDERR,'Bootstrap administrator sync failed: '.$e->getMessage()."\n");
+    fwrite(STDERR,'Bootstrap administrator failed: '.$e->getMessage()."\n");
     exit(1);
 }
