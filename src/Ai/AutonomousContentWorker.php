@@ -80,7 +80,9 @@ final class AutonomousContentWorker
 
     private function client(array $settings): OllamaClient
     {
-        $url=trim((string)($settings['ollama_url']??''));$model=trim((string)($settings['model']??''));if($url===''||$model==='')throw new RuntimeException('Ollama URL and model must be configured.');return new OllamaClient($url,$model);
+        $url=trim((string)($settings['ollama_url']??''));$model=trim((string)($settings['model']??''));$apiKey=trim((string)($settings['api_key']??''));
+        if($url===''||$model===''||$apiKey==='')throw new RuntimeException('Remote Ollama URL, model and API key must be configured.');
+        return new OllamaClient($url,$model,$apiKey);
     }
 
     private function cmsContext(): string
