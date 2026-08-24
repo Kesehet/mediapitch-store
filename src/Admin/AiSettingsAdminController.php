@@ -27,8 +27,11 @@ final class AiSettingsAdminController
         if(!Auth::isAdministrator()){http_response_code(403);echo 'Administrator access required.';return true;}
 
         if($path==='/admin/settings/ai'&&$method==='GET'){
-            $users=Database::connection()->query("SELECT id,name,email,role FROM users WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
-            View::render('admin/settings-ai',['pageTitle'=>'AI Content Settings','adminUser'=>Auth::user(),'settings'=>$this->settings->get(),'jobs'=>$this->jobs->recent(25),'users'=>$users,'success'=>$this->flash('success'),'error'=>$this->flash('error')],'admin/layout');return true;
+            $pageError=$this->flash('error');
+            $users=[];$jobs=[];
+            try{$users=Database::connection()->query("SELECT id,name,email,role FROM users WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);}catch(Throwable $e){$pageError=$pageError?:'Could not load AI draft owners: '.$e->getMessage();}
+            try{$jobs=$this->jobs->recent(25);}catch(Throwable $e){$pageError=$pageError?:'AI job tables are not ready yet. Run the database migrations (`composer deploy-db` or `php database/deploy.php`) and reload this page. Detail: '.$e->getMessage();}
+            View::render('admin/settings-ai',['pageTitle'=>'AI Content Settings','adminUser'=>Auth::user(),'settings'=>$this->settings->get(),'jobs'=>$jobs,'users'=>$users,'success'=>$this->flash('success'),'error'=>$pageError],'admin/layout');return true;
         }
         if($path==='/admin/settings/ai/save'&&$method==='POST'){
             $this->requireCsrf();
