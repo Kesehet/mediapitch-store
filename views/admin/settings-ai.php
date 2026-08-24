@@ -1,6 +1,6 @@
 <?php use MediaPitch\Core\Csrf; ?>
 <section class="panel form-panel settings-panel">
-  <div class="panel-head"><div><h2>Autonomous AI content</h2><p>Research and prepare editorial drafts with Ollama. AI-created content is always saved as draft for human review.</p></div></div>
+  <div class="panel-head"><div><h2>Autonomous AI content</h2><p>Research and prepare editorial drafts with remote Ollama. AI-created content is always saved as draft for human review.</p></div></div>
   <form method="post" action="<?= e(url('admin/settings/ai/save')) ?>">
     <?= Csrf::field() ?>
     <div class="settings-subpanel">
@@ -9,13 +9,15 @@
     </div>
 
     <div class="settings-subpanel">
-      <div class="settings-section-head compact"><h3>Ollama</h3><p>The CMS talks to Ollama over HTTP. The Ollama host can be on another machine.</p></div>
+      <div class="settings-section-head compact"><h3>Remote Ollama</h3><p>MediaPitch connects to a remote Ollama endpoint. A URL, model and API key are required.</p></div>
       <div class="form-grid">
-        <label class="span-2">Ollama URL<input name="ollama_url" required maxlength="500" value="<?= e($settings['ollama_url']??'http://127.0.0.1:11434') ?>" placeholder="http://127.0.0.1:11434"></label>
+        <label class="span-2">Ollama URL<input name="ollama_url" required maxlength="500" value="<?= e($settings['ollama_url']??'') ?>" placeholder="https://your-ollama-host.example.com"></label>
         <label>Model<input name="model" required maxlength="150" value="<?= e($settings['model']??'qwen3:30b') ?>" placeholder="qwen3:30b"></label>
+        <label>API key <small><?= !empty($settings['api_key_configured'])?'A key is already saved. Leave blank to keep it.':'Required for the remote Ollama service.' ?></small><input type="password" name="api_key" autocomplete="new-password" placeholder="<?= !empty($settings['api_key_configured'])?'••••••••••••':'Paste API key' ?>"></label>
         <label>AI draft owner<select name="author_id"><option value="0">First active admin/editor</option><?php foreach(($users??[]) as $user): ?><option value="<?= (int)$user['id'] ?>" <?= (int)($settings['author_id']??0)===(int)$user['id']?'selected':'' ?>><?= e($user['name'].' — '.$user['email']) ?></option><?php endforeach; ?></select></label>
       </div>
-      <div class="form-actions"><button class="secondary-button" type="submit" formaction="<?= e(url('admin/settings/ai/test')) ?>">Test Ollama connection</button></div>
+      <p class="muted">The API key is encrypted before storage and is never displayed back in plaintext.</p>
+      <div class="form-actions"><button class="secondary-button" type="submit" formaction="<?= e(url('admin/settings/ai/test')) ?>">Test remote Ollama connection</button></div>
     </div>
 
     <div class="settings-subpanel">

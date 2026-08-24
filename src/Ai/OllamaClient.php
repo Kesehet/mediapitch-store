@@ -8,7 +8,7 @@ use RuntimeException;
 
 final class OllamaClient
 {
-    public function __construct(private readonly string $baseUrl,private readonly string $model){}
+    public function __construct(private readonly string $baseUrl,private readonly string $model,private readonly string $apiKey){}
 
     public function model(): string{return $this->model;}
 
@@ -44,9 +44,10 @@ final class OllamaClient
     {
         $base=rtrim(trim($this->baseUrl),'/');
         if(!preg_match('#^https?://#i',$base))throw new RuntimeException('Ollama URL must start with http:// or https://.');
+        if(trim($this->apiKey)==='')throw new RuntimeException('Ollama API key is required.');
         $url=$base.$path;
         $body=$payload===null?null:json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
-        $headers=['Accept: application/json'];if($body!==null)$headers[]='Content-Type: application/json';
+        $headers=['Accept: application/json','Authorization: Bearer '.$this->apiKey];if($body!==null)$headers[]='Content-Type: application/json';
         if(function_exists('curl_init')){
             $ch=curl_init($url);if($ch===false)throw new RuntimeException('Could not initialize HTTP client.');
             curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>240,CURLOPT_HTTPHEADER=>$headers,CURLOPT_CUSTOMREQUEST=>$method]);
