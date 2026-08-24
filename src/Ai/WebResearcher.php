@@ -30,7 +30,7 @@ final class WebResearcher
     public function read(string $url,int $maxChars=10000): string
     {
         if(!$this->isSafePublicUrl($url))throw new RuntimeException('Research URL is not an allowed public HTTP(S) URL.');
-        $html=$this->fetch($url,400000,true);
+        $html=$this->fetch($url,400000,false);
         $html=preg_replace('#<(script|style|noscript|svg|iframe|form|nav|footer|header)[^>]*>.*?</\1>#is',' ',$html)??$html;
         $text=html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8');
         $text=preg_replace('/\s+/u',' ',$text)??$text;
@@ -52,13 +52,13 @@ final class WebResearcher
         $headers=['User-Agent: Mozilla/5.0 (compatible; MediaPitchResearchBot/1.0; +https://store.mediapitch.in/)','Accept: text/html,application/xhtml+xml'];
         if(function_exists('curl_init')){
             $ch=curl_init($url);if($ch===false)throw new RuntimeException('Could not initialize research HTTP client.');
-            curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>25,CURLOPT_FOLLOWLOCATION=>$follow,CURLOPT_MAXREDIRS=>3,CURLOPT_HTTPHEADER=>$headers,CURLOPT_ENCODING=>'']);
+            curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>25,CURLOPT_FOLLOWLOCATION=>$follow,CURLOPT_MAXREDIRS=>$follow?3:0,CURLOPT_HTTPHEADER=>$headers,CURLOPT_ENCODING=>'']);
             $raw=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$type=(string)curl_getinfo($ch,CURLINFO_CONTENT_TYPE);$error=curl_error($ch);curl_close($ch);
             if($raw===false)throw new RuntimeException('Research request failed: '.$error);
             if($status<200||$status>=400)throw new RuntimeException('Research request returned HTTP '.$status.'.');
             if($type!==''&&!str_contains(strtolower($type),'text/html'))throw new RuntimeException('Research source is not HTML.');
         }else{
-            $context=stream_context_create(['http'=>['method'=>'GET','header'=>implode("\r\n",$headers),'timeout'=>25,'ignore_errors'=>false]]);
+            $context=stream_context_create(['http'=>['method'=>'GET','header'=>implode("\r\n",$headers),'timeout'=>25,'ignore_errors'=>false,'follow_location'=>$follow?1:0,'max_redirects'=>$follow?3:0]]);
             $raw=@file_get_contents($url,false,$context);if($raw===false)throw new RuntimeException('Research request failed. Enable cURL or allow_url_fopen.');
         }
         return substr((string)$raw,0,$maxBytes);
