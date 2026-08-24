@@ -30,7 +30,24 @@ final class SettingsAdminController
         }
         if($path==='/admin/settings/site/save'&&$method==='POST'){
             $this->requireCsrf();
-            try{$this->repo->saveSite($_POST);Audit::record('settings.site.update','settings',null,'Updated website settings',['site_name'=>(string)($_POST['site_name']??''),'tagline'=>(string)($_POST['tagline']??''),'home_categories'=>!empty($_POST['home_categories']),'home_products'=>!empty($_POST['home_products']),'home_guides'=>!empty($_POST['home_guides']),'home_comparisons'=>!empty($_POST['home_comparisons']),'home_articles'=>!empty($_POST['home_articles'])]);$this->setFlash('success','Website settings saved.');}
+            try{
+                $this->repo->saveSite($_POST);
+                $conversionLabels=0;
+                foreach(['google_ads_affiliate_label','google_ads_product_view_label','google_ads_search_label'] as $key)if(trim((string)($_POST[$key]??''))!=='')$conversionLabels++;
+                Audit::record('settings.site.update','settings',null,'Updated website settings',[
+                    'site_name'=>(string)($_POST['name']??''),
+                    'tagline'=>(string)($_POST['tagline']??''),
+                    'google_tag_configured'=>trim((string)($_POST['google_tag_id']??''))!=='',
+                    'google_ads_conversion_labels'=>$conversionLabels,
+                    'affiliate_disclosure_configured'=>trim((string)($_POST['affiliate_disclosure']??''))!=='',
+                    'home_categories'=>!empty($_POST['home_categories']),
+                    'home_products'=>!empty($_POST['home_products']),
+                    'home_guides'=>!empty($_POST['home_guides']),
+                    'home_comparisons'=>!empty($_POST['home_comparisons']),
+                    'home_articles'=>!empty($_POST['home_articles']),
+                ]);
+                $this->setFlash('success','Website settings saved.');
+            }
             catch(Throwable $e){$this->setFlash('error','Website settings could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/settings/site');
         }
