@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MediaPitch\Admin;
 
 use MediaPitch\Ai\AiJobRepository;
+use MediaPitch\Ai\AutonomousContentWorker;
 use MediaPitch\Ai\OllamaClient;
 use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
@@ -31,7 +32,7 @@ final class AiSettingsAdminController
         }
         if($path==='/admin/settings/ai/save'&&$method==='POST'){
             $this->requireCsrf();
-            try{$this->settings->save($_POST);Audit::record('settings.ai.update','settings',null,'Updated autonomous AI content settings',['enabled'=>!empty($_POST['enabled']),'model'=>(string)($_POST['model']??''),'auto_discover'=>!empty($_POST['auto_discover']),'research_depth'=>(string)($_POST['research_depth']??''),'max_drafts_per_day'=>(int)($_POST['max_drafts_per_day']??0)]);$this->setFlash('success','AI content settings saved.');}
+            try{$this->settings->save($_POST);Audit::record('settings.ai.update','settings',null,'Updated autonomous AI content settings',['enabled'=>!empty($_POST['enabled']),'model'=>(string)($_POST['model']??''),'auto_discover'=>!empty($_POST['auto_discover']),'research_depth'=>(string)($_POST['research_depth']??'')]);$this->setFlash('success','AI content settings saved. Automatic generation is limited to one run per India calendar day.');}
             catch(Throwable $e){$this->setFlash('error','AI settings could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
@@ -41,14 +42,19 @@ final class AiSettingsAdminController
             catch(Throwable $e){$this->setFlash('error','Ollama connection failed: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
-        if($path==='/admin/settings/ai/queue'&&$method==='POST'){
+        if($path==='/admin/settings/ai/run-now'&&$method==='POST'){
             $this->requireCsrf();
             try{
-                $settings=$this->settings->get();if(empty($settings['enabled']))throw new \RuntimeException('Enable autonomous AI content before queueing a job.');
-                $topic=trim((string)($_POST['topic']??''));if($topic==='')throw new \InvalidArgumentException('Enter a topic to queue.');
+                $settings=$this->settings->get();if(empty($settings['enabled']))throw new \RuntimeException('Enable AI content before running it manually.');
+                $topic=trim((string)($_POST['topic']??''));if($topic==='')throw new \InvalidArgumentException('Enter a topic to run.');
                 $type=(string)($_POST['content_type']??'blog');if(!in_array($type,['blog','buying_guide'],true))$type='blog';
-                $id=$this->jobs->queue($topic,$type,['queued_by'=>(int)(Auth::user()['id']??0)]);Audit::record('ai.content.queued','ai_job',$id,'Queued AI content draft',['topic'=>$topic,'content_type'=>$type]);$this->setFlash('success','AI draft job #'.$id.' queued. The CLI worker will pick it up.');
-            }catch(Throwable $e){$this->setFlash('error','Could not queue AI job: '.$e->getMessage());}
+                $id=$this->jobs->queue($topic,$type,['queued_by'=>(int)(Auth::user()['id']??0)],'manual');
+                Audit::record('ai.content.manual_run','ai_job',$id,'Started manual AI content run',['topic'=>$topic,'content_type'=>$type]);
+                $result=(new AutonomousContentWorker($this->settings,$this->jobs))->runOnce('manual');
+                if(($result['status']??'')==='completed')$this->setFlash('success','Manual AI run completed. Draft #'.(int)($result['content_id']??0).' is ready for review.');
+                elseif(($result['status']??'')==='failed')$this->setFlash('error','Manual AI run failed: '.(string)($result['error']??'Unknown error.'));
+                else $this->setFlash('success','Manual AI job #'.$id.' was created with status: '.(string)($result['status']??'unknown').'.');
+            }catch(Throwable $e){$this->setFlash('error','Could not run AI job: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
         return false;
