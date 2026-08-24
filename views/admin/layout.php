@@ -53,6 +53,7 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/redirects')?'active':'' ?>" href="<?= e(url('admin/redirects')) ?>">Redirects</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/users')?'active':'' ?>" href="<?= e(url('admin/users')) ?>">Users</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= $currentPath==='/admin/settings/site'?'active':'' ?>" href="<?= e(url('admin/settings/site')) ?>">Website Settings</a><?php endif;?>
+    <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/settings/google-ads')?'active':'' ?>" href="<?= e(url('admin/settings/google-ads')) ?>">Google Ads</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/settings/ai')?'active':'' ?>" href="<?= e(url('admin/settings/ai')) ?>">AI Content</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/settings/amazon')?'active':'' ?>" href="<?= e(url('admin/settings/amazon')) ?>">Amazon Settings</a><?php endif;?>
   </nav>
