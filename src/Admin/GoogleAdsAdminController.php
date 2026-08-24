@@ -44,7 +44,7 @@ final class GoogleAdsAdminController
             if($expected===''||$state===''||!hash_equals($expected,$state)){$this->setFlash('error','Google OAuth state check failed. Please connect again.');$this->redirect('/admin/settings/google-ads');}
             try{
                 $refresh=$this->client->exchangeCode($code);$this->repo->saveRefreshToken($refresh);$accounts=$this->client->listAccessibleCustomers($refresh);
-                if(count($accounts)===1)$this->repo->selectCustomer((string)$accounts[0]['id'],(string)$accounts[0]['name'],!empty($accounts[0]['manager'])?(string)$accounts[0]['id']:'');
+                if(count($accounts)===1)$this->repo->selectCustomer((string)$accounts[0]['id'],(string)$accounts[0]['name'],(string)($accounts[0]['login_customer_id']??''));
                 Audit::record('google_ads.connect','settings',null,'Connected Google Ads account',['accessible_accounts'=>count($accounts)]);
                 $this->setFlash('success','Google Ads connected. Choose the account to manage, then run Verify & repair.');
             }catch(Throwable $e){$this->repo->setError($e->getMessage());$this->setFlash('error','Google Ads connection failed: '.$e->getMessage());}
@@ -57,8 +57,8 @@ final class GoogleAdsAdminController
                 $connection=$this->repo->connection();if(!$connection['connected'])throw new \RuntimeException('Connect Google Ads first.');
                 $accounts=$this->client->listAccessibleCustomers((string)$connection['refresh_token']);$selected=null;foreach($accounts as $account)if((string)$account['id']===$id){$selected=$account;break;}
                 if(!$selected)throw new \RuntimeException('That Google Ads customer is not accessible with the connected account.');
-                $login=!empty($selected['manager'])?$id:'';$this->repo->selectCustomer($id,(string)$selected['name'],$login);
-                Audit::record('google_ads.customer_select','settings',null,'Selected Google Ads customer',['customer_id'=>$id,'manager'=>!empty($selected['manager'])]);$this->setFlash('success','Google Ads account selected.');
+                $login=(string)($selected['login_customer_id']??'');$this->repo->selectCustomer($id,(string)$selected['name'],$login);
+                Audit::record('google_ads.customer_select','settings',null,'Selected Google Ads customer',['customer_id'=>$id,'login_customer_id'=>$login!==''?$login:null,'manager'=>!empty($selected['manager'])]);$this->setFlash('success','Google Ads account selected.');
             }catch(Throwable $e){$this->setFlash('error','Account selection failed: '.$e->getMessage());}
             $this->redirect('/admin/settings/google-ads');
         }
