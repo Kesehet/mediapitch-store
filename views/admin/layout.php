@@ -23,19 +23,8 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
     $stmt=Database::connection()->prepare('SELECT id,source,asin,api_marketplace,last_synced_at,manual_override_json FROM products WHERE id=:id LIMIT 1');
     $stmt->execute(['id'=>(int)$syncMatch[1]]);
     $syncProduct=$stmt->fetch(PDO::FETCH_ASSOC);
-    if($syncProduct){
-      $productSyncState=[
-        'id'=>(int)$syncProduct['id'],
-        'source'=>(string)$syncProduct['source'],
-        'asin'=>(string)($syncProduct['asin']??''),
-        'marketplace'=>(string)($syncProduct['api_marketplace']??''),
-        'last_synced_at'=>$syncProduct['last_synced_at']?:null,
-        'overrides'=>(new ProductOverrides())->forProduct($syncProduct),
-      ];
-    }
-  }catch(Throwable $syncError){
-    if((bool)env('APP_DEBUG',false))error_log('Product sync UI state failed: '.$syncError->getMessage());
-  }
+    if($syncProduct){$productSyncState=['id'=>(int)$syncProduct['id'],'source'=>(string)$syncProduct['source'],'asin'=>(string)($syncProduct['asin']??''),'marketplace'=>(string)($syncProduct['api_marketplace']??''),'last_synced_at'=>$syncProduct['last_synced_at']?:null,'overrides'=>(new ProductOverrides())->forProduct($syncProduct)];}
+  }catch(Throwable $syncError){if((bool)env('APP_DEBUG',false))error_log('Product sync UI state failed: '.$syncError->getMessage());}
 }
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.css"><link rel="stylesheet" href="/assets/admin-editor.css?v=<?= e($adminEditorCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-ux.css?v=<?= e($adminUxCssVersion) ?>"><script src="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.js" defer></script><script src="/assets/admin-editor.js?v=<?= e($adminEditorJsVersion) ?>" defer></script><script src="/assets/admin-ux.js?v=<?= e($adminUxJsVersion) ?>" defer></script><script src="/assets/product-sync.js?v=<?= e($productSyncJsVersion) ?>" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
@@ -64,6 +53,7 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/redirects')?'active':'' ?>" href="<?= e(url('admin/redirects')) ?>">Redirects</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/users')?'active':'' ?>" href="<?= e(url('admin/users')) ?>">Users</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= $currentPath==='/admin/settings/site'?'active':'' ?>" href="<?= e(url('admin/settings/site')) ?>">Website Settings</a><?php endif;?>
+    <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/settings/ai')?'active':'' ?>" href="<?= e(url('admin/settings/ai')) ?>">AI Content</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/settings/amazon')?'active':'' ?>" href="<?= e(url('admin/settings/amazon')) ?>">Amazon Settings</a><?php endif;?>
   </nav>
   <div class="admin-user"><strong><?= e($adminUser['name'] ?? '') ?></strong><small><?= e($adminUser['role'] ?? '') ?></small>
