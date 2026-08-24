@@ -19,13 +19,13 @@
     </div>
 
     <div class="settings-subpanel">
-      <div class="settings-section-head compact"><h3>Autonomy &amp; research</h3><p>Control how often the agent works and how much research it performs before writing.</p></div>
+      <div class="settings-section-head compact"><h3>Autonomy &amp; research</h3><p>The automatic worker is hard-limited to one Ollama run per India calendar day. Manual runs do not affect that daily slot.</p></div>
       <div class="form-grid">
-        <label>Maximum drafts per day<input type="number" name="max_drafts_per_day" min="1" max="20" value="<?= (int)($settings['max_drafts_per_day']??2) ?>"></label>
+        <label>Automatic cadence<input value="Once per day" disabled></label>
         <label>Research depth<select name="research_depth"><option value="quick" <?= ($settings['research_depth']??'')==='quick'?'selected':'' ?>>Quick — 3 searches</option><option value="standard" <?= ($settings['research_depth']??'')==='standard'?'selected':'' ?>>Standard — 5 searches</option><option value="thorough" <?= ($settings['research_depth']??'thorough')==='thorough'?'selected':'' ?>>Thorough — 8 searches</option></select></label>
       </div>
       <div class="settings-toggle-list">
-        <label class="check"><input type="checkbox" name="auto_discover" value="1" <?= !empty($settings['auto_discover'])?'checked':'' ?>> Let AI discover content opportunities automatically</label>
+        <label class="check"><input type="checkbox" name="auto_discover" value="1" <?= !empty($settings['auto_discover'])?'checked':'' ?>> Let AI discover one content opportunity automatically each day</label>
         <label class="check"><input type="checkbox" name="allow_blog" value="1" <?= !empty($settings['allow_blog'])?'checked':'' ?>> Allow blog/article drafts</label>
         <label class="check"><input type="checkbox" name="allow_guides" value="1" <?= !empty($settings['allow_guides'])?'checked':'' ?>> Allow buying-guide drafts</label>
       </div>
@@ -39,28 +39,28 @@
         <label class="span-2">From email <small>Optional. Your server must be configured to send PHP mail.</small><input type="email" name="notification_from" maxlength="255" value="<?= e($settings['notification_from']??'') ?>" placeholder="cms@mediapitch.in"></label>
       </div>
     </div>
-    <div class="form-actions settings-save-bar"><span class="muted">Disabling the master switch stops new worker activity.</span><button class="primary-button">Save AI settings</button></div>
+    <div class="form-actions settings-save-bar"><span class="muted">Disabling the master switch stops all automatic and manual AI activity.</span><button class="primary-button">Save AI settings</button></div>
   </form>
 </section>
 
 <section class="panel form-panel">
-  <div class="panel-head"><div><h2>Queue a draft manually</h2><p>Useful for testing the complete research → draft → email workflow.</p></div></div>
-  <form method="post" action="<?= e(url('admin/settings/ai/queue')) ?>">
+  <div class="panel-head"><div><h2>Run AI now</h2><p>Use Ollama immediately for an extra topic whenever you need it. This does not consume the once-a-day automatic run.</p></div></div>
+  <form method="post" action="<?= e(url('admin/settings/ai/run-now')) ?>">
     <?= Csrf::field() ?>
     <div class="form-grid">
       <label class="span-2">Topic<input name="topic" required maxlength="500" placeholder="Best laptops for students under ₹50,000"></label>
       <label>Content type<select name="content_type"><option value="blog">Blog article</option><option value="buying_guide">Buying guide</option></select></label>
     </div>
-    <div class="form-actions"><button class="primary-button">Queue AI draft</button></div>
+    <div class="form-actions"><button class="primary-button">Run now</button></div>
   </form>
 </section>
 
 <section class="panel">
   <div class="panel-head"><div><h2>Recent AI activity</h2><p>Research and writing jobs remain visible for review and debugging.</p></div></div>
-  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Topic</th><th>Type</th><th>Status</th><th>Stage</th><th>Draft</th><th>Created</th></tr></thead><tbody>
-  <?php if(empty($jobs)): ?><tr><td colspan="7" class="muted">No AI jobs yet.</td></tr><?php endif; ?>
+  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Topic</th><th>Mode</th><th>Type</th><th>Status</th><th>Stage</th><th>Draft</th><th>Created</th></tr></thead><tbody>
+  <?php if(empty($jobs)): ?><tr><td colspan="8" class="muted">No AI jobs yet.</td></tr><?php endif; ?>
   <?php foreach(($jobs??[]) as $job): ?><tr>
-    <td>#<?= (int)$job['id'] ?></td><td><?= e($job['topic']) ?></td><td><?= e($job['content_type']) ?></td><td><?= e($job['status']) ?></td><td><?= e($job['stage']??'') ?></td>
+    <td>#<?= (int)$job['id'] ?></td><td><?= e($job['topic']) ?></td><td><?= e($job['trigger_mode']??'automatic') ?></td><td><?= e($job['content_type']) ?></td><td><?= e($job['status']) ?></td><td><?= e($job['stage']??'') ?></td>
     <td><?php if(!empty($job['content_id'])): $editBase=$job['content_type']==='buying_guide'?'admin/guides/':'admin/blog/'; ?><a href="<?= e(url($editBase.(int)$job['content_id'].'/edit')) ?>">Review draft</a><?php elseif(!empty($job['error_message'])): ?><span title="<?= e($job['error_message']) ?>">Failed</span><?php else: ?>—<?php endif; ?></td>
     <td><?= e($job['created_at']??'') ?></td>
   </tr><?php endforeach; ?>
