@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS ai_jobs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     job_type VARCHAR(50) NOT NULL DEFAULT 'content_draft',
+    trigger_mode ENUM('automatic','manual') NOT NULL DEFAULT 'automatic',
     status ENUM('queued','running','completed','failed') NOT NULL DEFAULT 'queued',
     topic VARCHAR(500) NOT NULL,
     content_type ENUM('blog','buying_guide') NOT NULL DEFAULT 'blog',
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_ai_jobs_status_created (status, created_at),
+    INDEX idx_ai_jobs_trigger_created (trigger_mode, created_at),
     INDEX idx_ai_jobs_completed (completed_at),
     INDEX idx_ai_jobs_content (content_id),
     CONSTRAINT fk_ai_jobs_content FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE SET NULL
