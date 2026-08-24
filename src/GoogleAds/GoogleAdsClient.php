@@ -26,25 +26,16 @@ final class GoogleAdsClient
         $clientId=trim((string)env('GOOGLE_ADS_CLIENT_ID',''));
         if($clientId==='')throw new RuntimeException('GOOGLE_ADS_CLIENT_ID is not configured.');
         return 'https://accounts.google.com/o/oauth2/v2/auth?'.http_build_query([
-            'client_id'=>$clientId,
-            'redirect_uri'=>$this->redirectUri(),
-            'response_type'=>'code',
-            'scope'=>self::SCOPE,
-            'access_type'=>'offline',
-            'prompt'=>'consent',
-            'include_granted_scopes'=>'true',
-            'state'=>$state,
+            'client_id'=>$clientId,'redirect_uri'=>$this->redirectUri(),'response_type'=>'code','scope'=>self::SCOPE,
+            'access_type'=>'offline','prompt'=>'consent','include_granted_scopes'=>'true','state'=>$state,
         ]);
     }
 
     public function exchangeCode(string $code): string
     {
         $json=$this->tokenRequest([
-            'code'=>$code,
-            'client_id'=>(string)env('GOOGLE_ADS_CLIENT_ID',''),
-            'client_secret'=>(string)env('GOOGLE_ADS_CLIENT_SECRET',''),
-            'redirect_uri'=>$this->redirectUri(),
-            'grant_type'=>'authorization_code',
+            'code'=>$code,'client_id'=>(string)env('GOOGLE_ADS_CLIENT_ID',''),'client_secret'=>(string)env('GOOGLE_ADS_CLIENT_SECRET',''),
+            'redirect_uri'=>$this->redirectUri(),'grant_type'=>'authorization_code',
         ]);
         $refresh=trim((string)($json['refresh_token']??''));
         if($refresh==='')throw new RuntimeException('Google did not return a refresh token. Reconnect and approve offline access.');
@@ -55,29 +46,39 @@ final class GoogleAdsClient
     {
         $access=$this->accessToken($refreshToken);
         $json=$this->request('GET','/customers:listAccessibleCustomers',$access);
-        $resources=$json['resourceNames']??[];$accounts=[];
+        $resources=$json['resourceNames']??[];$accounts=[];$seen=[];
         if(!is_array($resources))return [];
         foreach($resources as $resource){
-            $id=preg_replace('/\D/','',(string)$resource)??'';
-            if($id==='')continue;
+            $id=$this->digits((string)$resource);if($id==='')continue;
             $name='Google Ads '.$id;$manager=false;
             try{
                 $detail=$this->search($id,$access,"SELECT customer.id, customer.descriptive_name, customer.manager, customer.currency_code, customer.time_zone FROM customer LIMIT 1",$id);
                 $row=$detail[0]['customer']??[];
                 if(is_array($row)){$name=trim((string)($row['descriptiveName']??''))?:$name;$manager=!empty($row['manager']);}
-            }catch(\Throwable){/* The account is still selectable even if metadata lookup is restricted. */}
-            $accounts[]=['id'=>$id,'name'=>$name,'manager'=>$manager];
+            }catch(\Throwable){/* Keep directly accessible account available even when metadata is restricted. */}
+            $accounts[]=['id'=>$id,'name'=>$name,'manager'=>$manager,'login_customer_id'=>$manager?$id:''];$seen[$id]=true;
+
+            if($manager){
+                try{
+                    $children=$this->search($id,$access,"SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.level, customer_client.status FROM customer_client WHERE customer_client.status = 'ENABLED'",$id);
+                    foreach($children as $child){
+                        $cc=$child['customerClient']??null;if(!is_array($cc))continue;
+                        $childId=$this->digits((string)($cc['id']??''));if($childId===''||$childId===$id||isset($seen[$childId]))continue;
+                        $childName=trim((string)($cc['descriptiveName']??''))?:('Google Ads '.$childId);
+                        $accounts[]=['id'=>$childId,'name'=>$childName,'manager'=>!empty($cc['manager']),'login_customer_id'=>$id];$seen[$childId]=true;
+                    }
+                }catch(\Throwable){/* Direct manager remains usable if hierarchy lookup is unavailable. */}
+            }
         }
+        usort($accounts,static fn(array $a,array $b):int=>strcmp((string)$a['name'],(string)$b['name']));
         return $accounts;
     }
 
     public function reconcile(string $refreshToken,string $customerId,string $loginCustomerId=''): array
     {
-        $access=$this->accessToken($refreshToken);
-        $customerId=$this->digits($customerId);
-        $loginCustomerId=$this->digits($loginCustomerId);
-        $rows=$this->conversionActions($customerId,$access,$loginCustomerId);
-        $byName=[];foreach($rows as $row){$action=$row['conversionAction']??null;if(is_array($action)&&isset($action['name']))$byName[(string)$action['name']]=$action;}
+        $access=$this->accessToken($refreshToken);$customerId=$this->digits($customerId);$loginCustomerId=$this->digits($loginCustomerId);
+        $rows=$this->conversionActions($customerId,$access,$loginCustomerId);$byName=[];
+        foreach($rows as $row){$action=$row['conversionAction']??null;if(is_array($action)&&isset($action['name']))$byName[(string)$action['name']]=$action;}
         $report=[];
         foreach(self::EXPECTED as $key=>$definition){
             $action=$byName[$definition['name']]??null;
@@ -85,19 +86,15 @@ final class GoogleAdsClient
                 if(($action['type']??'')!=='WEBPAGE'){$report[$key]=['status'=>'conflict','name'=>$definition['name'],'message'=>'An action with this name exists but is not a website conversion. Nothing was changed.'];continue;}
                 $report[$key]=['status'=>'present','name'=>$definition['name'],'action'=>$action];continue;
             }
-            $this->createConversionAction($customerId,$access,$definition,$loginCustomerId);
-            $report[$key]=['status'=>'created','name'=>$definition['name']];
+            $this->createConversionAction($customerId,$access,$definition,$loginCustomerId);$report[$key]=['status'=>'created','name'=>$definition['name']];
         }
         $rows=$this->conversionActions($customerId,$access,$loginCustomerId);$byName=[];
         foreach($rows as $row){$action=$row['conversionAction']??null;if(is_array($action)&&isset($action['name']))$byName[(string)$action['name']]=$action;}
         $tracking=['google_tag_id'=>'','affiliate_label'=>'','product_view_label'=>'','search_label'=>''];
         foreach(self::EXPECTED as $key=>$definition){
-            $action=$byName[$definition['name']]??null;if(!is_array($action))continue;
-            $parsed=$this->trackingFromAction($action);
+            $action=$byName[$definition['name']]??null;if(!is_array($action))continue;$parsed=$this->trackingFromAction($action);
             if($tracking['google_tag_id']===''&&$parsed['google_tag_id']!=='')$tracking['google_tag_id']=$parsed['google_tag_id'];
-            if($key==='affiliate')$tracking['affiliate_label']=$parsed['label'];
-            if($key==='product_view')$tracking['product_view_label']=$parsed['label'];
-            if($key==='search')$tracking['search_label']=$parsed['label'];
+            if($key==='affiliate')$tracking['affiliate_label']=$parsed['label'];if($key==='product_view')$tracking['product_view_label']=$parsed['label'];if($key==='search')$tracking['search_label']=$parsed['label'];
             $report[$key]['action']=$action;
         }
         return ['report'=>$report,'tracking'=>$tracking];
@@ -111,8 +108,7 @@ final class GoogleAdsClient
     private function createConversionAction(string $customerId,string $accessToken,array $definition,string $loginCustomerId): void
     {
         $payload=['operations'=>[['create'=>[
-            'name'=>$definition['name'],'category'=>$definition['category'],'type'=>'WEBPAGE','status'=>'ENABLED',
-            'primaryForGoal'=>(bool)$definition['primary'],'countingType'=>$definition['counting'],
+            'name'=>$definition['name'],'category'=>$definition['category'],'type'=>'WEBPAGE','status'=>'ENABLED','primaryForGoal'=>(bool)$definition['primary'],'countingType'=>$definition['counting'],
             'valueSettings'=>['defaultValue'=>0,'defaultCurrencyCode'=>'INR','alwaysUseDefaultValue'=>true],
         ]]]];
         $this->request('POST','/customers/'.$customerId.'/conversionActions:mutate',$accessToken,$payload,$loginCustomerId);
@@ -134,12 +130,8 @@ final class GoogleAdsClient
 
     private function accessToken(string $refreshToken): string
     {
-        $cached=$_SESSION['_google_ads_access_token']??null;
-        if(is_array($cached)&&(int)($cached['expires_at']??0)>time()+90&&!empty($cached['token']))return (string)$cached['token'];
-        $json=$this->tokenRequest([
-            'client_id'=>(string)env('GOOGLE_ADS_CLIENT_ID',''),'client_secret'=>(string)env('GOOGLE_ADS_CLIENT_SECRET',''),
-            'refresh_token'=>$refreshToken,'grant_type'=>'refresh_token',
-        ]);
+        $cached=$_SESSION['_google_ads_access_token']??null;if(is_array($cached)&&(int)($cached['expires_at']??0)>time()+90&&!empty($cached['token']))return (string)$cached['token'];
+        $json=$this->tokenRequest(['client_id'=>(string)env('GOOGLE_ADS_CLIENT_ID',''),'client_secret'=>(string)env('GOOGLE_ADS_CLIENT_SECRET',''),'refresh_token'=>$refreshToken,'grant_type'=>'refresh_token']);
         $token=trim((string)($json['access_token']??''));if($token==='')throw new RuntimeException('Google access-token refresh failed.');
         $_SESSION['_google_ads_access_token']=['token'=>$token,'expires_at'=>time()+max(60,(int)($json['expires_in']??3600))];return $token;
     }
@@ -157,21 +149,15 @@ final class GoogleAdsClient
     {
         if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL extension is required for Google Ads integration.');
         $developerToken=trim((string)env('GOOGLE_ADS_DEVELOPER_TOKEN',''));if($developerToken==='')throw new RuntimeException('GOOGLE_ADS_DEVELOPER_TOKEN is not configured.');
-        $headers=['Authorization: Bearer '.$accessToken,'developer-token: '.$developerToken,'Accept: application/json'];
-        if($loginCustomerId!=='')$headers[]='login-customer-id: '.$loginCustomerId;
+        $headers=['Authorization: Bearer '.$accessToken,'developer-token: '.$developerToken,'Accept: application/json'];if($loginCustomerId!=='')$headers[]='login-customer-id: '.$loginCustomerId;
         $ch=curl_init('https://googleads.googleapis.com/'.self::API_VERSION.$path);$options=[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>$headers,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false];
-        if($payload!==null){$headers[]='Content-Type: application/json';$options[CURLOPT_HTTPHEADER]=$headers;$options[CURLOPT_POSTFIELDS]=json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);}
-        curl_setopt_array($ch,$options);$response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
+        if($payload!==null){$headers[]='Content-Type: application/json';$options[CURLOPT_HTTPHEADER]=$headers;$options[CURLOPT_POSTFIELDS]=json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);}curl_setopt_array($ch,$options);
+        $response=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$error=curl_error($ch);curl_close($ch);
         if($response===false)throw new RuntimeException('Google Ads API request failed: '.$error);$json=json_decode((string)$response,true);
         if($status<200||$status>=300||!is_array($json))throw new RuntimeException('Google Ads API failed (HTTP '.$status.'): '.$this->errorMessage($json));return $json;
     }
 
-    private function errorMessage(mixed $json): string
-    {
-        if(!is_array($json))return 'Unexpected response.';
-        return (string)($json['error']['message']??$json['error_description']??$json['error']??'Request failed');
-    }
-
+    private function errorMessage(mixed $json): string{if(!is_array($json))return 'Unexpected response.';return (string)($json['error']['message']??$json['error_description']??$json['error']??'Request failed');}
     private function redirectUri(): string{return url('admin/settings/google-ads/callback');}
     private function digits(string $value): string{return preg_replace('/\D/','',$value)??'';}
 }
