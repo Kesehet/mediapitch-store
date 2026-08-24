@@ -11,7 +11,7 @@ $affiliateDisclosure=(string)($siteSettings['affiliate_disclosure']??'As an Amaz
 $googleTagId=strtoupper(trim((string)($siteSettings['google_tag_id']??'')));
 if($googleTagId!==''&&!preg_match('/^(?:AW-\d+|G-[A-Z0-9]+|GT-[A-Z0-9]+|DC-\d+)$/',$googleTagId))$googleTagId='';
 $googleLabel=static function(mixed $value): string {
-    $value=trim((string)$value;
+    $value=trim((string)$value);
     return $value!==''&&preg_match('/^[A-Za-z0-9_-]{1,100}$/',$value)?$value:'';
 };
 $googleAdsLabels=[
