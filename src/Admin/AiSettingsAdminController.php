@@ -35,13 +35,13 @@ final class AiSettingsAdminController
         }
         if($path==='/admin/settings/ai/save'&&$method==='POST'){
             $this->requireCsrf();
-            try{$this->settings->save($_POST);Audit::record('settings.ai.update','settings',null,'Updated autonomous AI content settings',['enabled'=>!empty($_POST['enabled']),'model'=>(string)($_POST['model']??''),'auto_discover'=>!empty($_POST['auto_discover']),'research_depth'=>(string)($_POST['research_depth']??'')]);$this->setFlash('success','AI content settings saved. Automatic generation is limited to one run per India calendar day.');}
+            try{$this->settings->save($_POST);Audit::record('settings.ai.update','settings',null,'Updated autonomous AI content settings',['enabled'=>!empty($_POST['enabled']),'model'=>(string)($_POST['model']??''),'api_key'=>trim((string)($_POST['api_key']??''))!==''?'[changed]':'[unchanged]','auto_discover'=>!empty($_POST['auto_discover']),'research_depth'=>(string)($_POST['research_depth']??'')]);$this->setFlash('success','AI content settings saved. Automatic generation is limited to one run per India calendar day.');}
             catch(Throwable $e){$this->setFlash('error','AI settings could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
         if($path==='/admin/settings/ai/test'&&$method==='POST'){
             $this->requireCsrf();
-            try{$settings=$this->settings->get();$result=(new OllamaClient((string)$settings['ollama_url'],(string)$settings['model']))->test();$models=$result['models']??[];$found=in_array((string)$settings['model'],$models,true);$this->setFlash('success','Ollama connection succeeded. '.count($models).' model(s) available.'.($found?' Configured model found.':' Configured model was not listed; pull it before running jobs.'));Audit::record('ai.ollama.test','settings',null,'Tested Ollama connection',['model'=>$settings['model'],'configured_model_found'=>$found]);}
+            try{$settings=$this->settings->get();$result=(new OllamaClient((string)$settings['ollama_url'],(string)$settings['model'],(string)$settings['api_key']))->test();$models=$result['models']??[];$found=in_array((string)$settings['model'],$models,true);$this->setFlash('success','Remote Ollama connection succeeded. '.count($models).' model(s) available.'.($found?' Configured model found.':' Configured model was not listed.'));Audit::record('ai.ollama.test','settings',null,'Tested remote Ollama connection',['model'=>$settings['model'],'configured_model_found'=>$found]);}
             catch(Throwable $e){$this->setFlash('error','Ollama connection failed: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
