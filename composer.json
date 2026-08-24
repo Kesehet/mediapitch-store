@@ -21,6 +21,7 @@
     "deploy-db": "@php database/deploy.php",
     "prune-analytics": "@php database/prune-analytics.php",
     "refresh-amazon": "@php database/refresh-amazon.php",
+    "ai-worker": "@php database/ai-worker.php",
     "smoke-test": "@php database/smoke-test.php"
   }
 }
