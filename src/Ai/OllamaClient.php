@@ -20,6 +20,14 @@ final class OllamaClient
         return ['ok'=>true,'models'=>$models];
     }
 
+    public function testGeneration(): array
+    {
+        $schema=['type'=>'object','properties'=>['status'=>['type'=>'string']],'required'=>['status']];
+        $result=$this->json('You are a connectivity test. Return the requested JSON only.','Return {"status":"ok"}.',$schema);
+        if(strtolower(trim((string)($result['status']??'')))!=='ok')throw new RuntimeException('Ollama model responded, but structured generation validation failed.');
+        return ['ok'=>true,'model'=>$this->model];
+    }
+
     public function json(string $system,string $user,array $schema): array
     {
         $payload=[
