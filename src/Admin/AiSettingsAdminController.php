@@ -7,6 +7,7 @@ namespace MediaPitch\Admin;
 use MediaPitch\Ai\AiJobRepository;
 use MediaPitch\Ai\AutonomousContentWorker;
 use MediaPitch\Ai\OllamaClient;
+use MediaPitch\Ai\WebResearcher;
 use MediaPitch\Core\Audit;
 use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
@@ -41,8 +42,17 @@ final class AiSettingsAdminController
         }
         if($path==='/admin/settings/ai/test'&&$method==='POST'){
             $this->requireCsrf();
-            try{$settings=$this->settings->get();$result=(new OllamaClient((string)$settings['ollama_url'],(string)$settings['model'],(string)$settings['api_key']))->test();$models=$result['models']??[];$found=in_array((string)$settings['model'],$models,true);$this->setFlash('success','Remote Ollama connection succeeded. '.count($models).' model(s) available.'.($found?' Configured model found.':' Configured model was not listed.'));Audit::record('ai.ollama.test','settings',null,'Tested remote Ollama connection',['model'=>$settings['model'],'configured_model_found'=>$found]);}
-            catch(Throwable $e){$this->setFlash('error','Ollama connection failed: '.$e->getMessage());}
+            try{
+                $settings=$this->settings->get();
+                $client=new OllamaClient((string)$settings['ollama_url'],(string)$settings['model'],(string)$settings['api_key']);
+                $result=$client->test();$models=$result['models']??[];$found=in_array((string)$settings['model'],$models,true);
+                $client->testGeneration();
+                $research=(new WebResearcher())->search('consumer product buying guide',2);
+                if(!$research)throw new \RuntimeException('The AI model works, but the server could not obtain web research search results. Check outbound HTTPS/DNS access or the research search provider.');
+                $this->setFlash('success','AI readiness test passed: remote Ollama is reachable, structured content generation works, and web research is reachable. '.count($models).' model(s) available.'.($found?' Configured model found.':' Configured model was not listed, but it successfully generated the test response.'));
+                Audit::record('ai.ollama.test','settings',null,'Tested remote Ollama generation and web research',['model'=>$settings['model'],'configured_model_found'=>$found,'research_results'=>count($research)]);
+            }
+            catch(Throwable $e){$this->setFlash('error','AI readiness test failed: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
         }
         if($path==='/admin/settings/ai/run-now'&&$method==='POST'){
