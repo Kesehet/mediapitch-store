@@ -2,9 +2,9 @@
 <section class="hero">
     <div class="container hero-grid">
         <div>
-            <span class="eyebrow">MediaPitch Buying Guides</span>
-            <h1>Find the right product without the noise.</h1>
-            <p>Research-backed rankings, practical comparisons and straightforward recommendations for everyday purchases.</p>
+            <span class="eyebrow">MediaPitch Guides</span>
+            <h1>Smarter buying starts here</h1>
+            <p>Clear product advice, useful comparisons and practical shopping insights to help you understand what matters before you buy.</p>
             <form class="hero-search" action="/search" method="get" role="search">
                 <input type="search" name="q" placeholder="What are you looking to buy?" aria-label="What are you looking to buy?">
                 <button type="submit">Search</button>
