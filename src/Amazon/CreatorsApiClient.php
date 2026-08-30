@@ -9,11 +9,25 @@ use RuntimeException;
 final class CreatorsApiClient
 {
     private const RETRYABLE_STATUS=[429,500,502,503,504];
+    private static array $tokenCache=[];
 
     public function testCredentials(array $settings): array
     {
+        if(empty($settings['enabled']))throw new RuntimeException('Enable this Amazon Creators API marketplace profile before testing it.');
         $token=$this->fetchToken($settings,true);
-        return ['ok'=>true,'expires_in'=>$token['expires_in'],'token_type'=>$token['token_type']];
+        $marketplace=trim((string)($settings['marketplace']??''));
+        $partnerTag=trim((string)($settings['partner_tag']??''));
+        if($marketplace===''||$partnerTag==='')throw new RuntimeException('Amazon marketplace and Partner Tag are required.');
+
+        // Do a real catalog call, not just OAuth. This validates credential scope,
+        // marketplace access, Partner Tag and the current Creators API request shape.
+        $probe=$this->apiRequest('searchItems',[
+            'keywords'=>'book','searchIndex'=>'All','itemCount'=>1,
+            'marketplace'=>$marketplace,'partnerTag'=>$partnerTag,
+            'resources'=>['images.primary.large','itemInfo.title','offersV2.listings.price'],
+        ],$settings);
+        $items=$probe['searchResult']['items']??[];
+        return ['ok'=>true,'expires_in'=>$token['expires_in'],'token_type'=>$token['token_type'],'catalog_ok'=>is_array($items),'sample_items'=>is_array($items)?count($items):0];
     }
 
     public function searchItems(array $settings,string $keywords,int $itemCount=10): array
@@ -100,7 +114,7 @@ final class CreatorsApiClient
         if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL extension is required for Creators API requests.');
 
         $fingerprint=hash('sha256',$version.'|'.$id);
-        $cached=$_SESSION['_amazon_creators_token']??null;
+        $cached=self::$tokenCache[$fingerprint]??($_SESSION['_amazon_creators_token']??null);
         if(!$force&&is_array($cached)&&($cached['fingerprint']??'')===$fingerprint&&(int)($cached['expires_at']??0)>time()+90&&!empty($cached['access_token'])) return $cached;
 
         [$endpoint,$body,$contentType]=$this->tokenRequest($version,$id,$secret);
@@ -119,6 +133,7 @@ final class CreatorsApiClient
                 if($status>=200&&$status<300&&is_array($json)&&!empty($json['access_token'])){
                     $expires=max(60,(int)($json['expires_in']??3600));
                     $token=['access_token'=>(string)$json['access_token'],'expires_in'=>$expires,'token_type'=>(string)($json['token_type']??'bearer'),'expires_at'=>time()+$expires,'fingerprint'=>$fingerprint];
+                    self::$tokenCache[$fingerprint]=$token;
                     $_SESSION['_amazon_creators_token']=$token;
                     return $token;
                 }
