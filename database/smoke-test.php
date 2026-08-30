@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use MediaPitch\Core\Database;
+use MediaPitch\Repositories\AiSettingsRepository;
+use MediaPitch\Repositories\SettingsRepository;
 
 require dirname(__DIR__).'/src/bootstrap.php';
 
@@ -16,6 +18,7 @@ $check=static function(string $label,bool $ok,string $detail='',bool $warningOnl
 };
 
 $check('PHP >= 8.2',version_compare(PHP_VERSION,'8.2.0','>='),PHP_VERSION);
+$check('cURL extension',extension_loaded('curl'),'Required by Amazon Creators API and preferred for AI web research.');
 $check('PDO extension',extension_loaded('pdo'));
 $check('PDO MySQL extension',extension_loaded('pdo_mysql'));
 $check('OpenSSL extension',extension_loaded('openssl'));
@@ -39,7 +42,7 @@ try{
     $requiredTables=[
         'users','categories','brands','products','content','content_products','product_specifications',
         'specification_definitions','settings','affiliate_clicks','redirects','media','search_queries',
-        'admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
+        'admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations','ai_jobs','ai_research_sources',
     ];
     foreach($requiredTables as $table){
         try{$db->query('SELECT 1 FROM `'.$table.'` LIMIT 1');$check('Table '.$table,true);}catch(Throwable $e){$check('Table '.$table,false,substr($e->getMessage(),0,160));}
@@ -50,6 +53,8 @@ try{
         'media'=>['thumbnail_path','optimized'],
         'brands'=>['active'],
         'specification_definitions'=>['active'],
+        'products'=>['asin','api_marketplace','last_synced_at','affiliate_url','source'],
+        'ai_jobs'=>['trigger_mode','stage','content_id','model','started_at','completed_at'],
     ];
     foreach($requiredColumns as $table=>$columns){
         foreach($columns as $column){
@@ -63,6 +68,18 @@ try{
 
     try{$migrationCount=(int)$db->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn();$check('Migration tracking',true,$migrationCount.' migration(s) recorded');}catch(Throwable $e){$check('Migration tracking',false,substr($e->getMessage(),0,160));}
     try{$userCount=(int)$db->query('SELECT COUNT(*) FROM users WHERE active=1')->fetchColumn();$check('Active admin/user account exists',$userCount>0,$userCount.' active user(s)');}catch(Throwable $e){$check('Active admin/user account exists',false,substr($e->getMessage(),0,160));}
+
+    try{
+        $ai=(new AiSettingsRepository())->get();
+        $aiConfigured=trim((string)($ai['ollama_url']??''))!==''&&trim((string)($ai['model']??''))!==''&&!empty($ai['api_key_configured']);
+        $check('AI remote configuration present',$aiConfigured,$aiConfigured?'Ollama URL, model and API key configured.':'Configure Ollama URL, model and API key in Admin > AI Content Settings.',true);
+    }catch(Throwable $e){$check('AI settings readable',false,substr($e->getMessage(),0,160));}
+
+    try{
+        $amazon=(new SettingsRepository())->amazon();
+        $amazonConfigured=!empty($amazon['enabled'])&&trim((string)($amazon['marketplace']??''))!==''&&trim((string)($amazon['partner_tag']??''))!==''&&trim((string)($amazon['credential_id']??''))!==''&&trim((string)($amazon['credential_secret']??''))!=='';
+        $check('Amazon Creators API profile configured',$amazonConfigured,$amazonConfigured?'Active marketplace profile has credentials and Partner Tag.':'Expected until Creators API credentials are added in Admin > Amazon Creators API.',true);
+    }catch(Throwable $e){$check('Amazon settings readable',false,substr($e->getMessage(),0,160));}
 }catch(Throwable $e){
     $check('Database connection',false,substr($e->getMessage(),0,200));
 }
