@@ -60,7 +60,7 @@ final class Html
 
             if($tag==='a'){
                 $href=self::extractAttribute($raw,'href');
-                $href=$href!==null?self::normalizeHref($href):null;
+                $href=$href!==null?self::sanitizeHref($href):null;
                 if($href!==null)$attrs['href']=$href;
                 $title=self::extractAttribute($raw,'title');
                 if($title!==null&&$title!=='')$attrs['title']=$title;
@@ -96,25 +96,27 @@ final class Html
         return null;
     }
 
-    private static function normalizeHref(string $href): ?string
+    /**
+     * Preserve editor-authored links unless they use an explicitly dangerous scheme.
+     * Browsers support many valid absolute, protocol-relative, root-relative,
+     * query/fragment and relative URL forms; sanitization should not silently erase them.
+     */
+    private static function sanitizeHref(string $href): ?string
     {
         $href=trim(html_entity_decode($href,ENT_QUOTES|ENT_HTML5,'UTF-8'));
         $href=(string)preg_replace('/[\x00-\x1F\x7F]+/u','',$href);
         if($href==='')return null;
 
-        if(preg_match('#^(https?://|//|/|#|mailto:|tel:)#i',$href)===1)return $href;
+        // Reject schemes that can execute code, expose local files, or embed active data.
+        if(preg_match('#^(?:javascript|vbscript|data|file):#i',$href)===1)return null;
 
-        // Editors sometimes paste links without a scheme (amazon.in/..., www.example.com/...).
-        if(preg_match('#^(?:www\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}(?:[/:?#].*)?$#i',$href)===1){
-            return 'https://'.$href;
+        // If a scheme is explicitly present, allow only normal web/contact schemes.
+        if(preg_match('#^([a-z][a-z0-9+.-]*):#i',$href,$m)===1){
+            if(!in_array(strtolower($m[1]),['http','https','mailto','tel'],true))return null;
         }
 
-        // Preserve ordinary relative site links such as blog/foo or product/bar.
-        if(!str_contains($href,':') && preg_match('#^[A-Za-z0-9._~!$&\'()*+,;=@%/\-]+(?:\?[^\s]*)?(?:#[^\s]*)?$#',$href)===1){
-            return $href;
-        }
-
-        return null;
+        // Keep the editor's href as authored. Spaces are encoded rather than discarded.
+        return str_replace(' ','%20',$href);
     }
 
     private static function cleanNode(DOMNode $node): void
@@ -136,7 +138,7 @@ final class Html
                     }
                 }
                 if($tag==='a'){
-                    $href=self::normalizeHref($child->getAttribute('href'));
+                    $href=self::sanitizeHref($child->getAttribute('href'));
                     if($href===null)$child->removeAttribute('href');
                     else $child->setAttribute('href',$href);
                     if(strtolower($child->getAttribute('target'))==='_blank')$child->setAttribute('rel','noopener noreferrer');
