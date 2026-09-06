@@ -91,13 +91,12 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   });
 
-  // Newsletter subscriber CRM entry. Kept here so the existing server-rendered sidebar remains untouched.
   const nav=document.querySelector('.admin-sidebar nav');
-  if(nav&&!nav.querySelector('a[href="/admin/newsletter.php"]')){
+  if(nav&&!nav.querySelector('a[href="/admin/newsletter"]')){
     const link=document.createElement('a');
-    link.href='/admin/newsletter.php';
+    link.href='/admin/newsletter';
     link.textContent='Newsletter Subscribers';
-    if(location.pathname==='/admin/newsletter.php')link.classList.add('active');
+    if(location.pathname.startsWith('/admin/newsletter'))link.classList.add('active');
     const analytics=[...nav.querySelectorAll('a')].find(a=>a.getAttribute('href')?.includes('/admin/analytics'));
     nav.insertBefore(link,analytics||null);
   }
