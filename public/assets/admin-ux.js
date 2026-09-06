@@ -90,4 +90,14 @@ document.addEventListener('DOMContentLoaded',()=>{
       count.textContent=visible+' of '+rows.length+' items';
     });
   });
+
+  const nav=document.querySelector('.admin-sidebar nav');
+  if(nav&&!nav.querySelector('a[href="/admin/newsletter"]')){
+    const link=document.createElement('a');
+    link.href='/admin/newsletter';
+    link.textContent='Newsletter Subscribers';
+    if(location.pathname.startsWith('/admin/newsletter'))link.classList.add('active');
+    const analytics=[...nav.querySelectorAll('a')].find(a=>a.getAttribute('href')?.includes('/admin/analytics'));
+    nav.insertBefore(link,analytics||null);
+  }
 });
