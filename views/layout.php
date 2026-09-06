@@ -70,8 +70,10 @@ $assetVersion=static function(string $relative): string {
     <link rel="stylesheet" href="/assets/catalog.css?v=<?= e($assetVersion('assets/catalog.css')) ?>">
     <link rel="stylesheet" href="/assets/accessibility.css?v=<?= e($assetVersion('assets/accessibility.css')) ?>">
     <link rel="stylesheet" href="/assets/embeds.css?v=<?= e($assetVersion('assets/embeds.css')) ?>">
+    <link rel="stylesheet" href="/assets/newsletter.css?v=<?= e($assetVersion('assets/newsletter.css')) ?>">
     <script src="/assets/search.js?v=<?= e($assetVersion('assets/search.js')) ?>" defer></script>
     <script src="/assets/navigation.js?v=<?= e($assetVersion('assets/navigation.js')) ?>" defer></script>
+    <script src="/assets/newsletter.js?v=<?= e($assetVersion('assets/newsletter.js')) ?>" defer></script>
     <script src="/assets/amazon-disclosure.js?v=<?= e($assetVersion('assets/amazon-disclosure.js')) ?>" defer></script>
 </head>
 <body>
