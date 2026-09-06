@@ -42,14 +42,8 @@ final class Html
         return $out;
     }
 
-    /**
-     * Safe fallback for shared hosts where ext-dom is unavailable.
-     * Keep editorial formatting and hyperlinks instead of flattening everything
-     * to plain text, while rebuilding opening tags from an attribute allow-list.
-     */
     private static function sanitizeWithoutDom(string $html): string
     {
-        // Remove script/style blocks completely before allowing editorial tags.
         $html=(string)preg_replace('#<(script|style)\b[^>]*>.*?</\1\s*>#is','',$html);
         $allowed='<'.implode('><',self::ALLOWED_TAGS).'>';
         $html=strip_tags($html,$allowed);
@@ -58,19 +52,16 @@ final class Html
             $tag=strtolower($m[1]);
             if(!in_array($tag,self::ALLOWED_TAGS,true))return '';
             $raw=(string)($m[2]??'');
-
-            // Void-ish editorial tags do not need attributes here.
             if(in_array($tag,['br','hr'],true))return '<'.$tag.'>';
 
             $attrs=[];
-            if(in_array('class',self::GLOBAL_ATTRIBUTES,true)){
-                $class=self::extractAttribute($raw,'class');
-                if($class!==null&&preg_match('/^[A-Za-z0-9_\-\s]{1,200}$/',$class))$attrs['class']=$class;
-            }
+            $class=self::extractAttribute($raw,'class');
+            if($class!==null&&preg_match('/^[A-Za-z0-9_\-\s]{1,200}$/',$class))$attrs['class']=$class;
 
             if($tag==='a'){
                 $href=self::extractAttribute($raw,'href');
-                if($href!==null&&self::isSafeHref($href))$attrs['href']=$href;
+                $href=$href!==null?self::normalizeHref($href):null;
+                if($href!==null)$attrs['href']=$href;
                 $title=self::extractAttribute($raw,'title');
                 if($title!==null&&$title!=='')$attrs['title']=$title;
                 $target=strtolower((string)(self::extractAttribute($raw,'target')??''));
@@ -105,10 +96,25 @@ final class Html
         return null;
     }
 
-    private static function isSafeHref(string $href): bool
+    private static function normalizeHref(string $href): ?string
     {
-        $href=trim($href);
-        return $href!==''&&preg_match('#^(https?://|//|/|#|mailto:|tel:)#i',$href)===1;
+        $href=trim(html_entity_decode($href,ENT_QUOTES|ENT_HTML5,'UTF-8'));
+        $href=(string)preg_replace('/[\x00-\x1F\x7F]+/u','',$href);
+        if($href==='')return null;
+
+        if(preg_match('#^(https?://|//|/|#|mailto:|tel:)#i',$href)===1)return $href;
+
+        // Editors sometimes paste links without a scheme (amazon.in/..., www.example.com/...).
+        if(preg_match('#^(?:www\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}(?:[/:?#].*)?$#i',$href)===1){
+            return 'https://'.$href;
+        }
+
+        // Preserve ordinary relative site links such as blog/foo or product/bar.
+        if(!str_contains($href,':') && preg_match('#^[A-Za-z0-9._~!$&\'()*+,;=@%/\-]+(?:\?[^\s]*)?(?:#[^\s]*)?$#',$href)===1){
+            return $href;
+        }
+
+        return null;
     }
 
     private static function cleanNode(DOMNode $node): void
@@ -130,10 +136,9 @@ final class Html
                     }
                 }
                 if($tag==='a'){
-                    $href=trim($child->getAttribute('href'));
-                    // Keep normal web, root-relative, fragment, email and phone links.
-                    // Reject script/data/file style schemes even if pasted from rich editors.
-                    if($href!==''&&!self::isSafeHref($href))$child->removeAttribute('href');
+                    $href=self::normalizeHref($child->getAttribute('href'));
+                    if($href===null)$child->removeAttribute('href');
+                    else $child->setAttribute('href',$href);
                     if(strtolower($child->getAttribute('target'))==='_blank')$child->setAttribute('rel','noopener noreferrer');
                 }
                 self::cleanNode($child);
