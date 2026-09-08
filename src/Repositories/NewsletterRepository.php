@@ -55,7 +55,7 @@ final class NewsletterRepository
         $where=[];$params=[];
         if($query!==''){$where[]='email LIKE :query';$params['query']='%'.$query.'%';}
         if(in_array($status,['active','unsubscribed'],true)){$where[]='status=:status';$params['status']=$status;}
-        if(in_array($validation,['clean','risky','unknown'],true)){$where[]='validation_status=:validation';$params['validation']=$validation;}
+        if(in_array($validation,['clean','risky','unknown','invalid'],true)){$where[]='validation_status=:validation';$params['validation']=$validation;}
         elseif($validation==='not_checked'){$where[]='validation_status IS NULL';}
         $sql='SELECT * FROM newsletter_subscribers'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY subscribed_at DESC,id DESC LIMIT 1000';
         $stmt=Database::connection()->prepare($sql);$stmt->execute($params);return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -63,7 +63,27 @@ final class NewsletterRepository
 
     public function stats(): array
     {
-        return Database::connection()->query("SELECT COUNT(*) total,SUM(status='active') active,SUM(status='unsubscribed') unsubscribed,SUM(validation_status='risky') risky,SUM(validation_status='unknown') unknown_count,SUM(validation_status IS NULL) not_checked FROM newsletter_subscribers")->fetch(PDO::FETCH_ASSOC) ?: ['total'=>0,'active'=>0,'unsubscribed'=>0,'risky'=>0,'unknown_count'=>0,'not_checked'=>0];
+        return Database::connection()->query("SELECT COUNT(*) total,SUM(status='active') active,SUM(status='unsubscribed') unsubscribed,SUM(validation_status='risky') risky,SUM(validation_status='invalid') invalid_count,SUM(validation_status='unknown') unknown_count,SUM(validation_status IS NULL) not_checked FROM newsletter_subscribers")->fetch(PDO::FETCH_ASSOC) ?: ['total'=>0,'active'=>0,'unsubscribed'=>0,'risky'=>0,'invalid_count'=>0,'unknown_count'=>0,'not_checked'=>0];
+    }
+
+    public function revalidate(int $id): void
+    {
+        $pdo=Database::connection();
+        $stmt=$pdo->prepare('SELECT email FROM newsletter_subscribers WHERE id=:id LIMIT 1');
+        $stmt->execute(['id'=>$id]);
+        $email=$stmt->fetchColumn();
+        if(!is_string($email) || $email==='') return;
+
+        $validation=(new EmailValidationClient())->validate($email);
+        $validationStatus=(string)($validation['status']??'unknown');
+        if(!in_array($validationStatus,['clean','risky','unknown','invalid'],true))$validationStatus='unknown';
+        $validationReason=substr(trim((string)($validation['reason']??'')),0,255);
+        $update=$pdo->prepare('UPDATE newsletter_subscribers SET validation_status=:validation_status,validation_reason=:validation_reason,validation_checked_at=NOW() WHERE id=:id');
+        $update->execute([
+            'validation_status'=>$validationStatus,
+            'validation_reason'=>$validationReason!==''?$validationReason:null,
+            'id'=>$id,
+        ]);
     }
 
     public function setStatus(int $id,string $status): void
