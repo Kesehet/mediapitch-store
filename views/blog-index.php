@@ -1,3 +1,4 @@
+<?php $publicAuthorName='Media Pitch Product Expert'; ?>
 <section class="section">
   <div class="container narrow center"><div class="eyebrow">MediaPitch Editorial</div><h1>Buying advice &amp; product insights</h1><p class="lead">Independent buying advice, practical product explainers, comparisons and shopping insights from the MediaPitch editorial team.</p></div>
 </section>
@@ -11,7 +12,7 @@
           <?php if(!empty($post['category_name'])):?><div class="eyebrow"><?= e($post['category_name']) ?></div><?php endif; ?>
           <h2><a href="<?= e(url('blog/' . $post['slug'])) ?>"><?= e($post['title']) ?></a></h2>
           <?php if(!empty($post['excerpt'])):?><p><?= e($post['excerpt']) ?></p><?php endif; ?>
-          <p class="muted"><?php if(!empty($post['published_at'])):?><time datetime="<?= e(gmdate('c',strtotime((string)$post['published_at'].' UTC'))) ?>"><?= e(date('j M Y',strtotime((string)$post['published_at']))) ?></time><?php endif; ?><?php if(!empty($post['author_name'])): ?> · <?= e($post['author_name']) ?><?php endif; ?></p>
+          <p class="muted"><?php if(!empty($post['published_at'])):?><time datetime="<?= e(gmdate('c',strtotime((string)$post['published_at'].' UTC'))) ?>"><?= e(date('j M Y',strtotime((string)$post['published_at']))) ?></time> · <?php endif; ?><?= e($publicAuthorName) ?></p>
         </div>
       </article>
     <?php endforeach; ?>
