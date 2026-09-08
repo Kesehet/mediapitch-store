@@ -22,9 +22,15 @@ if($method==='POST'){
     }
     header('Location: '.url('admin/newsletter').'?success='.rawurlencode('Subscriber updated.'));exit;
 }
-$query=trim((string)($_GET['q']??''));$status=(string)($_GET['status']??'all');$rows=$repo->all($query,$status);
+$query=trim((string)($_GET['q']??''));
+$status=(string)($_GET['status']??'all');
+$validation=(string)($_GET['validation']??'all');
+$rows=$repo->all($query,$status,$validation);
 if(($_GET['export']??'')==='csv'){
     header('Content-Type: text/csv; charset=utf-8');header('Content-Disposition: attachment; filename="mediapitch-newsletter-subscribers-'.date('Y-m-d').'.csv"');
-    $out=fopen('php://output','w');fputcsv($out,['Email','Status','Source','Subscribed at','Unsubscribed at']);foreach($rows as $row)fputcsv($out,[$row['email'],$row['status'],$row['source'],$row['subscribed_at'],$row['unsubscribed_at']]);fclose($out);exit;
+    $out=fopen('php://output','w');
+    fputcsv($out,['Email','Status','Source','Validation','Validation reason','Validation checked at','Subscribed at','Unsubscribed at']);
+    foreach($rows as $row)fputcsv($out,[$row['email'],$row['status'],$row['source'],$row['validation_status']??'', $row['validation_reason']??'', $row['validation_checked_at']??'', $row['subscribed_at'],$row['unsubscribed_at']]);
+    fclose($out);exit;
 }
-View::render('admin/newsletter',['pageTitle'=>'Newsletter Subscribers','adminUser'=>Auth::user(),'subscribers'=>$rows,'stats'=>$repo->stats(),'query'=>$query,'status'=>$status,'success'=>(string)($_GET['success']??'')],'admin/layout');
+View::render('admin/newsletter',['pageTitle'=>'Newsletter Subscribers','adminUser'=>Auth::user(),'subscribers'=>$rows,'stats'=>$repo->stats(),'query'=>$query,'status'=>$status,'validation'=>$validation,'success'=>(string)($_GET['success']??'')],'admin/layout');
