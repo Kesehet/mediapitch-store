@@ -22,16 +22,16 @@ final class NewsletterRepository
         // results are still allowed so a temporary validator outage never loses a signup.
         $validation=(new EmailValidationClient())->validate($email);
         $status=(string)($validation['status']??'unknown');
-
-        if($status==='invalid') {
-            throw new \InvalidArgumentException('Please enter an email address that can receive mail.');
-        }
-
         $suggestion=trim((string)($validation['suggestion']??''));
+
         if($suggestion!=='') {
             $at=strrpos($email,'@');
             $local=$at===false?$email:substr($email,0,$at);
             throw new \InvalidArgumentException('Please check your email address. Did you mean '.$local.'@'.$suggestion.'?');
+        }
+
+        if($status==='invalid') {
+            throw new \InvalidArgumentException('Please enter an email address that can receive mail.');
         }
 
         $stmt=Database::connection()->prepare("INSERT INTO newsletter_subscribers(email,status,source,subscribed_at,unsubscribed_at) VALUES(:email,'active',:source,NOW(),NULL) ON DUPLICATE KEY UPDATE status='active',source=VALUES(source),subscribed_at=IF(status='unsubscribed',NOW(),subscribed_at),unsubscribed_at=NULL,updated_at=CURRENT_TIMESTAMP");
