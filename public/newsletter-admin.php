@@ -19,8 +19,9 @@ if($method==='POST'){
         if($action==='delete')$repo->delete($id);
         elseif($action==='activate')$repo->setStatus($id,'active');
         elseif($action==='unsubscribe')$repo->setStatus($id,'unsubscribed');
+        elseif($action==='revalidate')$repo->revalidate($id);
     }
-    header('Location: '.url('admin/newsletter').'?success='.rawurlencode('Subscriber updated.'));exit;
+    header('Location: '.url('admin/newsletter').'?success='.rawurlencode($action==='revalidate'?'Email validation refreshed.':'Subscriber updated.'));exit;
 }
 $query=trim((string)($_GET['q']??''));
 $status=(string)($_GET['status']??'all');
