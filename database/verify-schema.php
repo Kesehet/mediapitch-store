@@ -11,12 +11,14 @@ $requiredTables=[
     'users','categories','brands','products','specification_definitions','product_specifications',
     'content','content_products','affiliate_clicks','settings','redirects','media',
     'search_queries','admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
+    'newsletter_subscribers',
 ];
 $requiredColumns=[
     'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
     'media'=>['thumbnail_path','optimized'],
     'brands'=>['active'],
     'specification_definitions'=>['active'],
+    'newsletter_subscribers'=>['validation_status','validation_reason','validation_checked_at'],
 ];
 $failures=[];
 
