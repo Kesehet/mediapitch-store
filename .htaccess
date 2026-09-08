@@ -8,9 +8,16 @@ RewriteRule ^robots\.txt$ public/robots.txt [L]
 RewriteRule ^sitemap\.xml$ public/sitemap.php [QSA,L]
 RewriteRule ^api/v1(?:/.*)?$ public/api-v1.php [QSA,L]
 RewriteRule ^newsletter-subscribe\.php$ public/newsletter-subscribe.php [QSA,L]
+
+# Admin routes that use dedicated entry points.
 RewriteRule ^admin/newsletter(?:/.*)?$ public/newsletter-admin.php [QSA,L]
 RewriteRule ^admin/settings/ai(?:/.*)?$ public/ai-settings.php [QSA,L]
 RewriteRule ^admin/settings/google-ads(?:/.*)?$ public/google-ads.php [QSA,L]
+
+# Always route the remaining admin area through the application front controller.
+# This must be before the existing-directory check because some hosts may expose
+# a physical /admin directory, which would otherwise produce a 403 with -Indexes.
+RewriteRule ^admin(?:/.*)?$ public/index.php [QSA,L]
 
 # Protect repository/application internals and secrets from direct web access.
 RewriteRule ^(?:src|database|views|docs|vendor|\.git|\.github)(?:/|$) - [F,L]
