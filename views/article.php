@@ -1,9 +1,10 @@
 <?php
+$publicAuthorName='Media Pitch Product Expert';
 $articleSchema=['@context'=>'https://schema.org','@type'=>'BlogPosting','headline'=>$post['title'],'description'=>(string)($post['excerpt'] ?? '')];
 if(!empty($post['featured_image_url'])) $articleSchema['image']=$post['featured_image_url'];
 if(!empty($post['published_at'])) $articleSchema['datePublished']=date(DATE_ATOM,strtotime((string)$post['published_at']));
 if(!empty($post['updated_at'])) $articleSchema['dateModified']=date(DATE_ATOM,strtotime((string)$post['updated_at']));
-if(!empty($post['author_name'])) $articleSchema['author']=['@type'=>'Person','name'=>$post['author_name']];
+$articleSchema['author']=['@type'=>'Person','name'=>$publicAuthorName];
 if(!empty($post['tags'])&&is_array($post['tags']))$articleSchema['keywords']=implode(', ',array_column($post['tags'],'name'));
 $articleSchema['mainEntityOfPage']=url('blog/'.$post['slug']);
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
@@ -20,7 +21,7 @@ $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forCont
     <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <a href="<?= e(url('blog')) ?>">Blog</a> · <?= e($post['title']) ?></nav>
     <?php if(!empty($post['category_name'])):?><div class="eyebrow"><?= e($post['category_name']) ?></div><?php endif; ?>
     <h1><?= e($post['title']) ?></h1>
-    <p class="muted"><?php if(!empty($post['published_at'])):?><?= e(date('j F Y',strtotime((string)$post['published_at']))) ?><?php endif; ?><?php if(!empty($post['author_name'])):?> · <?= e($post['author_name']) ?><?php endif; ?></p>
+    <p class="muted"><?php if(!empty($post['published_at'])):?><?= e(date('j F Y',strtotime((string)$post['published_at']))) ?> · <?php endif; ?><?= e($publicAuthorName) ?></p>
     <?php if(!empty($post['tags'])&&is_array($post['tags'])):?><div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.75rem 0"><?php foreach($post['tags'] as $tag):?><span class="badge">#<?= e($tag['name']) ?></span><?php endforeach;?></div><?php endif; ?>
     <?php if(!empty($post['excerpt'])):?><p class="lead"><?= e($post['excerpt']) ?></p><?php endif; ?>
   </div></header>
