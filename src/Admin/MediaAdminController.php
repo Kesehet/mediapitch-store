@@ -70,7 +70,8 @@ final class MediaAdminController
             if(!$uploads) $errors[]='Choose at least one image to upload.';
             foreach($uploads as $index=>$file){
                 try {
-                    $alt=trim((string)($altTexts[$index] ?? ($uploaded===0 ? $fallbackAlt : '')));
+                    $alt=trim((string)($altTexts[$index] ?? ''));
+                    if($alt==='' && count($uploads)===1) $alt=$fallbackAlt;
                     $stored=$this->storeUpload($file,$alt);
                     $uploaded++;
                     if(!empty($stored['optimized'])) $optimized++;
@@ -96,7 +97,7 @@ final class MediaAdminController
             try {
                 $id=(int)($_POST['id']??0);
                 $altText=trim((string)($_POST['alt_text']??''));
-                if(mb_strlen($altText)>500) throw new \InvalidArgumentException('Alt text must be 500 characters or fewer.');
+                if(strlen($altText)>500) throw new \InvalidArgumentException('Alt text must be 500 characters or fewer.');
                 $this->repo->updateAltText($id,$altText!==''?$altText:null);
                 Audit::record('media.alt.update','media',$id,'Updated media alt text',['alt_text'=>$altText]);
                 $this->setFlash('success','Alt text updated.');
