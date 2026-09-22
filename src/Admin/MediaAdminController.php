@@ -38,7 +38,7 @@ final class MediaAdminController
                 $categories=Auth::canManageProducts()
                     ? Database::connection()->query('SELECT id,name,image_url FROM categories ORDER BY name')->fetchAll(PDO::FETCH_ASSOC)
                     : [];
-                $items=$this->repo->all(100,$query);
+                $items=$this->repo->all(250,$query);
             }catch(Throwable $e){
                 $message=$e->getMessage();
                 if(str_contains($message,"Table") || str_contains($message,'Base table or view not found')){
@@ -62,15 +62,70 @@ final class MediaAdminController
 
         if ($path === '/admin/media/upload' && $method === 'POST') {
             $this->requireCsrf();
+            $uploads=$this->normalizeUploads($_FILES['images'] ?? null);
+            if(!$uploads && isset($_FILES['image']) && is_array($_FILES['image'])) $uploads=[$_FILES['image']];
+            $altTexts=is_array($_POST['alt_texts'] ?? null) ? $_POST['alt_texts'] : [];
+            $fallbackAlt=trim((string)($_POST['alt_text'] ?? ''));
+            $uploaded=0;$optimized=0;$errors=[];
+            if(!$uploads) $errors[]='Choose at least one image to upload.';
+            foreach($uploads as $index=>$file){
+                try {
+                    $alt=trim((string)($altTexts[$index] ?? ($uploaded===0 ? $fallbackAlt : '')));
+                    $stored=$this->storeUpload($file,$alt);
+                    $uploaded++;
+                    if(!empty($stored['optimized'])) $optimized++;
+                    Audit::record('media.upload','media',$stored['id']??null,'Uploaded media item',[
+                        'original_name'=>$stored['original_name']??'','file_path'=>$stored['file_path']??'','mime_type'=>$stored['mime_type']??'','file_size'=>$stored['file_size']??0,'optimized'=>!empty($stored['optimized']),
+                    ]);
+                } catch (Throwable $e) {
+                    $name=trim((string)($file['name'] ?? 'Image'));
+                    $errors[]=($name!==''?$name.': ':'').$e->getMessage();
+                }
+            }
+            if($uploaded>0){
+                $message=$uploaded===1 ? 'Image uploaded.' : $uploaded.' images uploaded.';
+                if($optimized>0) $message.=' '.$optimized.' optimized.';
+                $this->setFlash('success',$message);
+            }
+            if($errors) $this->setFlash('error',implode(' ',array_slice($errors,0,4)));
+            $this->redirect('/admin/media');
+        }
+
+        if ($path === '/admin/media/update-alt' && $method === 'POST') {
+            $this->requireCsrf();
             try {
-                $stored=$this->storeUpload($_FILES['image'] ?? [], trim((string)($_POST['alt_text'] ?? '')));
-                Audit::record('media.upload','media',$stored['id']??null,'Uploaded media item',[
-                    'original_name'=>$stored['original_name']??'','file_path'=>$stored['file_path']??'','mime_type'=>$stored['mime_type']??'','file_size'=>$stored['file_size']??0,'optimized'=>!empty($stored['optimized']),
-                ]);
-                $this->setFlash('success','Image uploaded'.(!empty($stored['optimized'])?' and optimized.':'.'));
+                $id=(int)($_POST['id']??0);
+                $altText=trim((string)($_POST['alt_text']??''));
+                if(mb_strlen($altText)>500) throw new \InvalidArgumentException('Alt text must be 500 characters or fewer.');
+                $this->repo->updateAltText($id,$altText!==''?$altText:null);
+                Audit::record('media.alt.update','media',$id,'Updated media alt text',['alt_text'=>$altText]);
+                $this->setFlash('success','Alt text updated.');
             } catch (Throwable $e) {
                 $this->setFlash('error',$e->getMessage());
             }
+            $this->redirect('/admin/media');
+        }
+
+        if ($path === '/admin/media/delete-bulk' && $method === 'POST') {
+            if (!Auth::canManageProducts()) { http_response_code(403); exit('Forbidden'); }
+            $this->requireCsrf();
+            $ids=is_array($_POST['ids']??null) ? array_values(array_unique(array_filter(array_map('intval',$_POST['ids'])))) : [];
+            $ids=array_slice($ids,0,100);
+            $deleted=0;$skipped=[];
+            foreach($ids as $id){
+                try {
+                    $item=$this->repo->deleteIfUnused($id);
+                    $this->storage->delete((string)$item['file_path']);
+                    if(!empty($item['thumbnail_path'])) $this->storage->delete((string)$item['thumbnail_path']);
+                    Audit::record('media.delete','media',$id,'Deleted unused media item',['file_path'=>$item['file_path']??'','bulk'=>true]);
+                    $deleted++;
+                } catch (Throwable $e) {
+                    $skipped[]=$e->getMessage();
+                }
+            }
+            if($deleted>0) $this->setFlash('success',$deleted===1?'1 unused media item deleted.':$deleted.' unused media items deleted.');
+            if($skipped) $this->setFlash('error',count($skipped).' selected item(s) were kept because they are in use or could not be deleted.');
+            if(!$ids) $this->setFlash('error','Select at least one media item.');
             $this->redirect('/admin/media');
         }
 
@@ -107,6 +162,26 @@ final class MediaAdminController
         }
 
         return false;
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function normalizeUploads(mixed $files): array
+    {
+        if(!is_array($files) || !isset($files['name'])) return [];
+        if(!is_array($files['name'])) return [$files];
+        $normalized=[];
+        foreach($files['name'] as $index=>$name){
+            $error=(int)($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+            if($error===UPLOAD_ERR_NO_FILE) continue;
+            $normalized[]=[
+                'name'=>$name,
+                'type'=>$files['type'][$index] ?? '',
+                'tmp_name'=>$files['tmp_name'][$index] ?? '',
+                'error'=>$error,
+                'size'=>$files['size'][$index] ?? 0,
+            ];
+        }
+        return $normalized;
     }
 
     private function storeUpload(array $file, string $altText): array
