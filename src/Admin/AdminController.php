@@ -247,7 +247,14 @@ final class AdminController
                     $this->redirect('/admin/blog/' . $id . '/edit');
                 } catch (Throwable $e) {
                     $this->setFlash('error','Article could not be saved: ' . $e->getMessage());
-                    $this->redirect('/admin/blog');
+                    $post=$_POST;
+                    if($existingId)$post['id']=$existingId;
+                    View::render('admin/blog-form', array_merge([
+                        'post'=>$post,
+                        'categories'=>$this->repo->categoryOptions(),
+                        'mediaItems'=>$media(),
+                    ], $this->common($existingId ? 'Edit Article' : 'New Article')), 'admin/layout');
+                    return true;
                 }
             }
         }
