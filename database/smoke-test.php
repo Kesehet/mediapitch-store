@@ -42,7 +42,7 @@ try{
     $requiredTables=[
         'users','categories','brands','products','content','content_products','product_specifications',
         'specification_definitions','settings','affiliate_clicks','redirects','media','search_queries',
-        'admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations','ai_jobs','ai_research_sources',
+        'admin_audit_log','password_reset_tokens','tags','content_tags','admin_form_drafts','schema_migrations','ai_jobs','ai_research_sources',
     ];
     foreach($requiredTables as $table){
         try{$db->query('SELECT 1 FROM `'.$table.'` LIMIT 1');$check('Table '.$table,true);}catch(Throwable $e){$check('Table '.$table,false,substr($e->getMessage(),0,160));}
@@ -51,9 +51,10 @@ try{
     $requiredColumns=[
         'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
         'media'=>['thumbnail_path','optimized'],
-        'brands'=>['active'],
+        'brands'=>['active','description','seo_title','meta_description','canonical_url','robots_index'],
         'specification_definitions'=>['active'],
-        'products'=>['asin','api_marketplace','last_synced_at','affiliate_url','source'],
+        'products'=>['asin','api_marketplace','last_synced_at','affiliate_url','source','seo_title','meta_description','canonical_url','robots_index'],
+        'categories'=>['seo_title','meta_description','canonical_url','robots_index'],
         'ai_jobs'=>['trigger_mode','stage','content_id','model','started_at','completed_at'],
     ];
     foreach($requiredColumns as $table=>$columns){
