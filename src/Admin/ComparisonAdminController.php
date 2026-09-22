@@ -62,11 +62,21 @@ final class ComparisonAdminController
                     'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'category_id'=>(int)($_POST['category_id']??0),
                     'product_ids'=>array_values(array_map('intval',is_array($_POST['product_id']??null)?$_POST['product_id']:[])),
                 ]);
+                if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Comparison saved.');
                 $this->redirect('/admin/comparisons/'.$id.'/edit');
             }catch(Throwable $e){
                 $this->setFlash('error','Comparison could not be saved: '.$e->getMessage());
-                $this->redirect('/admin/comparisons');
+                $comparison=$_POST;
+                if($existingId)$comparison['id']=$existingId;
+                $productIds=is_array($_POST['product_id']??null)?$_POST['product_id']:[];
+                $comparison['products']=array_map(static fn($id)=>['product_id'=>(int)$id],$productIds);
+                View::render('admin/comparison-form',array_merge([
+                    'comparison'=>$comparison,
+                    'categories'=>$this->admin->categoryOptions(),
+                    'productOptions'=>$this->admin->productOptions(),
+                ],$this->common($existingId?'Edit Comparison':'New Comparison')),'admin/layout');
+                return true;
             }
         }
         if($method==='POST'&&preg_match('#^/admin/comparisons/(\d+)/delete$#',$path,$m)){
