@@ -250,6 +250,21 @@ final class AdminController
                     $this->redirect('/admin/blog');
                 }
             }
+            if ($method === 'POST' && preg_match('#^/admin/blog/(\d+)/delete$#',$path,$m)) {
+                $this->requireCsrf();
+                $id=(int)$m[1];
+                try{
+                    $deleted=$contentRepo->deleteAdminContent($id,'blog');
+                    if(!$deleted) throw new \RuntimeException('Article not found.');
+                    Audit::record('blog.delete','blog',$id,'Deleted article',[
+                        'title'=>$deleted['title']??'','slug'=>$deleted['slug']??'','status'=>$deleted['status']??'',
+                    ]);
+                    $this->setFlash('success','Article deleted permanently.');
+                }catch(Throwable $e){
+                    $this->setFlash('error','Article could not be deleted: '.$e->getMessage());
+                }
+                $this->redirect('/admin/blog');
+            }
         }
 
         if (str_starts_with($path, '/admin/guides')) {
@@ -298,6 +313,21 @@ final class AdminController
                     ], $this->common($existingId ? 'Edit Buying Guide' : 'New Buying Guide')), 'admin/layout');
                     return true;
                 }
+            }
+            if ($method === 'POST' && preg_match('#^/admin/guides/(\d+)/delete$#',$path,$m)) {
+                $this->requireCsrf();
+                $id=(int)$m[1];
+                try{
+                    $deleted=$contentRepo->deleteAdminContent($id,'buying_guide');
+                    if(!$deleted) throw new \RuntimeException('Buying guide not found.');
+                    Audit::record('guide.delete','buying_guide',$id,'Deleted buying guide',[
+                        'title'=>$deleted['title']??'','slug'=>$deleted['slug']??'','status'=>$deleted['status']??'',
+                    ]);
+                    $this->setFlash('success','Buying guide deleted permanently.');
+                }catch(Throwable $e){
+                    $this->setFlash('error','Buying guide could not be deleted: '.$e->getMessage());
+                }
+                $this->redirect('/admin/guides');
             }
         }
 
