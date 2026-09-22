@@ -17,3 +17,5 @@ jobs:
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
       - name: SQL placeholder regression test
         run: php database/sql-placeholder-test.php
+      - name: Editorial SEO and draft hardening test
+        run: php database/editorial-hardening-test.php
