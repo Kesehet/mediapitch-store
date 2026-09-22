@@ -10,14 +10,16 @@ $db=Database::connection();
 $requiredTables=[
     'users','categories','brands','products','specification_definitions','product_specifications',
     'content','content_products','affiliate_clicks','settings','redirects','media',
-    'search_queries','admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
+    'search_queries','admin_audit_log','password_reset_tokens','tags','content_tags','admin_form_drafts','schema_migrations',
     'newsletter_subscribers',
 ];
 $requiredColumns=[
     'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
     'media'=>['thumbnail_path','optimized'],
-    'brands'=>['active'],
+    'brands'=>['active','description','seo_title','meta_description','canonical_url','robots_index'],
     'specification_definitions'=>['active'],
+    'products'=>['seo_title','meta_description','canonical_url','robots_index'],
+    'categories'=>['seo_title','meta_description','canonical_url','robots_index'],
     'newsletter_subscribers'=>['validation_status','validation_reason','validation_checked_at'],
 ];
 $failures=[];
