@@ -3,6 +3,13 @@ document.addEventListener('DOMContentLoaded',()=>{
     .filter(form=>form.method.toLowerCase()==='post' && form.querySelector('textarea, input[name="title"], input[name="name"]'));
   if(!forms.length)return;
 
+  const successfulSave=!!document.querySelector('.flash.success');
+  const lastSubmittedKey=sessionStorage.getItem('mediapitch:last-submitted-draft-key');
+  if(successfulSave&&lastSubmittedKey){
+    try{localStorage.removeItem('mediapitch:form-draft:'+lastSubmittedKey);}catch(_){}
+    sessionStorage.removeItem('mediapitch:last-submitted-draft-key');
+  }
+
   const csrf=form=>form.querySelector('input[name="_csrf"]')?.value||'';
   const keyFor=form=>{
     const id=form.querySelector('input[name="id"]')?.value||'new';
@@ -88,7 +95,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     form.addEventListener('input',schedule);
     form.addEventListener('change',schedule);
     window.addEventListener('beforeunload',saveLocal);
-    form.addEventListener('submit',()=>{saveLocal();});
+    form.addEventListener('submit',()=>{saveLocal();try{sessionStorage.setItem('mediapitch:last-submitted-draft-key',key);}catch(_){}});
 
     const candidates=[];
     try{
