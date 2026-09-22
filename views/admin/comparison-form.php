@@ -4,6 +4,7 @@
 <label class="span-2">Title<input name="title" required value="<?= e($c['title']??'') ?>"></label>
 <label>Slug<input name="slug" required value="<?= e($c['slug']??'') ?>"></label>
 <label>Category<select name="category_id"><option value="">—</option><?php foreach($categories as $category):?><option value="<?= (int)$category['id'] ?>" <?= (int)($c['category_id']??0)===(int)$category['id']?'selected':'' ?>><?= e($category['name']) ?></option><?php endforeach;?></select></label>
+<label class="span-2">Tags <small>comma-separated; up to 20</small><input name="tags" maxlength="1000" placeholder="flagship phones, Android, comparison" value="<?= e($c['tags'] ?? '') ?>"></label>
 <label class="span-2">Short summary<textarea name="excerpt" rows="3"><?= e($c['excerpt']??'') ?></textarea></label>
 <label class="span-2">Editorial verdict / comparison notes<textarea name="body" rows="8"><?= e($c['body']??'') ?></textarea></label>
 <label class="span-2">Featured image URL<input type="url" name="featured_image_url" value="<?= e($c['featured_image_url']??'') ?>"></label>

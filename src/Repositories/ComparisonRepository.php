@@ -39,6 +39,7 @@ final class ComparisonRepository
         );
         $stmt->execute(['id'=>$id]);
         $row['products']=$stmt->fetchAll(PDO::FETCH_ASSOC);
+        $row['tags']=implode(', ',array_column((new ContentRepository())->tagsForContent((int)$row['id']),'name'));
         return $row;
     }
 
@@ -95,6 +96,7 @@ final class ComparisonRepository
             foreach($productIds as $i=>$productId){
                 $insert->execute(['content_id'=>$id,'product_id'=>$productId,'sort_order'=>$i]);
             }
+            (new ContentRepository())->syncTags((int)$id,(string)($data['tags']??''));
             $db->commit();
             return (int)$id;
         }catch(\Throwable $e){
@@ -154,6 +156,7 @@ final class ComparisonRepository
             $definitions[$defId]['values'][(int)$row['product_id']]=$value;
         }
         $comparison['products']=$products;
+        $comparison['tags']=(new ContentRepository())->tagsForContent((int)$comparison['id']);
         $comparison['specifications']=array_values($definitions);
         return $comparison;
     }

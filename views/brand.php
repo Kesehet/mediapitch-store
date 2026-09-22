@@ -1,6 +1,7 @@
 <?php
 $products=$brand['products']??[];
 $brandSchema=['@context'=>'https://schema.org','@type'=>'Brand','name'=>$brand['name'],'url'=>url('brand/'.$brand['slug'])];
+if(!empty($brand['description']))$brandSchema['description']=$brand['description'];
 if(!empty($brand['logo_url']))$brandSchema['logo']=$brand['logo_url'];
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
  ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
@@ -12,6 +13,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
 <section class="section section-soft"><div class="container narrow">
 <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <?= e($brand['name']) ?></nav>
 <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap"><?php if(!empty($brand['logo_url'])):?><img src="<?= e($brand['logo_url']) ?>" alt="<?= e($brand['name']) ?> logo" style="max-width:120px;max-height:72px;object-fit:contain"><?php endif;?><div><span class="eyebrow">Brand</span><h1><?= e($brand['name']) ?></h1></div></div>
+<?php if(!empty($brand['description'])):?><p class="lead"><?= e($brand['description']) ?></p><?php endif;?>
 <?php if(!empty($brand['website_url'])):?><p><a class="text-link" style="margin-left:0" href="<?= e($brand['website_url']) ?>" rel="nofollow noopener" target="_blank">Official website ↗</a></p><?php endif;?>
 </div></section>
 <section class="section"><div class="container">

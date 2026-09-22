@@ -6,6 +6,7 @@ $articleSchema=['@context'=>'https://schema.org','@type'=>'Article','headline'=>
 if(!empty($comparison['featured_image_url']))$articleSchema['image']=$comparison['featured_image_url'];
 if(!empty($comparison['published_at']))$articleSchema['datePublished']=date(DATE_ATOM,strtotime((string)$comparison['published_at']));
 if(!empty($comparison['updated_at']))$articleSchema['dateModified']=date(DATE_ATOM,strtotime((string)$comparison['updated_at']));
+if(!empty($comparison['tags'])&&is_array($comparison['tags']))$articleSchema['keywords']=implode(', ',array_column($comparison['tags'],'name'));
 $itemList=['@context'=>'https://schema.org','@type'=>'ItemList','name'=>$comparison['title'].' products','itemListElement'=>[]];
 foreach($products as $i=>$product){$itemList['itemListElement'][]=['@type'=>'ListItem','position'=>$i+1,'item'=>['@type'=>'Product','name'=>$product['display_title']?:$product['title'],'url'=>url('product/'.$product['slug'])]];}
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
@@ -21,6 +22,7 @@ $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','i
 <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · <a href="<?= e(url('comparisons')) ?>">Comparisons</a> · <?= e($comparison['title']) ?></nav>
 <?php if(!empty($comparison['category_name'])):?><div class="eyebrow"><a href="<?= e(url('category/'.$comparison['category_slug'])) ?>"><?= e($comparison['category_name']) ?></a></div><?php endif;?>
 <h1><?= e($comparison['title']) ?></h1>
+<?php if(!empty($comparison['tags'])&&is_array($comparison['tags'])):?><div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.75rem 0"><?php foreach($comparison['tags'] as $tag):?><a class="badge" href="<?= e(url('tag/'.$tag['slug'])) ?>">#<?= e($tag['name']) ?></a><?php endforeach;?></div><?php endif;?>
 <?php if(!empty($comparison['excerpt'])):?><p class="lead"><?= e($comparison['excerpt']) ?></p><?php endif;?>
 </div></section>
 

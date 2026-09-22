@@ -22,7 +22,7 @@ $relatedItems=(new \MediaPitch\Repositories\RelatedContentRepository())->forCont
     <?php if(!empty($post['category_name'])):?><div class="eyebrow"><?= e($post['category_name']) ?></div><?php endif; ?>
     <h1><?= e($post['title']) ?></h1>
     <p class="muted"><?php if(!empty($post['published_at'])):?><?= e(date('j F Y',strtotime((string)$post['published_at']))) ?> · <?php endif; ?><?= e($publicAuthorName) ?></p>
-    <?php if(!empty($post['tags'])&&is_array($post['tags'])):?><div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.75rem 0"><?php foreach($post['tags'] as $tag):?><span class="badge">#<?= e($tag['name']) ?></span><?php endforeach;?></div><?php endif; ?>
+    <?php if(!empty($post['tags'])&&is_array($post['tags'])):?><div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.75rem 0"><?php foreach($post['tags'] as $tag):?><a class="badge" href="<?= e(url('tag/'.$tag['slug'])) ?>">#<?= e($tag['name']) ?></a><?php endforeach;?></div><?php endif; ?>
     <?php if(!empty($post['excerpt'])):?><p class="lead"><?= e($post['excerpt']) ?></p><?php endif; ?>
   </div></header>
   <?php if(!empty($post['featured_image_url'])):?><div class="container narrow"><img class="article-hero" src="<?= e($post['featured_image_url']) ?>" alt="<?= e($post['title']) ?>"></div><?php endif; ?>
