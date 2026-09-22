@@ -518,11 +518,14 @@ final class AdminRepository
 
         $stmt=$db->prepare(
             'SELECT id FROM products
-             WHERE title=:title OR display_title=:title
+             WHERE title=:title_exact OR display_title=:display_title_exact
              ORDER BY active DESC,id ASC
              LIMIT 1'
         );
-        $stmt->execute(['title'=>$title]);
+        $stmt->execute([
+            'title_exact'=>$title,
+            'display_title_exact'=>$title,
+        ]);
         $existing=(int)($stmt->fetchColumn() ?: 0);
         if($existing>0) return $existing;
 
