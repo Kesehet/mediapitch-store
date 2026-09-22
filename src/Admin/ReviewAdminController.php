@@ -57,7 +57,18 @@ final class ReviewAdminController
                     'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'product_id'=>(int)($_POST['product_id']??0),
                 ]);
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
-            }catch(Throwable $e){$this->setFlash('error',$e->getMessage());$this->redirect('/admin/reviews');}
+            }catch(Throwable $e){
+                $this->setFlash('error',$e->getMessage());
+                $review=$_POST;
+                if($existingId)$review['id']=$existingId;
+                View::render('admin/review-form',[
+                    'pageTitle'=>$existingId?'Edit Review':'New Review','adminUser'=>Auth::user(),
+                    'review'=>$review,'products'=>$this->admin->productOptions(),
+                    'categories'=>$this->admin->categoryOptions(),'mediaItems'=>(new MediaRepository())->all(),
+                    'success'=>$this->flash('success'),'error'=>$this->flash('error')
+                ],'admin/layout');
+                return true;
+            }
         }
         return false;
     }
