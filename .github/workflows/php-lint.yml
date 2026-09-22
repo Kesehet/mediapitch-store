@@ -15,3 +15,5 @@ jobs:
           php-version: '8.2'
       - name: Lint PHP files
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: SQL placeholder regression test
+        run: php database/sql-placeholder-test.php

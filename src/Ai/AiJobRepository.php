@@ -38,8 +38,9 @@ final class AiJobRepository
 
     public function setStage(int $id,string $stage,array $metadata=[]): void
     {
-        $stmt=Database::connection()->prepare('UPDATE ai_jobs SET stage=:stage,metadata_json=CASE WHEN :meta IS NULL THEN metadata_json ELSE :meta END WHERE id=:id');
-        $json=$metadata?json_encode($metadata,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE):null;$stmt->execute(['stage'=>substr($stage,0,80),'meta'=>$json,'id'=>$id]);
+        $stmt=Database::connection()->prepare('UPDATE ai_jobs SET stage=:stage,metadata_json=CASE WHEN :meta_check IS NULL THEN metadata_json ELSE :meta_value END WHERE id=:id');
+        $json=$metadata?json_encode($metadata,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE):null;
+        $stmt->execute(['stage'=>substr($stage,0,80),'meta_check'=>$json,'meta_value'=>$json,'id'=>$id]);
     }
 
     public function addSource(int $jobId,string $query,string $url,string $title,string $excerpt): void
