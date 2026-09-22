@@ -3,6 +3,7 @@ $guideSchema=['@context'=>'https://schema.org','@type'=>'Article','headline'=>$g
 if(!empty($guide['featured_image_url'])) $guideSchema['image']=$guide['featured_image_url'];
 if(!empty($guide['published_at'])) $guideSchema['datePublished']=date(DATE_ATOM,strtotime((string)$guide['published_at']));
 if(!empty($guide['updated_at'])) $guideSchema['dateModified']=date(DATE_ATOM,strtotime((string)$guide['updated_at']));
+if(!empty($guide['tags'])&&is_array($guide['tags'])) $guideSchema['keywords']=implode(', ',array_column($guide['tags'],'name'));
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
   ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
   ['@type'=>'ListItem','position'=>2,'name'=>'Buying Guides','item'=>url().'#guides'],
@@ -18,6 +19,7 @@ $guideContent=(new \MediaPitch\Services\GuideContent())->render((string)($guide[
         <nav class="muted" aria-label="Breadcrumb"><a href="<?= e(url()) ?>">Home</a> · Buying Guides · <?= e($guide['title']) ?></nav>
         <span class="eyebrow">Buying Guide</span>
         <h1><?= e($guide['title']) ?></h1>
+        <?php if(!empty($guide['tags'])&&is_array($guide['tags'])):?><div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.75rem 0"><?php foreach($guide['tags'] as $tag):?><a class="badge" href="<?= e(url('tag/'.$tag['slug'])) ?>">#<?= e($tag['name']) ?></a><?php endforeach;?></div><?php endif;?>
         <?php if (!empty($guide['excerpt'])): ?><p class="lead"><?= e($guide['excerpt']) ?></p><?php endif; ?>
     </div>
 </section>
