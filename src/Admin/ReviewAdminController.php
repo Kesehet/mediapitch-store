@@ -56,6 +56,7 @@ final class ReviewAdminController
                 Audit::record($existingId?'review.update':'review.create','review',$id,$existingId?'Updated review':'Created review',[
                     'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'product_id'=>(int)($_POST['product_id']??0),
                 ]);
+                if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
             }catch(Throwable $e){
                 $this->setFlash('error',$e->getMessage());
