@@ -40,6 +40,18 @@ document.addEventListener('DOMContentLoaded',()=>{
   };
   const restore=(form,payload)=>{
     if(!payload?.fields)return;
+
+    const repeated=['product_title[]','product_id[]','rank_position[]','score[]','product_best_for[]','recommendation[]','cta_text[]'];
+    const desired=Math.max(0,...repeated.map(name=>Array.isArray(payload.fields[name])?payload.fields[name].length:0));
+    const addButton=form.querySelector('#add-product')||document.getElementById('add-product');
+    if(desired>0&&addButton){
+      let current=Math.max(
+        form.querySelectorAll('[name="product_title[]"]').length,
+        form.querySelectorAll('[name="product_id[]"]').length
+      );
+      while(current<desired){addButton.click();current++;}
+    }
+
     Object.entries(payload.fields).forEach(([name,value])=>setField(form,name,value));
     form.dispatchEvent(new CustomEvent('mediapitch:draft-restored',{bubbles:true}));
   };
