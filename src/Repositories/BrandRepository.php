@@ -58,7 +58,7 @@ final class BrandRepository
         $seoTitle=trim((string)($data['seo_title']??''));
         $metaDescription=trim((string)($data['meta_description']??''));
         $canonicalUrl=trim((string)($data['canonical_url']??''));
-        $robotsIndex=!isset($data['robots_index'])||!empty($data['robots_index'])?1:0;
+        $robotsIndex=!empty($data['robots_index'])?1:0;
         if($name===''||$slug==='')throw new InvalidArgumentException('Brand name and slug are required.');
         if($website!==''&&!filter_var($website,FILTER_VALIDATE_URL))throw new InvalidArgumentException('Brand website URL is invalid.');
         if($logo!==''&&!filter_var($logo,FILTER_VALIDATE_URL))throw new InvalidArgumentException('Brand logo URL is invalid.');
