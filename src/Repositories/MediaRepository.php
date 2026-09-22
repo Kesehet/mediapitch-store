@@ -69,6 +69,14 @@ final class MediaRepository
         return (int) Database::connection()->lastInsertId();
     }
 
+    public function updateAltText(int $id, ?string $altText): void
+    {
+        $item=$this->find($id);
+        if(!$item) throw new InvalidArgumentException('Media item not found.');
+        $stmt=Database::connection()->prepare('UPDATE media SET alt_text=:alt_text WHERE id=:id');
+        $stmt->execute(['alt_text'=>$altText,'id'=>$id]);
+    }
+
     public function deleteIfUnused(int $id): array
     {
         $item=$this->find($id);
