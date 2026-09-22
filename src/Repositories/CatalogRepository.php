@@ -236,6 +236,7 @@ final class CatalogRepository
         );
         $products->execute(['content_id' => $guide['id']]);
         $guide['products'] = $products->fetchAll();
+        $guide['tags']=(new ContentRepository())->tagsForContent((int)$guide['id']);
         return $guide;
     }
 
