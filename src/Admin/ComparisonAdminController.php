@@ -10,6 +10,7 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
 use MediaPitch\Repositories\ComparisonRepository;
+use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\RedirectRepository;
 use Throwable;
 
@@ -67,6 +68,21 @@ final class ComparisonAdminController
                 $this->setFlash('error','Comparison could not be saved: '.$e->getMessage());
                 $this->redirect('/admin/comparisons');
             }
+        }
+        if($method==='POST'&&preg_match('#^/admin/comparisons/(\d+)/delete$#',$path,$m)){
+            $this->requireCsrf();
+            $id=(int)$m[1];
+            try{
+                $deleted=(new ContentRepository())->deleteAdminContent($id,'comparison');
+                if(!$deleted) throw new \RuntimeException('Comparison not found.');
+                Audit::record('comparison.delete','comparison',$id,'Deleted comparison',[
+                    'title'=>$deleted['title']??'','slug'=>$deleted['slug']??'','status'=>$deleted['status']??'',
+                ]);
+                $this->setFlash('success','Comparison deleted permanently.');
+            }catch(Throwable $e){
+                $this->setFlash('error','Comparison could not be deleted: '.$e->getMessage());
+            }
+            $this->redirect('/admin/comparisons');
         }
 
         http_response_code(404);

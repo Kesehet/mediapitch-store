@@ -85,6 +85,31 @@ final class ContentRepository
         }
     }
 
+    public function deleteAdminContent(int $id, string $type): ?array
+    {
+        if ($id < 1 || !in_array($type, ['blog','buying_guide','review','comparison'], true)) return null;
+
+        $db=Database::connection();
+        $db->beginTransaction();
+        try{
+            $stmt=$db->prepare('SELECT id,title,slug,status FROM content WHERE id=:id AND type=:type LIMIT 1 FOR UPDATE');
+            $stmt->execute(['id'=>$id,'type'=>$type]);
+            $row=$stmt->fetch(PDO::FETCH_ASSOC);
+            if(!$row){
+                $db->rollBack();
+                return null;
+            }
+
+            $delete=$db->prepare('DELETE FROM content WHERE id=:id AND type=:type');
+            $delete->execute(['id'=>$id,'type'=>$type]);
+            $db->commit();
+            return $row;
+        }catch(\Throwable $e){
+            if($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
     public function publishedPosts(int $limit = 20, int $offset = 0): array
     {
         $visibility=ContentVisibility::sql('c');

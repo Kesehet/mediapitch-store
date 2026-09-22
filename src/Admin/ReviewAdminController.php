@@ -9,6 +9,7 @@ use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
+use MediaPitch\Repositories\ContentRepository;
 use MediaPitch\Repositories\MediaRepository;
 use MediaPitch\Repositories\RedirectRepository;
 use MediaPitch\Repositories\ReviewRepository;
@@ -58,6 +59,19 @@ final class ReviewAdminController
                 ]);
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
             }catch(Throwable $e){$this->setFlash('error',$e->getMessage());$this->redirect('/admin/reviews');}
+        }
+        if($method==='POST'&&preg_match('#^/admin/reviews/(\d+)/delete$#',$path,$m)){
+            if(!Csrf::validate(isset($_POST['_csrf'])?(string)$_POST['_csrf']:null)){http_response_code(419);exit('Invalid or expired form token.');}
+            $id=(int)$m[1];
+            try{
+                $deleted=(new ContentRepository())->deleteAdminContent($id,'review');
+                if(!$deleted) throw new \RuntimeException('Review not found.');
+                Audit::record('review.delete','review',$id,'Deleted review',[
+                    'title'=>$deleted['title']??'','slug'=>$deleted['slug']??'','status'=>$deleted['status']??'',
+                ]);
+                $this->setFlash('success','Review deleted permanently.');
+            }catch(Throwable $e){$this->setFlash('error','Review could not be deleted: '.$e->getMessage());}
+            $this->redirect('/admin/reviews');
         }
         return false;
     }

@@ -53,6 +53,37 @@ final class RedirectRepository
         return (int)Database::connection()->lastInsertId();
     }
 
+    public function disable(int $id): bool
+    {
+        if($id<1)return false;
+        $stmt=Database::connection()->prepare('UPDATE redirects SET active=0 WHERE id=:id');
+        $stmt->execute(['id'=>$id]);
+        return $stmt->rowCount()>0;
+    }
+
+    public function delete(int $id): ?array
+    {
+        if($id<1)return null;
+        $db=Database::connection();
+        $db->beginTransaction();
+        try{
+            $stmt=$db->prepare('SELECT * FROM redirects WHERE id=:id LIMIT 1 FOR UPDATE');
+            $stmt->execute(['id'=>$id]);
+            $row=$stmt->fetch(PDO::FETCH_ASSOC);
+            if(!$row){
+                $db->rollBack();
+                return null;
+            }
+            $delete=$db->prepare('DELETE FROM redirects WHERE id=:id');
+            $delete->execute(['id'=>$id]);
+            $db->commit();
+            return $row;
+        }catch(\Throwable $e){
+            if($db->inTransaction())$db->rollBack();
+            throw $e;
+        }
+    }
+
     public function upsert(string $fromPath,string $toUrl,int $status=301): void
     {
         $from=$this->normalizePath($fromPath);
