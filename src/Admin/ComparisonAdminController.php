@@ -61,6 +61,7 @@ final class ComparisonAdminController
                     'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'category_id'=>(int)($_POST['category_id']??0),
                     'product_ids'=>array_values(array_map('intval',is_array($_POST['product_id']??null)?$_POST['product_id']:[])),
                 ]);
+                if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Comparison saved.');
                 $this->redirect('/admin/comparisons/'.$id.'/edit');
             }catch(Throwable $e){
