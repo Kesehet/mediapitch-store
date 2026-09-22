@@ -49,7 +49,10 @@ final class CategoryAdminController
                 ]);
                 if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Category saved.');
-            }catch(Throwable $e){$this->setFlash('error','Category could not be saved: '.$e->getMessage());}
+            }catch(Throwable $e){
+                $this->setFlash('error','Category could not be saved: '.$e->getMessage());
+                $this->redirect($id?'/admin/categories?edit='.$id:'/admin/categories');
+            }
             $this->redirect('/admin/categories');
         }
 
