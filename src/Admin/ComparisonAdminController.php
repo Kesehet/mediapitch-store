@@ -65,7 +65,16 @@ final class ComparisonAdminController
                 $this->redirect('/admin/comparisons/'.$id.'/edit');
             }catch(Throwable $e){
                 $this->setFlash('error','Comparison could not be saved: '.$e->getMessage());
-                $this->redirect('/admin/comparisons');
+                $comparison=$_POST;
+                if($existingId)$comparison['id']=$existingId;
+                $productIds=is_array($_POST['product_id']??null)?$_POST['product_id']:[];
+                $comparison['products']=array_map(static fn($id)=>['product_id'=>(int)$id],$productIds);
+                View::render('admin/comparison-form',array_merge([
+                    'comparison'=>$comparison,
+                    'categories'=>$this->admin->categoryOptions(),
+                    'productOptions'=>$this->admin->productOptions(),
+                ],$this->common($existingId?'Edit Comparison':'New Comparison')),'admin/layout');
+                return true;
             }
         }
 
