@@ -25,6 +25,10 @@ document.addEventListener('DOMContentLoaded',()=>{
         data[name].push(String(value));
       }else data[name]=String(value);
     }
+    form.querySelectorAll('input[type="checkbox"][name],input[type="radio"][name]').forEach(control=>{
+      if(control.name==='_csrf'||control.name==='_draft_key')return;
+      if(!Object.prototype.hasOwnProperty.call(data,control.name))data[control.name]='';
+    });
     return {version:2,savedAt:Date.now(),path:location.pathname,fields:data};
   };
   const setField=(form,name,value)=>{
