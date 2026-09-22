@@ -16,6 +16,7 @@ use MediaPitch\Repositories\UserRepository;
 use MediaPitch\Services\ProductAdminActions;
 use MediaPitch\Services\ProductAuthoring;
 use MediaPitch\Services\ProductGallery;
+use MediaPitch\Services\ProductLinkMetadata;
 use Throwable;
 
 final class AdminController
@@ -148,6 +149,19 @@ final class AdminController
             $this->requireEditor();
             if ($path === '/admin/products' && $method === 'GET') {
                 View::render('admin/products', array_merge(['products'=>$this->repo->products()], $this->common('Products')), 'admin/layout');
+                return true;
+            }
+            if ($path === '/admin/products/fetch-metadata' && $method === 'POST') {
+                $this->requireCsrf();
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-store');
+                try {
+                    $metadata=(new ProductLinkMetadata())->fetch((string)($_POST['url']??''));
+                    echo json_encode(['ok'=>true,'metadata'=>$metadata],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+                } catch (Throwable $e) {
+                    http_response_code(422);
+                    echo json_encode(['ok'=>false,'error'=>$e->getMessage()],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+                }
                 return true;
             }
             if ($method === 'GET' && ($path === '/admin/products/new' || preg_match('#^/admin/products/(\d+)/edit$#', $path, $m))) {
