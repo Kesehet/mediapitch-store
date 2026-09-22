@@ -260,6 +260,17 @@ final class AdminRepository
 
         $db->beginTransaction();
         try {
+            if(!$params['brand_id']){
+                $detectedBrand=trim((string)($data['detected_brand_name']??''));
+                if($detectedBrand!=='')$params['brand_id']=$this->findOrCreateMetadataBrand($db,$detectedBrand);
+            }
+            if(($data['metadata_provider']??'')==='amazon_creators_api' && in_array((string)$params['source'],['amazon_api','hybrid'],true)){
+                $marketplace=strtolower(trim((string)($data['metadata_marketplace']??'')));
+                if($marketplace!==''&&strlen($marketplace)<=100&&preg_match('/^[a-z0-9.-]+$/',$marketplace)){
+                    $params['api_marketplace']=$marketplace;
+                    $params['last_synced_at']=gmdate('Y-m-d H:i:s');
+                }
+            }
             $fields = array_keys($params);
             if ($id) {
                 $params['id'] = $id;
@@ -281,6 +292,41 @@ final class AdminRepository
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    private function findOrCreateMetadataBrand(PDO $db,string $name): ?int
+    {
+        $name=trim(preg_replace('/\s+/u',' ',strip_tags($name))??$name);
+        $name=substr($name,0,150);
+        if($name==='')return null;
+
+        $stmt=$db->prepare('SELECT id FROM brands WHERE name=:name LIMIT 1');
+        $stmt->execute(['name'=>$name]);
+        $existing=$stmt->fetchColumn();
+        if($existing)return (int)$existing;
+
+        $slugSource=$name;
+        if(function_exists('iconv')){
+            $ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$slugSource);
+            if(is_string($ascii)&&$ascii!=='')$slugSource=$ascii;
+        }
+        $base=trim(preg_replace('/[^a-z0-9]+/','-',strtolower($slugSource))??'','-');
+        if($base==='')return null;
+        $base=substr($base,0,170);
+        $slug=$base;$suffix=2;
+        $check=$db->prepare('SELECT id,name FROM brands WHERE slug=:slug LIMIT 1');
+        while(true){
+            $check->execute(['slug'=>$slug]);
+            $collision=$check->fetch(PDO::FETCH_ASSOC);
+            if(!$collision)break;
+            if(strcasecmp((string)$collision['name'],$name)===0)return (int)$collision['id'];
+            $suffixText='-'.$suffix++;
+            $slug=substr($base,0,180-strlen($suffixText)).$suffixText;
+        }
+
+        $insert=$db->prepare('INSERT INTO brands (name,slug,website_url,logo_url) VALUES (:name,:slug,NULL,NULL)');
+        $insert->execute(['name'=>$name,'slug'=>$slug]);
+        return (int)$db->lastInsertId();
     }
 
     private function saveProductSpecifications(int $productId, ?int $categoryId, array $submitted): void

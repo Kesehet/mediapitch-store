@@ -28,6 +28,9 @@ final class ProductAuthoring
             $marketStmt=$db->prepare('SELECT api_marketplace FROM products WHERE id=:id LIMIT 1');
             $marketStmt->execute(['id'=>$productId]);
             $currentMarketplace=strtolower(trim((string)($marketStmt->fetchColumn()?:'')));
+        }elseif(($data['metadata_provider']??'')==='amazon_creators_api'){
+            $candidate=strtolower(trim((string)($data['metadata_marketplace']??'')));
+            if($candidate!==''&&strlen($candidate)<=100&&preg_match('/^[a-z0-9.-]+$/',$candidate))$currentMarketplace=$candidate;
         }
 
         $sql='SELECT id,title FROM products WHERE slug=:slug';
