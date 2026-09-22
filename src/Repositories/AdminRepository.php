@@ -364,7 +364,12 @@ final class AdminRepository
 
     public function productOptions(): array
     {
-        return Database::connection()->query('SELECT id,COALESCE(display_title,title) AS title FROM products WHERE active=1 ORDER BY title LIMIT 1000')->fetchAll(PDO::FETCH_ASSOC);
+        return Database::connection()->query(
+            'SELECT id,COALESCE(display_title,title) AS title,active
+             FROM products
+             ORDER BY active DESC, title
+             LIMIT 2000'
+        )->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function saveGuide(array $data, int $authorId, ?int $id = null): int
@@ -406,24 +411,35 @@ final class AdminRepository
             }
 
             $db->prepare('DELETE FROM content_products WHERE content_id=:id')->execute(['id'=>$id]);
-            $productIds=$data['product_id'] ?? [];
-            if (!is_array($productIds)) $productIds=[];
-            $rank=$data['rank_position'] ?? [];
-            $score=$data['score'] ?? [];
-            $bestFor=$data['product_best_for'] ?? [];
-            $recommendation=$data['recommendation'] ?? [];
-            $cta=$data['cta_text'] ?? [];
+
+            $productIds=is_array($data['product_id'] ?? null) ? $data['product_id'] : [];
+            $productTitles=is_array($data['product_title'] ?? null) ? $data['product_title'] : [];
+            $rank=is_array($data['rank_position'] ?? null) ? $data['rank_position'] : [];
+            $score=is_array($data['score'] ?? null) ? $data['score'] : [];
+            $bestFor=is_array($data['product_best_for'] ?? null) ? $data['product_best_for'] : [];
+            $recommendation=is_array($data['recommendation'] ?? null) ? $data['recommendation'] : [];
+            $cta=is_array($data['cta_text'] ?? null) ? $data['cta_text'] : [];
+
             $insert=$db->prepare(
                 'INSERT INTO content_products (content_id,product_id,rank_position,score,best_for_label,recommendation,cta_text,sort_order)
                  VALUES (:content_id,:product_id,:rank_position,:score,:best_for_label,:recommendation,:cta_text,:sort_order)'
             );
+
             $seen=[];
-            foreach($productIds as $i=>$productId){
-                $productId=(int)$productId;
-                if($productId<1 || isset($seen[$productId])) continue;
+            $rowCount=max(count($productIds),count($productTitles));
+            for($i=0;$i<$rowCount;$i++){
+                $productId=$this->resolveGuideProductId(
+                    $db,
+                    $productIds[$i] ?? null,
+                    (string)($productTitles[$i] ?? ''),
+                    $params['category_id']
+                );
+                if(!$productId || isset($seen[$productId])) continue;
                 $seen[$productId]=true;
+
                 $insert->execute([
-                    'content_id'=>$id,'product_id'=>$productId,
+                    'content_id'=>$id,
+                    'product_id'=>$productId,
                     'rank_position'=>isset($rank[$i]) && $rank[$i]!=='' ? (int)$rank[$i] : $i+1,
                     'score'=>isset($score[$i]) && $score[$i]!=='' ? (float)$score[$i] : null,
                     'best_for_label'=>trim((string)($bestFor[$i] ?? '')) ?: null,
@@ -432,11 +448,78 @@ final class AdminRepository
                     'sort_order'=>$i,
                 ]);
             }
+
             $db->commit();
             return (int)$id;
         } catch (\Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
+        }
+    }
+
+    private function resolveGuideProductId(PDO $db, mixed $rawProductId, string $rawTitle, ?int $categoryId): ?int
+    {
+        $productId=(int)$rawProductId;
+        if($productId>0){
+            $stmt=$db->prepare('SELECT id FROM products WHERE id=:id LIMIT 1');
+            $stmt->execute(['id'=>$productId]);
+            $existing=(int)($stmt->fetchColumn() ?: 0);
+            if($existing>0) return $existing;
+        }
+
+        $title=$this->guideProductTitle($rawTitle);
+        if($title==='') return null;
+
+        $stmt=$db->prepare(
+            'SELECT id FROM products
+             WHERE title=:title OR display_title=:title
+             ORDER BY active DESC,id ASC
+             LIMIT 1'
+        );
+        $stmt->execute(['title'=>$title]);
+        $existing=(int)($stmt->fetchColumn() ?: 0);
+        if($existing>0) return $existing;
+
+        $slug=$this->uniqueGuideProductSlug($db,$title);
+        $insert=$db->prepare(
+            "INSERT INTO products (category_id,title,slug,source,editorial_notes,active)
+             VALUES (:category_id,:title,:slug,'manual',:editorial_notes,0)"
+        );
+        $insert->execute([
+            'category_id'=>$categoryId,
+            'title'=>$title,
+            'slug'=>$slug,
+            'editorial_notes'=>'Auto-created from a buying guide. Complete the product details before activating the standalone product page.',
+        ]);
+        return (int)$db->lastInsertId();
+    }
+
+    private function guideProductTitle(string $value): string
+    {
+        $value=trim($value);
+        if($value==='') return '';
+        return trim((string)(preg_replace('/\\s*·\\s*#\\d+\\s*$/u','',$value) ?? $value));
+    }
+
+    private function uniqueGuideProductSlug(PDO $db, string $title): string
+    {
+        $value=$title;
+        if(function_exists('iconv')){
+            $ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$value);
+            if(is_string($ascii) && $ascii!=='') $value=$ascii;
+        }
+        $value=strtolower($value);
+        $base=trim((string)(preg_replace('/[^a-z0-9]+/','-',$value) ?? ''),'-');
+        if($base==='') $base='guide-product';
+
+        $base=substr($base,0,220);
+        $slug=$base;
+        $suffix=2;
+        $check=$db->prepare('SELECT COUNT(*) FROM products WHERE slug=:slug');
+        while(true){
+            $check->execute(['slug'=>$slug]);
+            if((int)$check->fetchColumn()===0) return $slug;
+            $slug=$base.'-'.$suffix++;
         }
     }
 }
