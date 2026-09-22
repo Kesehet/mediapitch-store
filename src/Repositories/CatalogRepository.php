@@ -227,9 +227,9 @@ final class CatalogRepository
         $products = Database::connection()->prepare(
             'SELECT cp.rank_position, cp.score AS guide_score, cp.best_for_label AS guide_best_for, cp.recommendation, cp.cta_text,
                     p.id, p.title, p.display_title, p.slug, p.main_image_url, p.short_description, p.features_json, p.pros_json, p.cons_json,
-                    p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, b.name AS brand_name
+                    p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, p.active, b.name AS brand_name
              FROM content_products cp
-             JOIN products p ON p.id = cp.product_id AND p.active = 1
+             JOIN products p ON p.id = cp.product_id
              LEFT JOIN brands b ON b.id = p.brand_id
              WHERE cp.content_id = :content_id
              ORDER BY COALESCE(cp.rank_position, 999999), cp.sort_order, cp.id'

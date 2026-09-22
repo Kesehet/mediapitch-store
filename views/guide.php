@@ -55,7 +55,7 @@ $guideContent=(new \MediaPitch\Services\GuideContent())->render((string)($guide[
                             <?php if ($cons): ?><div><strong>Cons</strong><ul><?php foreach (array_slice($cons, 0, 3) as $con): ?><li><?= e((string) $con) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
                         </div>
                         <?php if (!empty($item['affiliate_url'])): ?><a class="button" href="/go/<?= (int) $item['id'] ?>?content=<?= (int) $guide['id'] ?>&rank=<?= (int) $item['rank_position'] ?>&from=guide"><?= e($item['cta_text'] ?: 'Check Price on Amazon') ?></a><?php endif; ?>
-                        <a class="text-link" href="/product/<?= e($item['slug']) ?>">Read product details</a>
+                        <?php if (!empty($item['active'])): ?><a class="text-link" href="/product/<?= e($item['slug']) ?>">Read product details</a><?php else: ?><span class="muted">Product details are being completed.</span><?php endif; ?>
                     </div>
                 </div>
             </div>
