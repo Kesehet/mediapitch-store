@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MediaPitch\Admin\AdminController;
+use MediaPitch\Admin\AdminFormDraftController;
 use MediaPitch\Admin\AnalyticsAdminController;
 use MediaPitch\Admin\AuditAdminController;
 use MediaPitch\Admin\BrandAdminController;
@@ -19,6 +20,7 @@ use MediaPitch\Admin\SpecificationAdminController;
 use MediaPitch\Core\Database;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\AdminRepository;
+use MediaPitch\Repositories\AdminFormDraftRepository;
 use MediaPitch\Repositories\AnalyticsRepository;
 use MediaPitch\Repositories\AuditRepository;
 use MediaPitch\Repositories\BrandRepository;
@@ -57,6 +59,10 @@ $path = '/' . trim($path, '/');
 if ($path === '//') $path = '/';
 
 try {
+    if (str_starts_with($path, '/admin/form-drafts')) {
+        $draftAdmin = new AdminFormDraftController(new AdminFormDraftRepository());
+        if ($draftAdmin->handle($method, $path)) exit;
+    }
     if (in_array($path,['/admin/forgot-password','/admin/reset-password'],true)) {
         $passwordResetAdmin = new PasswordResetAdminController(new PasswordReset());
         if ($passwordResetAdmin->handle($method, $path)) exit;
@@ -138,12 +144,12 @@ try {
 
     if ($method === 'GET' && preg_match('#^/category/([a-z0-9-]+)$#i',$path,$matches)) {
         $category=$catalog->categoryBySlug($matches[1]);if(!$category){http_response_code(404);View::render('404',['pageTitle'=>'Category not found','metaDescription'=>'']);exit;}
-        View::render('category',['pageTitle'=>($category['seo_title'] ?: $category['name']).' — MediaPitch Store','metaDescription'=>(string)($category['meta_description'] ?: $category['description']),'canonicalUrl'=>url('category/'.$category['slug']),'category'=>$category,'breadcrumbs'=>$categoryHierarchy->ancestors((int)$category['id'])]);exit;
+        View::render('category',['pageTitle'=>($category['seo_title'] ?: $category['name']).' — MediaPitch Store','metaDescription'=>(string)($category['meta_description'] ?: $category['description']),'canonicalUrl'=>$category['canonical_url'] ?: url('category/'.$category['slug']),'robotsIndex'=>(bool)$category['robots_index'],'category'=>$category,'breadcrumbs'=>$categoryHierarchy->ancestors((int)$category['id'])]);exit;
     }
 
     if ($method === 'GET' && preg_match('#^/brand/([a-z0-9-]+)$#i',$path,$matches)) {
         $brand=$brandRepo->bySlug($matches[1]);if(!$brand){http_response_code(404);View::render('404',['pageTitle'=>'Brand not found','metaDescription'=>'']);exit;}
-        View::render('brand',['pageTitle'=>$brand['name'].' | MediaPitch Store','metaDescription'=>'Browse '.$brand['name'].' products, recommendations and MediaPitch scores.','canonicalUrl'=>url('brand/'.$brand['slug']),'brand'=>$brand]);exit;
+        View::render('brand',['pageTitle'=>($brand['seo_title'] ?: $brand['name']).' | MediaPitch Store','metaDescription'=>(string)($brand['meta_description'] ?: ($brand['description'] ?: 'Browse '.$brand['name'].' products, recommendations and MediaPitch scores.')),'canonicalUrl'=>$brand['canonical_url'] ?: url('brand/'.$brand['slug']),'robotsIndex'=>(bool)$brand['robots_index'],'brand'=>$brand]);exit;
     }
 
     if ($method === 'GET' && $path === '/blog') {View::render('blog-index',['pageTitle'=>'MediaPitch Blog — Buying Advice & Product Guides','metaDescription'=>'Buying advice, product explainers, how-to articles and shopping insights from MediaPitch.','posts'=>$contentRepo->publishedPosts()]);exit;}
@@ -163,6 +169,13 @@ try {
         View::render('review',['pageTitle'=>($review['seo_title'] ?: $review['title']).' — MediaPitch','metaDescription'=>(string)($review['meta_description'] ?: $review['excerpt']),'canonicalUrl'=>$review['canonical_url'] ?: url('review/'.$review['slug']),'robotsIndex'=>(bool)$review['robots_index'],'review'=>$review]);exit;
     }
 
+    if ($method === 'GET' && preg_match('#^/tag/([a-z0-9-]+)$#i',$path,$matches)) {
+        $tag=$contentRepo->tagBySlug($matches[1]);
+        if(!$tag){http_response_code(404);View::render('404',['pageTitle'=>'Tag not found','metaDescription'=>'']);exit;}
+        $items=$contentRepo->publishedByTag($matches[1]);
+        View::render('tag',['pageTitle'=>$tag['name'].' | MediaPitch','metaDescription'=>'Browse MediaPitch content about '.$tag['name'].'.','canonicalUrl'=>url('tag/'.$tag['slug']),'tag'=>$tag,'items'=>$items]);exit;
+    }
+
     if ($method === 'GET' && $path === '/search') {
         $query=trim((string)($_GET['q']??''));$page=max(1,(int)($_GET['page']??1));$categoryId=max(0,(int)($_GET['category']??0));
         $results=$query!==''?$searchRepo->search($query,$page,12,$categoryId?:null):['products'=>[],'categories'=>[],'guides'=>[],'comparisons'=>[],'articles'=>[],'reviews'=>[],'result_count'=>0,'pagination'=>['page'=>1,'pages'=>1,'product_total'=>0]];
@@ -173,7 +186,7 @@ try {
     if ($method === 'GET' && preg_match('#^/product/([a-z0-9-]+)$#i',$path,$matches)) {
         $product=$catalog->productBySlug($matches[1]);if(!$product){http_response_code(404);View::render('404',['pageTitle'=>'Product not found','metaDescription'=>'']);exit;}
         $related=$relatedRepo->forProduct((int)$product['id'],!empty($product['category_id'])?(int)$product['category_id']:null);
-        View::render('product',['pageTitle'=>($product['display_title'] ?: $product['title']).' — MediaPitch','metaDescription'=>(string)($product['short_description']??''),'canonicalUrl'=>url('product/'.$product['slug']),'product'=>$product,'relatedProducts'=>$related['products'],'relatedGuides'=>$related['guides']]);exit;
+        View::render('product',['pageTitle'=>($product['seo_title'] ?: ($product['display_title'] ?: $product['title'])).' — MediaPitch','metaDescription'=>(string)($product['meta_description'] ?: ($product['short_description']??'')),'canonicalUrl'=>$product['canonical_url'] ?: url('product/'.$product['slug']),'robotsIndex'=>(bool)$product['robots_index'],'product'=>$product,'relatedProducts'=>$related['products'],'relatedGuides'=>$related['guides']]);exit;
     }
 
     if ($method === 'GET' && preg_match('#^/guide/([a-z0-9-]+)$#i',$path,$matches)) {
