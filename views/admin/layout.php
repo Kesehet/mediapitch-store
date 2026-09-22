@@ -11,6 +11,8 @@ $adminEditorCssVersion = (string) @filemtime($assetRoot . 'admin-editor.css');
 $adminUxCssVersion = (string) @filemtime($assetRoot . 'admin-ux.css');
 $adminEditorJsVersion = (string) @filemtime($assetRoot . 'admin-editor.js');
 $adminUxJsVersion = (string) @filemtime($assetRoot . 'admin-ux.js');
+$adminMediaCssVersion = (string) @filemtime($assetRoot . 'admin-media.css');
+$adminMediaJsVersion = (string) @filemtime($assetRoot . 'admin-media.js');
 $productSyncJsVersion = (string) @filemtime($assetRoot . 'product-sync.js');
 $browserTitle = str_replace(' — ', ' | ', ($helpMode ? 'Documentation' : ($pageTitle ?? 'Admin')) . ' | MediaPitch');
 $canCatalog=Auth::canManageProducts();
@@ -27,7 +29,7 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
   }catch(Throwable $syncError){if((bool)env('APP_DEBUG',false))error_log('Product sync UI state failed: '.$syncError->getMessage());}
 }
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.css"><link rel="stylesheet" href="/assets/admin-editor.css?v=<?= e($adminEditorCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-ux.css?v=<?= e($adminUxCssVersion) ?>"><script src="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.js" defer></script><script src="/assets/admin-editor.js?v=<?= e($adminEditorJsVersion) ?>" defer></script><script src="/assets/admin-ux.js?v=<?= e($adminUxJsVersion) ?>" defer></script><script src="/assets/product-sync.js?v=<?= e($productSyncJsVersion) ?>" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($browserTitle) ?></title><link rel="stylesheet" href="/assets/admin.css?v=<?= e($adminCssVersion) ?>"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.css"><link rel="stylesheet" href="/assets/admin-editor.css?v=<?= e($adminEditorCssVersion) ?>"><link rel="stylesheet" href="/assets/admin-ux.css?v=<?= e($adminUxCssVersion) ?>"><?php if(str_starts_with($currentPath,'/admin/media')):?><link rel="stylesheet" href="/assets/admin-media.css?v=<?= e($adminMediaCssVersion) ?>"><?php endif;?><script src="https://cdn.jsdelivr.net/npm/jodit@4.13.23/es2021/jodit.min.js" defer></script><script src="/assets/admin-editor.js?v=<?= e($adminEditorJsVersion) ?>" defer></script><script src="/assets/admin-ux.js?v=<?= e($adminUxJsVersion) ?>" defer></script><?php if(str_starts_with($currentPath,'/admin/media')):?><script src="/assets/admin-media.js?v=<?= e($adminMediaJsVersion) ?>" defer></script><?php endif;?><script src="/assets/product-sync.js?v=<?= e($productSyncJsVersion) ?>" defer></script><?php if($productSyncState): ?><script>window.MediaPitchProductSync=<?= json_encode($productSyncState,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script><?php endif; ?></head>
 <body class="admin-body">
 <aside class="admin-sidebar">
   <a class="admin-brand" href="<?= e(url('admin')) ?>">MediaPitch <span>CMS</span></a>
