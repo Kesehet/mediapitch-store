@@ -33,8 +33,11 @@ final class BrandAdminController
 
         if($path==='/admin/brands/save'&&$method==='POST'){
             $this->requireCsrf();$existingId=!empty($_POST['id'])?(int)$_POST['id']:null;
-            try{$id=$this->repo->save($_POST,$existingId);Audit::record($existingId?'brand.update':'brand.create','brand',$id,$existingId?'Updated brand':'Created brand',['name'=>(string)($_POST['name']??''),'slug'=>(string)($_POST['slug']??'')]);$this->setFlash('success','Brand saved.');}
-            catch(Throwable $e){$this->setFlash('error','Brand could not be saved: '.$e->getMessage());}
+            try{$id=$this->repo->save($_POST,$existingId);if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);Audit::record($existingId?'brand.update':'brand.create','brand',$id,$existingId?'Updated brand':'Created brand',['name'=>(string)($_POST['name']??''),'slug'=>(string)($_POST['slug']??'')]);$this->setFlash('success','Brand saved.');}
+            catch(Throwable $e){
+                $this->setFlash('error','Brand could not be saved: '.$e->getMessage());
+                $this->redirect($existingId?'/admin/brands?edit='.$existingId:'/admin/brands');
+            }
             $this->redirect('/admin/brands');
         }
 

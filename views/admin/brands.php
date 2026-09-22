@@ -11,6 +11,11 @@ $editing = !empty($brand);
       <label>Name<input required name="name" maxlength="150" value="<?= e($brand['name'] ?? '') ?>"></label>
       <label>Slug<input required name="slug" maxlength="180" value="<?= e($brand['slug'] ?? '') ?>"></label>
       <label>Website URL<input type="url" name="website_url" maxlength="1000" placeholder="https://example.com" value="<?= e($brand['website_url'] ?? '') ?>"></label>
+      <label>Description<textarea name="description" rows="4"><?= e($brand['description'] ?? '') ?></textarea></label>
+      <label>SEO title<input name="seo_title" maxlength="255" value="<?= e($brand['seo_title'] ?? '') ?>"></label>
+      <label>Meta description<textarea name="meta_description" maxlength="320" rows="3"><?= e($brand['meta_description'] ?? '') ?></textarea></label>
+      <label>Canonical URL<input type="url" name="canonical_url" maxlength="1000" value="<?= e($brand['canonical_url'] ?? '') ?>"></label>
+      <label class="check"><input type="checkbox" name="robots_index" value="1" <?= !isset($brand['robots_index'])||!empty($brand['robots_index'])?'checked':'' ?>> Allow search engines to index this brand</label>
       <?php if(!empty($mediaItems)): ?>
         <label>Choose logo from media library
           <select id="brand-logo-picker"><option value="">— Select uploaded image —</option><?php foreach($mediaItems as $media): $mediaUrl=url(ltrim((string)$media['file_path'],'/')); ?><option value="<?= e($mediaUrl) ?>" <?= ($brand['logo_url']??'')===$mediaUrl?'selected':'' ?>><?= e($media['original_name']) ?><?= !empty($media['alt_text'])?' — '.e($media['alt_text']):'' ?></option><?php endforeach; ?></select>

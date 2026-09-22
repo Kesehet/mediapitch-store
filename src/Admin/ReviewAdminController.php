@@ -57,8 +57,20 @@ final class ReviewAdminController
                 Audit::record($existingId?'review.update':'review.create','review',$id,$existingId?'Updated review':'Created review',[
                     'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'product_id'=>(int)($_POST['product_id']??0),
                 ]);
+                if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Review saved.'); $this->redirect('/admin/reviews/'.$id.'/edit');
-            }catch(Throwable $e){$this->setFlash('error',$e->getMessage());$this->redirect('/admin/reviews');}
+            }catch(Throwable $e){
+                $this->setFlash('error',$e->getMessage());
+                $review=$_POST;
+                if($existingId)$review['id']=$existingId;
+                View::render('admin/review-form',[
+                    'pageTitle'=>$existingId?'Edit Review':'New Review','adminUser'=>Auth::user(),
+                    'review'=>$review,'products'=>$this->admin->productOptions(),
+                    'categories'=>$this->admin->categoryOptions(),'mediaItems'=>(new MediaRepository())->all(),
+                    'success'=>$this->flash('success'),'error'=>$this->flash('error')
+                ],'admin/layout');
+                return true;
+            }
         }
         if($method==='POST'&&preg_match('#^/admin/reviews/(\d+)/delete$#',$path,$m)){
             if(!Csrf::validate(isset($_POST['_csrf'])?(string)$_POST['_csrf']:null)){http_response_code(419);exit('Invalid or expired form token.');}

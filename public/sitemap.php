@@ -19,16 +19,27 @@ $urls=[
 try{
     $db=Database::connection();
 
-    foreach($db->query("SELECT slug,updated_at FROM categories WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
+    foreach($db->query("SELECT slug,updated_at FROM categories WHERE active=1 AND robots_index=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/category/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
-    foreach($db->query("SELECT slug,updated_at FROM brands WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
+    foreach($db->query("SELECT slug,updated_at FROM brands WHERE active=1 AND robots_index=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/brand/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
-    foreach($db->query("SELECT slug,updated_at FROM products WHERE active=1 ORDER BY updated_at DESC")->fetchAll() as $row){
+    foreach($db->query("SELECT slug,updated_at FROM products WHERE active=1 AND robots_index=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $urls[]=['loc'=>$base.'/product/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
     }
     $visibility=ContentVisibility::sql('');
+    foreach($db->query(
+        "SELECT DISTINCT t.slug,MAX(c.updated_at) AS updated_at
+         FROM tags t
+         JOIN content_tags ct ON ct.tag_id=t.id
+         JOIN content c ON c.id=ct.content_id
+         WHERE $visibility AND c.robots_index=1
+         GROUP BY t.id,t.slug
+         ORDER BY updated_at DESC"
+    )->fetchAll() as $row){
+        $urls[]=['loc'=>$base.'/tag/'.$row['slug'],'lastmod'=>$row['updated_at']??null];
+    }
     foreach($db->query("SELECT type,slug,updated_at FROM content WHERE $visibility AND robots_index=1 ORDER BY updated_at DESC")->fetchAll() as $row){
         $prefix=match($row['type']){
             'buying_guide'=>'guide',

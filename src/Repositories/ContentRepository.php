@@ -30,7 +30,7 @@ final class ContentRepository
         $stmt->execute(['id'=>$id,'type'=>$type]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)return null;
-        if($type==='blog')$row['tags']=implode(', ',array_column($this->tagsForContent($id),'name'));
+        $row['tags']=implode(', ',array_column($this->tagsForContent($id),'name'));
         return $row;
     }
 
@@ -76,7 +76,7 @@ final class ContentRepository
                 );
                 $stmt->execute($params);$id=(int)$db->lastInsertId();
             }
-            if($type==='blog')$this->syncTags((int)$id,(string)($data['tags']??''));
+            $this->syncTags((int)$id,(string)($data['tags']??''));
             $db->commit();
             return (int)$id;
         }catch(\Throwable $e){
@@ -142,7 +142,7 @@ final class ContentRepository
         return $row;
     }
 
-    private function syncTags(int $contentId,string $input): void
+    public function syncTags(int $contentId,string $input): void
     {
         $db=Database::connection();
         $names=array_values(array_unique(array_filter(array_map(static fn($v)=>trim($v),preg_split('/[,\n]+/',$input)?:[]))));
@@ -161,12 +161,40 @@ final class ContentRepository
         }
     }
 
-    private function tagsForContent(int $contentId): array
+    public function tagsForContent(int $contentId): array
     {
         try{
             $stmt=Database::connection()->prepare('SELECT t.id,t.name,t.slug FROM tags t JOIN content_tags ct ON ct.tag_id=t.id WHERE ct.content_id=:id ORDER BY t.name');
             $stmt->execute(['id'=>$contentId]);return $stmt->fetchAll(PDO::FETCH_ASSOC);
         }catch(\Throwable){return [];}
+    }
+
+    public function tagBySlug(string $slug): ?array
+    {
+        try{
+            $stmt=Database::connection()->prepare('SELECT id,name,slug FROM tags WHERE slug=:slug LIMIT 1');
+            $stmt->execute(['slug'=>$slug]);
+            $row=$stmt->fetch(PDO::FETCH_ASSOC);
+            return $row?:null;
+        }catch(\Throwable){return null;}
+    }
+
+    public function publishedByTag(string $slug,int $limit=50): array
+    {
+        $visibility=ContentVisibility::sql('c');
+        $stmt=Database::connection()->prepare(
+            "SELECT c.id,c.type,c.title,c.slug,c.excerpt,c.featured_image_url,c.published_at,c.updated_at
+             FROM content c
+             JOIN content_tags ct ON ct.content_id=c.id
+             JOIN tags t ON t.id=ct.tag_id
+             WHERE t.slug=:slug AND $visibility AND c.robots_index=1
+             ORDER BY COALESCE(c.published_at,c.created_at) DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue(':slug',$slug);
+        $stmt->bindValue(':limit',$limit,PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private function tagSlug(string $value): string

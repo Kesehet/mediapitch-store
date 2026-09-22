@@ -34,6 +34,14 @@ if(!empty($product['brand_name'])){
     if($brandPage)$productSchema['brand']['url']=url('brand/'.$brandPage['slug']);
 }
 if(!empty($product['asin'])) $productSchema['sku']=$product['asin'];
+if($displayPrice!==null && !empty($product['affiliate_url'])){
+    $productSchema['offers']=[
+        '@type'=>'Offer',
+        'url'=>url('go/'.(int)$product['id'].'?from=product-schema'),
+        'priceCurrency'=>(string)($product['currency']??'INR'),
+        'price'=>$displayPrice,
+    ];
+}
 $breadcrumbSchema=['@context'=>'https://schema.org','@type'=>'BreadcrumbList','itemListElement'=>[
     ['@type'=>'ListItem','position'=>1,'name'=>'Home','item'=>url()],
 ]];

@@ -20,6 +20,7 @@ $googleAdsLabels=[
     'search'=>$googleLabel($siteSettings['google_ads_search_label']??''),
 ];
 $amazonPricingDisclosure='Product prices and availability are accurate as of the time our Amazon data was last refreshed and are subject to change. Any price and availability information displayed on the relevant Amazon marketplace at the time of purchase will apply to the purchase of the product.';
+$ogType=$ogType ?? (!empty($product)?'product':((!empty($post)||!empty($guide)||!empty($review)||!empty($comparison))?'article':'website'));
 $ogImage = $ogImage
     ?? ($product['main_image_url'] ?? null)
     ?? ($post['featured_image_url'] ?? null)
@@ -45,7 +46,7 @@ $assetVersion=static function(string $relative): string {
     <meta property="og:site_name" content="<?= e($siteName) ?>">
     <meta property="og:title" content="<?= e($pageTitle) ?>">
     <meta property="og:description" content="<?= e($metaDescription) ?>">
-    <meta property="og:type" content="website">
+    <meta property="og:type" content="<?= e($ogType) ?>">
     <?php if ($canonicalUrl): ?><meta property="og:url" content="<?= e($canonicalUrl) ?>"><?php endif; ?>
     <?php if ($ogImage): ?><meta property="og:image" content="<?= e($ogImage) ?>"><?php endif; ?>
     <meta name="twitter:card" content="<?= $ogImage ? 'summary_large_image' : 'summary' ?>">

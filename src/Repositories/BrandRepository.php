@@ -54,13 +54,18 @@ final class BrandRepository
         $slug=trim((string)($data['slug']??''));
         $website=trim((string)($data['website_url']??''));
         $logo=trim((string)($data['logo_url']??''));
+        $description=trim((string)($data['description']??''));
+        $seoTitle=trim((string)($data['seo_title']??''));
+        $metaDescription=trim((string)($data['meta_description']??''));
+        $canonicalUrl=trim((string)($data['canonical_url']??''));
+        $robotsIndex=!empty($data['robots_index'])?1:0;
         if($name===''||$slug==='')throw new InvalidArgumentException('Brand name and slug are required.');
         if($website!==''&&!filter_var($website,FILTER_VALIDATE_URL))throw new InvalidArgumentException('Brand website URL is invalid.');
         if($logo!==''&&!filter_var($logo,FILTER_VALIDATE_URL))throw new InvalidArgumentException('Brand logo URL is invalid.');
-        $params=['name'=>$name,'slug'=>$slug,'website_url'=>$website?:null,'logo_url'=>$logo?:null];
+        $params=['name'=>$name,'slug'=>$slug,'website_url'=>$website?:null,'logo_url'=>$logo?:null,'description'=>$description?:null,'seo_title'=>$seoTitle?:null,'meta_description'=>$metaDescription?:null,'canonical_url'=>$canonicalUrl?:null,'robots_index'=>$robotsIndex];
         $db=Database::connection();
-        if($id){$params['id']=$id;$db->prepare('UPDATE brands SET name=:name,slug=:slug,website_url=:website_url,logo_url=:logo_url WHERE id=:id')->execute($params);return $id;}
-        $db->prepare('INSERT INTO brands (name,slug,website_url,logo_url,active) VALUES (:name,:slug,:website_url,:logo_url,1)')->execute($params);
+        if($id){$params['id']=$id;$db->prepare('UPDATE brands SET name=:name,slug=:slug,website_url=:website_url,logo_url=:logo_url,description=:description,seo_title=:seo_title,meta_description=:meta_description,canonical_url=:canonical_url,robots_index=:robots_index WHERE id=:id')->execute($params);return $id;}
+        $db->prepare('INSERT INTO brands (name,slug,website_url,logo_url,description,seo_title,meta_description,canonical_url,robots_index,active) VALUES (:name,:slug,:website_url,:logo_url,:description,:seo_title,:meta_description,:canonical_url,:robots_index,1)')->execute($params);
         return (int)$db->lastInsertId();
     }
 

@@ -1,5 +1,6 @@
 <?php
 use MediaPitch\Core\Csrf;
+use MediaPitch\Services\ContentVisibility;
 
 $g=$guide ?? [];
 $rows=$g['products'] ?? [];
@@ -25,6 +26,7 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
                 <?php endforeach; ?>
             </select>
         </label>
+        <label class="span-2">Tags <small>comma-separated; up to 20</small><input name="tags" maxlength="1000" placeholder="air purifiers, HEPA, home appliances" value="<?= e($g['tags'] ?? '') ?>"></label>
         <label>Status
             <select name="status">
                 <option value="draft" <?= ($g['status']??'draft')==='draft'?'selected':'' ?>>Draft</option>
@@ -32,7 +34,7 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
                 <option value="published" <?= ($g['status']??'')==='published'?'selected':'' ?>>Published</option>
             </select>
         </label>
-        <label>Publish date<input type="datetime-local" name="published_at" value="<?= !empty($g['published_at'])?e(date('Y-m-d\TH:i',strtotime((string)$g['published_at']))):'' ?>"></label>
+        <label>Publish date <small><?= e(ContentVisibility::editorialTimezone()->getName()) ?></small><input type="datetime-local" name="published_at" value="<?= e(ContentVisibility::publishAtForInput($g['published_at'] ?? null)) ?>"></label>
         <label class="span-2">Excerpt<textarea name="excerpt" rows="3"><?= e($g['excerpt'] ?? '') ?></textarea></label>
         <label class="span-2">Body<textarea name="body" rows="10"><?= e($g['body'] ?? '') ?></textarea></label>
 
@@ -53,7 +55,9 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
         <label class="span-2">Featured image URL<input type="url" id="guide-image-url" name="featured_image_url" value="<?= e($g['featured_image_url'] ?? '') ?>"></label>
         <label>SEO title<input name="seo_title" value="<?= e($g['seo_title'] ?? '') ?>"></label>
         <label>Meta description<textarea name="meta_description" rows="3"><?= e($g['meta_description'] ?? '') ?></textarea></label>
+        <label class="span-2">Canonical URL<input type="url" name="canonical_url" value="<?= e($g['canonical_url'] ?? '') ?>"></label>
     </div>
+    <label class="check"><input type="checkbox" name="robots_index" value="1" <?= !isset($g['robots_index'])||!empty($g['robots_index'])?'checked':'' ?>> Allow search engines to index this buying guide</label>
 
     <div class="panel-head subhead">
         <div>
@@ -129,199 +133,68 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
     const rows=document.getElementById('product-rows');
     const tpl=document.getElementById('product-template');
     const form=document.getElementById('guide-form');
-    const warning=document.getElementById('guide-product-warning');
     const options=[...document.querySelectorAll('#guide-product-list option')];
     const optionMap=new Map(options.map(o=>[o.value,String(o.dataset.id||'')]));
-    const draftKey='mediapitch:buying-guide-draft:v1:'+(form.dataset.guideId||'new');
-    const serverSaved=<?= !empty($success) ? 'true' : 'false' ?>;
-    let draftTimer=null;
 
     function syncPicker(input){
         const row=input.closest('.guide-product-row');
-        const hidden=row.querySelector('.product-id-input');
-        hidden.value=optionMap.get(input.value)||'';
+        const hidden=row?.querySelector('.product-id-input');
+        if(hidden)hidden.value=optionMap.get(input.value)||hidden.value||'';
     }
-
     function renumber(){
         [...rows.querySelectorAll('.guide-product-row')].forEach((row,i)=>{
             row.querySelector('.rank-input').value=i+1;
         });
     }
-
     function bindRow(row){
         const picker=row.querySelector('.product-picker-input');
-        picker.addEventListener('input',()=>syncPicker(picker));
+        picker.addEventListener('input',()=>{if(!optionMap.has(picker.value))row.querySelector('.product-id-input').value='';});
         picker.addEventListener('change',()=>syncPicker(picker));
     }
-
-    function addRow(values={}){
+    function addRow(){
         const fragment=tpl.content.cloneNode(true);
         const row=fragment.querySelector('.guide-product-row');
         rows.append(fragment);
         bindRow(row);
-
-        row.querySelector('.product-picker-input').value=values.product_title||'';
-        row.querySelector('.product-id-input').value=values.product_id||'';
-        row.querySelector('.rank-input').value=values.rank_position||'';
-        row.querySelector('[name="score[]"]').value=values.score||'';
-        row.querySelector('[name="product_best_for[]"]').value=values.product_best_for||'';
-        row.querySelector('[name="recommendation[]"]').value=values.recommendation||'';
-        row.querySelector('[name="cta_text[]"]').value=values.cta_text||'Check Price on Amazon';
+        renumber();
         return row;
     }
 
-    function captureDraft(){
-        const fields={};
-        [
-            'title','slug','category_id','status','published_at','excerpt','body',
-            'featured_image_url','seo_title','meta_description'
-        ].forEach(name=>{
-            const control=form.elements.namedItem(name);
-            if(control) fields[name]=control.value;
-        });
-
-        const products=[...rows.querySelectorAll('.guide-product-row')].map(row=>({
-            product_title:row.querySelector('.product-picker-input').value,
-            product_id:row.querySelector('.product-id-input').value,
-            rank_position:row.querySelector('.rank-input').value,
-            score:row.querySelector('[name="score[]"]').value,
-            product_best_for:row.querySelector('[name="product_best_for[]"]').value,
-            recommendation:row.querySelector('[name="recommendation[]"]').value,
-            cta_text:row.querySelector('[name="cta_text[]"]').value
-        }));
-
-        return {version:1,savedAt:Date.now(),fields,products};
-    }
-
-    function draftSignature(draft){
-        if(!draft) return '';
-        return JSON.stringify({fields:draft.fields||{},products:draft.products||[]});
-    }
-
-    function saveDraftNow(){
-        try{
-            const draft=captureDraft();
-            localStorage.setItem(draftKey,JSON.stringify(draft));
-        }catch(_){}
-    }
-
-    function scheduleDraftSave(){
-        clearTimeout(draftTimer);
-        draftTimer=setTimeout(saveDraftNow,500);
-    }
-
-    function restoreDraft(draft){
-        if(!draft || !draft.fields) return;
-        Object.entries(draft.fields).forEach(([name,value])=>{
-            const control=form.elements.namedItem(name);
-            if(control) control.value=value ?? '';
-        });
-
-        rows.innerHTML='';
-        const products=Array.isArray(draft.products) && draft.products.length ? draft.products : [{}];
-        products.forEach(product=>addRow(product));
-        renumber();
-        scheduleDraftSave();
-    }
-
-    function showDraftRecovery(){
-        let stored=null;
-        try{
-            stored=JSON.parse(localStorage.getItem(draftKey)||'null');
-        }catch(_){}
-
-        if(!stored || draftSignature(stored)===draftSignature(captureDraft())) return;
-
-        const banner=document.createElement('div');
-        banner.className='flash';
-        banner.style.marginBottom='1rem';
-
-        const savedLabel=stored.savedAt ? new Date(stored.savedAt).toLocaleString() : 'an earlier session';
-        banner.innerHTML='<strong>Unsaved local draft found.</strong> A browser copy from '+savedLabel+' can be restored. '+
-            '<button type="button" class="secondary-button" data-restore-guide-draft>Restore draft</button> '+
-            '<button type="button" class="secondary-button" data-dismiss-guide-draft>Dismiss</button>';
-
-        form.before(banner);
-        banner.querySelector('[data-restore-guide-draft]').addEventListener('click',()=>{
-            restoreDraft(stored);
-            banner.remove();
-        });
-        banner.querySelector('[data-dismiss-guide-draft]').addEventListener('click',()=>{
-            try{localStorage.removeItem(draftKey);}catch(_){}
-            banner.remove();
-        });
-    }
-
     [...rows.querySelectorAll('.guide-product-row')].forEach(bindRow);
-
-    document.getElementById('add-product').addEventListener('click',()=>{
-        const row=addRow();
-        renumber();
-        row.querySelector('.product-picker-input').focus();
-        scheduleDraftSave();
-    });
-
+    document.getElementById('add-product').addEventListener('click',()=>addRow().querySelector('.product-picker-input').focus());
     rows.addEventListener('click',e=>{
-        if(e.target.classList.contains('remove-row') && rows.children.length>1){
+        if(e.target.classList.contains('remove-row')&&rows.children.length>1){
             e.target.closest('.guide-product-row').remove();
             renumber();
-            scheduleDraftSave();
         }
     });
 
     let dragged=null;
     rows.addEventListener('dragstart',e=>{
         const row=e.target.closest('.guide-product-row');
-        if(!row) return;
-        dragged=row;
-        row.classList.add('dragging');
-        e.dataTransfer.effectAllowed='move';
+        if(!row)return;
+        dragged=row;row.classList.add('dragging');e.dataTransfer.effectAllowed='move';
     });
     rows.addEventListener('dragend',()=>{
-        if(dragged) dragged.classList.remove('dragging');
-        dragged=null;
-        renumber();
-        scheduleDraftSave();
+        if(dragged)dragged.classList.remove('dragging');
+        dragged=null;renumber();
     });
     rows.addEventListener('dragover',e=>{
         e.preventDefault();
-        if(!dragged) return;
+        if(!dragged)return;
         const target=e.target.closest('.guide-product-row');
-        if(!target || target===dragged) return;
+        if(!target||target===dragged)return;
         const rect=target.getBoundingClientRect();
-        rows.insertBefore(dragged,e.clientY<rect.top+rect.height/2 ? target : target.nextSibling);
+        rows.insertBefore(dragged,e.clientY<rect.top+rect.height/2?target:target.nextSibling);
     });
-
-    form.addEventListener('input',scheduleDraftSave);
-    form.addEventListener('change',scheduleDraftSave);
-    window.addEventListener('beforeunload',saveDraftNow);
 
     form.addEventListener('submit',()=>{
         rows.querySelectorAll('.guide-product-row').forEach(row=>syncPicker(row.querySelector('.product-picker-input')));
-        saveDraftNow();
-        warning.style.display='none';
     });
 
     const mediaPicker=document.getElementById('guide-media-picker');
     const image=document.getElementById('guide-image-url');
-    if(mediaPicker && image){
-        mediaPicker.addEventListener('change',()=>{
-            if(mediaPicker.value){
-                image.value=mediaPicker.value;
-                scheduleDraftSave();
-            }
-        });
-    }
-
-    if(serverSaved){
-        try{
-            localStorage.removeItem(draftKey);
-            localStorage.removeItem('mediapitch:buying-guide-draft:v1:new');
-        }catch(_){}
-    }else{
-        showDraftRecovery();
-    }
-
+    if(mediaPicker&&image)mediaPicker.addEventListener('change',()=>{if(mediaPicker.value)image.value=mediaPicker.value;});
     renumber();
 })();
 </script>

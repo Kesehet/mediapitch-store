@@ -73,6 +73,8 @@ final class AdminRepository
             'description' => trim((string) ($data['description'] ?? '')) ?: null,
             'seo_title' => trim((string) ($data['seo_title'] ?? '')) ?: null,
             'meta_description' => trim((string) ($data['meta_description'] ?? '')) ?: null,
+            'canonical_url' => trim((string) ($data['canonical_url'] ?? '')) ?: null,
+            'robots_index' => !empty($data['robots_index']) ? 1 : 0,
             'sort_order' => (int) ($data['sort_order'] ?? 0),
             'active' => !empty($data['active']) ? 1 : 0,
         ];
@@ -82,15 +84,15 @@ final class AdminRepository
             $params['id'] = $id;
             $stmt = $db->prepare(
                 'UPDATE categories SET parent_id=:parent_id,name=:name,slug=:slug,description=:description,seo_title=:seo_title,
-                 meta_description=:meta_description,sort_order=:sort_order,active=:active WHERE id=:id'
+                 meta_description=:meta_description,canonical_url=:canonical_url,robots_index=:robots_index,sort_order=:sort_order,active=:active WHERE id=:id'
             );
             $stmt->execute($params);
             return $id;
         }
 
         $stmt = $db->prepare(
-            'INSERT INTO categories (parent_id,name,slug,description,seo_title,meta_description,sort_order,active)
-             VALUES (:parent_id,:name,:slug,:description,:seo_title,:meta_description,:sort_order,:active)'
+            'INSERT INTO categories (parent_id,name,slug,description,seo_title,meta_description,canonical_url,robots_index,sort_order,active)
+             VALUES (:parent_id,:name,:slug,:description,:seo_title,:meta_description,:canonical_url,:robots_index,:sort_order,:active)'
         );
         $stmt->execute($params);
         return (int) $db->lastInsertId();
@@ -255,6 +257,10 @@ final class AdminRepository
             'custom_score' => ($data['custom_score'] ?? '') !== '' ? (float)$data['custom_score'] : null,
             'best_for_label' => trim((string)($data['best_for_label'] ?? '')) ?: null,
             'editorial_notes' => trim((string)($data['editorial_notes'] ?? '')) ?: null,
+            'seo_title' => trim((string)($data['seo_title'] ?? '')) ?: null,
+            'meta_description' => trim((string)($data['meta_description'] ?? '')) ?: null,
+            'canonical_url' => trim((string)($data['canonical_url'] ?? '')) ?: null,
+            'robots_index' => !empty($data['robots_index']) ? 1 : 0,
             'active' => !empty($data['active']) ? 1 : 0,
         ];
 
@@ -405,6 +411,7 @@ final class AdminRepository
         );
         $stmt->execute(['id'=>$id]);
         $guide['products'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $guide['tags']=implode(', ',array_column((new ContentRepository())->tagsForContent((int)$guide['id']),'name'));
         return $guide;
     }
 
@@ -495,6 +502,7 @@ final class AdminRepository
                 ]);
             }
 
+            (new ContentRepository())->syncTags((int)$id,(string)($data['tags']??''));
             $db->commit();
             return (int)$id;
         } catch (\Throwable $e) {
