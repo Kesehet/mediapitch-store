@@ -74,7 +74,7 @@ final class AdminRepository
             'seo_title' => trim((string) ($data['seo_title'] ?? '')) ?: null,
             'meta_description' => trim((string) ($data['meta_description'] ?? '')) ?: null,
             'canonical_url' => trim((string) ($data['canonical_url'] ?? '')) ?: null,
-            'robots_index' => !isset($data['robots_index']) || !empty($data['robots_index']) ? 1 : 0,
+            'robots_index' => !empty($data['robots_index']) ? 1 : 0,
             'sort_order' => (int) ($data['sort_order'] ?? 0),
             'active' => !empty($data['active']) ? 1 : 0,
         ];
@@ -260,7 +260,7 @@ final class AdminRepository
             'seo_title' => trim((string)($data['seo_title'] ?? '')) ?: null,
             'meta_description' => trim((string)($data['meta_description'] ?? '')) ?: null,
             'canonical_url' => trim((string)($data['canonical_url'] ?? '')) ?: null,
-            'robots_index' => !isset($data['robots_index']) || !empty($data['robots_index']) ? 1 : 0,
+            'robots_index' => !empty($data['robots_index']) ? 1 : 0,
             'active' => !empty($data['active']) ? 1 : 0,
         ];
 
