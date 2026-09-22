@@ -51,6 +51,8 @@ $productHistory=!empty($p['id'])?(new AuditRepository())->forEntity('product',(i
 <script>
 (function(){const category=document.getElementById('product-category');const fields=[...document.querySelectorAll('.spec-field')];const empty=document.getElementById('no-spec-message');if(category&&fields.length){function update(){const selected=category.value;let visible=0;fields.forEach(field=>{const show=selected!==''&&field.dataset.category===selected;field.style.display=show?'flex':'none';field.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=!show);if(show)visible++;});if(empty)empty.style.display=visible?'none':'block';}category.addEventListener('change',update);update();}else if(empty){empty.style.display='block';}const picker=document.getElementById('product-media-picker');const image=document.getElementById('main-image-url');if(picker&&image)picker.addEventListener('change',()=>{if(picker.value)image.value=picker.value;});const galleryPicker=document.getElementById('product-gallery-picker');const gallery=document.getElementById('product-gallery');const addGallery=document.getElementById('add-gallery-image');if(galleryPicker&&gallery&&addGallery)addGallery.addEventListener('click',()=>{if(!galleryPicker.value)return;const lines=gallery.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean);if(!lines.includes(galleryPicker.value))lines.push(galleryPicker.value);gallery.value=lines.join('\n');galleryPicker.value='';});const title=document.getElementById('product-title');const slug=document.getElementById('product-slug');if(title&&slug){let slugManuallyEdited=slug.value.trim()!=='';const slugify=value=>value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');slug.addEventListener('input',()=>{slugManuallyEdited=slug.value.trim()!=='';});title.addEventListener('input',()=>{if(!slugManuallyEdited)slug.value=slugify(title.value);});if(!slug.value.trim()&&title.value.trim())slug.value=slugify(title.value);}
 
+const form=document.querySelector('form[action$="/admin/products/save"]');
+if(!form)return;
 const metadataButton=document.getElementById('fetch-product-metadata');
 const metadataUrl=document.getElementById('product-metadata-url');
 const metadataStatus=document.getElementById('product-metadata-status');
@@ -107,7 +109,10 @@ if(metadataButton&&metadataUrl&&metadataStatus&&csrf){
             if(fillIfEmpty('short_description',data.short_description))filled++;
             if(fillIfEmpty('features',data.features))filled++;
             if(fillIfEmpty('price',data.price))filled++;
-            if(fillIfEmpty('currency',data.currency))filled++;
+            const currencyField=form.querySelector('[name="currency"]');
+            if(data.currency&&currencyField&&!productId&&String(currencyField.value||'').trim().toUpperCase()==='INR'&&String(data.currency).trim().toUpperCase()!=='INR'){
+                currencyField.value=String(data.currency).trim().toUpperCase();filled++;
+            }else if(fillIfEmpty('currency',data.currency))filled++;
             if(fillIfEmpty('amazon_url',data.amazon_url))filled++;
             if(fillIfEmpty('affiliate_url',data.affiliate_url))filled++;
             const matchedBrand=selectBrand(data.brand||'');
