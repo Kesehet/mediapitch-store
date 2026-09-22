@@ -29,7 +29,9 @@ final class ReviewRepository
         );
         $stmt->execute(['id'=>$id]);
         $row=$stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        if(!$row)return null;
+        $row['tags']=implode(', ',array_column((new ContentRepository())->tagsForContent((int)$row['id']),'name'));
+        return $row;
     }
 
     public function save(array $data, int $authorId, ?int $id=null): int
@@ -66,6 +68,7 @@ final class ReviewRepository
             }
             $db->prepare('DELETE FROM content_products WHERE content_id=:id')->execute(['id'=>$id]);
             $db->prepare('INSERT INTO content_products (content_id,product_id,score,sort_order) VALUES (:content_id,:product_id,:score,0)')->execute(['content_id'=>$id,'product_id'=>$productId,'score'=>$score]);
+            (new ContentRepository())->syncTags((int)$id,(string)($data['tags']??''));
             $db->commit(); return $id;
         }catch(\Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     }
@@ -82,6 +85,7 @@ final class ReviewRepository
         );
         $stmt->execute(['slug'=>$slug]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
         if(!$row)return null;
+        $row['tags']=(new ContentRepository())->tagsForContent((int)$row['id']);
         $categoryId=(int)($row['product_category_id']?:$row['category_id']);
         $row['related_products']=[];
         if($categoryId>0){
