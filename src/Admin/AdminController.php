@@ -191,6 +191,7 @@ final class AdminController
                         'title'=>$data['title']??'','slug'=>$data['slug']??'','source'=>$data['source']??'manual','asin'=>$data['asin']??null,
                         'category_id'=>!empty($data['category_id'])?(int)$data['category_id']:null,'brand_id'=>!empty($data['brand_id'])?(int)$data['brand_id']:null,'active'=>!empty($data['active']),
                     ]);
+                    if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                     $this->setFlash('success','Product saved.');
                     $this->redirect('/admin/products/' . $id . '/edit');
                 } catch (Throwable $e) {
@@ -257,11 +258,19 @@ final class AdminController
                     Audit::record($existingId?'blog.update':'blog.create','blog',$id,$existingId?'Updated article':'Created article',[
                         'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'category_id'=>!empty($_POST['category_id'])?(int)$_POST['category_id']:null,
                     ]);
+                    if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                     $this->setFlash('success','Article saved.');
                     $this->redirect('/admin/blog/' . $id . '/edit');
                 } catch (Throwable $e) {
                     $this->setFlash('error','Article could not be saved: ' . $e->getMessage());
-                    $this->redirect('/admin/blog');
+                    $post=$_POST;
+                    if($existingId)$post['id']=$existingId;
+                    View::render('admin/blog-form', array_merge([
+                        'post'=>$post,
+                        'categories'=>$this->repo->categoryOptions(),
+                        'mediaItems'=>$media(),
+                    ], $this->common($existingId ? 'Edit Article' : 'New Article')), 'admin/layout');
+                    return true;
                 }
             }
             if ($method === 'POST' && preg_match('#^/admin/blog/(\d+)/delete$#',$path,$m)) {
@@ -315,6 +324,7 @@ final class AdminController
                         'title'=>(string)($_POST['title']??''),'slug'=>$newSlug,'status'=>$status,'category_id'=>!empty($_POST['category_id'])?(int)$_POST['category_id']:null,
                         'product_ids'=>array_values(array_map('intval',is_array($_POST['product_id']??null)?$_POST['product_id']:[])),
                     ]);
+                    if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                     $this->setFlash('success','Buying guide saved.');
                     $this->redirect('/admin/guides/' . $id . '/edit');
                 } catch (Throwable $e) {
