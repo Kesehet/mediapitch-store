@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS categories (
     image_url VARCHAR(1000) NULL,
     seo_title VARCHAR(255) NULL,
     meta_description VARCHAR(320) NULL,
+    canonical_url VARCHAR(1000) NULL,
+    robots_index TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -39,6 +41,11 @@ CREATE TABLE IF NOT EXISTS brands (
     slug VARCHAR(180) NOT NULL UNIQUE,
     website_url VARCHAR(1000) NULL,
     logo_url VARCHAR(1000) NULL,
+    description TEXT NULL,
+    seo_title VARCHAR(255) NULL,
+    meta_description VARCHAR(320) NULL,
+    canonical_url VARCHAR(1000) NULL,
+    robots_index TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -68,6 +75,10 @@ CREATE TABLE IF NOT EXISTS products (
     custom_score DECIMAL(4,2) NULL,
     best_for_label VARCHAR(150) NULL,
     editorial_notes MEDIUMTEXT NULL,
+    seo_title VARCHAR(255) NULL,
+    meta_description VARCHAR(320) NULL,
+    canonical_url VARCHAR(1000) NULL,
+    robots_index TINYINT(1) NOT NULL DEFAULT 1,
     manual_override_json JSON NULL,
     last_synced_at TIMESTAMP NULL,
     active TINYINT(1) NOT NULL DEFAULT 1,
@@ -171,6 +182,18 @@ CREATE TABLE IF NOT EXISTS affiliate_clicks (
     CONSTRAINT fk_click_content FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE SET NULL,
     INDEX idx_click_product_date (product_id, clicked_at),
     INDEX idx_click_content_date (content_id, clicked_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_form_drafts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    draft_key VARCHAR(190) NOT NULL,
+    payload_json MEDIUMTEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_admin_form_draft_user_key (user_id, draft_key),
+    CONSTRAINT fk_admin_form_draft_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_admin_form_draft_updated (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS settings (
