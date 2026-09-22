@@ -1,5 +1,6 @@
 <?php
 use MediaPitch\Core\Csrf;
+use MediaPitch\Services\ContentVisibility;
 
 $g=$guide ?? [];
 $rows=$g['products'] ?? [];
@@ -25,6 +26,7 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
                 <?php endforeach; ?>
             </select>
         </label>
+        <label class="span-2">Tags <small>comma-separated; up to 20</small><input name="tags" maxlength="1000" placeholder="air purifiers, HEPA, home appliances" value="<?= e($g['tags'] ?? '') ?>"></label>
         <label>Status
             <select name="status">
                 <option value="draft" <?= ($g['status']??'draft')==='draft'?'selected':'' ?>>Draft</option>
@@ -32,7 +34,7 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
                 <option value="published" <?= ($g['status']??'')==='published'?'selected':'' ?>>Published</option>
             </select>
         </label>
-        <label>Publish date<input type="datetime-local" name="published_at" value="<?= !empty($g['published_at'])?e(date('Y-m-d\TH:i',strtotime((string)$g['published_at']))):'' ?>"></label>
+        <label>Publish date <small><?= e(ContentVisibility::editorialTimezone()->getName()) ?></small><input type="datetime-local" name="published_at" value="<?= e(ContentVisibility::publishAtForInput($g['published_at'] ?? null)) ?>"></label>
         <label class="span-2">Excerpt<textarea name="excerpt" rows="3"><?= e($g['excerpt'] ?? '') ?></textarea></label>
         <label class="span-2">Body<textarea name="body" rows="10"><?= e($g['body'] ?? '') ?></textarea></label>
 
@@ -53,7 +55,9 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
         <label class="span-2">Featured image URL<input type="url" id="guide-image-url" name="featured_image_url" value="<?= e($g['featured_image_url'] ?? '') ?>"></label>
         <label>SEO title<input name="seo_title" value="<?= e($g['seo_title'] ?? '') ?>"></label>
         <label>Meta description<textarea name="meta_description" rows="3"><?= e($g['meta_description'] ?? '') ?></textarea></label>
+        <label class="span-2">Canonical URL<input type="url" name="canonical_url" value="<?= e($g['canonical_url'] ?? '') ?>"></label>
     </div>
+    <label class="check"><input type="checkbox" name="robots_index" value="1" <?= !isset($g['robots_index'])||!empty($g['robots_index'])?'checked':'' ?>> Allow search engines to index this buying guide</label>
 
     <div class="panel-head subhead">
         <div>
@@ -174,7 +178,7 @@ $guideId=!empty($g['id']) ? (int)$g['id'] : null;
         const fields={};
         [
             'title','slug','category_id','status','published_at','excerpt','body',
-            'featured_image_url','seo_title','meta_description'
+            'featured_image_url','seo_title','meta_description','tags','canonical_url'
         ].forEach(name=>{
             const control=form.elements.namedItem(name);
             if(control) fields[name]=control.value;
