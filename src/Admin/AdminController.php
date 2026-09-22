@@ -290,7 +290,13 @@ final class AdminController
                     $this->redirect('/admin/guides/' . $id . '/edit');
                 } catch (Throwable $e) {
                     $this->setFlash('error','Buying guide could not be saved: ' . $e->getMessage());
-                    $this->redirect('/admin/guides');
+                    View::render('admin/guide-form', array_merge([
+                        'guide'=>$this->guideFromPost($_POST,$existingId),
+                        'categories'=>$this->repo->categoryOptions(),
+                        'productOptions'=>$this->repo->productOptions(),
+                        'mediaItems'=>$media(),
+                    ], $this->common($existingId ? 'Edit Buying Guide' : 'New Buying Guide')), 'admin/layout');
+                    return true;
                 }
             }
         }
@@ -298,6 +304,36 @@ final class AdminController
         http_response_code(404);
         View::render('404', ['pageTitle'=>'Admin page not found','metaDescription'=>'']);
         return true;
+    }
+
+    private function guideFromPost(array $data, ?int $id): array
+    {
+        $guide=$data;
+        if($id) $guide['id']=$id;
+
+        $productIds=is_array($data['product_id'] ?? null) ? $data['product_id'] : [];
+        $productTitles=is_array($data['product_title'] ?? null) ? $data['product_title'] : [];
+        $rank=is_array($data['rank_position'] ?? null) ? $data['rank_position'] : [];
+        $score=is_array($data['score'] ?? null) ? $data['score'] : [];
+        $bestFor=is_array($data['product_best_for'] ?? null) ? $data['product_best_for'] : [];
+        $recommendation=is_array($data['recommendation'] ?? null) ? $data['recommendation'] : [];
+        $cta=is_array($data['cta_text'] ?? null) ? $data['cta_text'] : [];
+
+        $rows=[];
+        $rowCount=max(count($productIds),count($productTitles),count($rank),count($score),count($bestFor),count($recommendation),count($cta));
+        for($i=0;$i<$rowCount;$i++){
+            $rows[]=[
+                'product_id'=>(int)($productIds[$i] ?? 0),
+                'product_title'=>(string)($productTitles[$i] ?? ''),
+                'rank_position'=>$rank[$i] ?? $i+1,
+                'score'=>$score[$i] ?? '',
+                'best_for_label'=>$bestFor[$i] ?? '',
+                'recommendation'=>$recommendation[$i] ?? '',
+                'cta_text'=>$cta[$i] ?? 'Check Price on Amazon',
+            ];
+        }
+        $guide['products']=$rows ?: [[]];
+        return $guide;
     }
 
     private function common(string $title): array
