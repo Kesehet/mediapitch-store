@@ -47,6 +47,7 @@ final class CategoryAdminController
                 Audit::record($id?'category.update':'category.create','category',$saved,$id?'Updated category':'Created category',[
                     'name'=>$new['name']??($_POST['name']??''),'slug'=>$new['slug']??($_POST['slug']??''),'active'=>(bool)($new['active']??true),
                 ]);
+                if(!empty($_POST['_draft_key']))(new \MediaPitch\Repositories\AdminFormDraftRepository())->delete((int)Auth::user()['id'],(string)$_POST['_draft_key']);
                 $this->setFlash('success','Category saved.');
             }catch(Throwable $e){$this->setFlash('error','Category could not be saved: '.$e->getMessage());}
             $this->redirect('/admin/categories');
