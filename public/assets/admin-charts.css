@@ -17,3 +17,8 @@
 @media(max-width:1180px){.admin-chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-chart-card:last-child:nth-child(odd){grid-column:1/-1}.admin-chart-card:last-child:nth-child(odd) .admin-chart-canvas-wrap{height:230px}}
 @media(max-width:760px){.admin-insights{padding:16px}.admin-insights-head{flex-direction:column;gap:10px}.admin-insights-hint{white-space:normal}.admin-chart-grid{grid-template-columns:1fr}.admin-chart-card:last-child:nth-child(odd){grid-column:auto}.admin-chart-canvas-wrap,.admin-chart-card:last-child:nth-child(odd) .admin-chart-canvas-wrap{height:240px}}
 @media(prefers-reduced-motion:reduce){.admin-chart-card{transition:none}.admin-chart-card:hover{transform:none}}
+.admin-chart-grid.chart-count-1{grid-template-columns:minmax(0,1fr)}
+.admin-chart-grid.chart-count-1 .admin-chart-card{max-width:none}
+.admin-chart-grid.chart-count-1 .admin-chart-canvas-wrap{height:300px}
+.admin-chart-grid.chart-count-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:760px){.admin-chart-grid.chart-count-2{grid-template-columns:1fr}.admin-chart-grid.chart-count-1 .admin-chart-canvas-wrap{height:250px}}
