@@ -88,10 +88,14 @@ final class ProductToolsAdminController
                 ]);
                 $message=$result['processed'].' processed; '.$result['updated'].' product(s) updated with '.$result['fields'].' field(s).';
                 if($result['failed'])$message.=' '.$result['failed'].' failed.';
-                $errors=[];
-                foreach($result['results']as$row)if(($row['status']??'')==='failed')$errors[]='#'.(int)$row['product_id'].': '.(string)($row['error']??'Unknown error');
-                if($errors)$message.=' '.implode(' | ',array_slice($errors,0,3));
-                $this->setFlash($result['failed']?'error':'success',$message);
+                $details=[];
+                foreach($result['results'] as $row){
+                    $status=(string)($row['status']??'');
+                    if($status==='failed')$details[]='#'.(int)$row['product_id'].' failed: '.(string)($row['error']??'Unknown error');
+                    elseif($status==='no_change')$details[]='#'.(int)$row['product_id'].' no change: '.(string)($row['diagnostic']??'No new data found.');
+                }
+                if($details)$message.=' '.implode(' | ',array_slice($details,0,3));
+                $this->setFlash(($result['failed']||($result['updated']===0&&$details))?'error':'success',$message);
             }catch(Throwable$e){
                 $this->setFlash('error','Product backfill failed: '.$e->getMessage());
             }
