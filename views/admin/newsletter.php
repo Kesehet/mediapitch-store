@@ -1,4 +1,12 @@
 <?php use MediaPitch\Core\Csrf; ?>
+<nav class="email-tabs" aria-label="Email Center sections">
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=dashboard') ?>">Dashboard</a>
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=templates') ?>">Templates</a>
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=queue') ?>">Send Queue</a>
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=history') ?>">History</a>
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=settings') ?>">Settings</a>
+  <a class="email-tab-link is-active" href="<?= e(url('admin/newsletter')) ?>">Subscribers</a>
+</nav>
 <section class="admin-card">
   <div class="admin-grid stats-grid" style="margin-bottom:20px">
     <div class="stat-card"><span>Total subscribers</span><strong><?= number_format((int)($stats['total']??0)) ?></strong></div>
