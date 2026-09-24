@@ -14,6 +14,7 @@ final class WebResearcher
         $query=trim($query);
         if($query==='')return [];
 
+        $encoded=rawurlencode($query);
         $providers=[
             [
                 'name'=>'duckduckgo-html',
@@ -27,6 +28,12 @@ final class WebResearcher
                 'method'=>'POST',
                 'body'=>http_build_query(['q'=>$query],'','&',PHP_QUERY_RFC3986),
             ],
+            [
+                'name'=>'bing-html',
+                'url'=>'https://www.bing.com/search?q='.$encoded.'&setlang=en-IN',
+                'method'=>'GET',
+                'body'=>null,
+            ],
         ];
 
         $errors=[];
@@ -37,17 +44,14 @@ final class WebResearcher
                     200000,
                     false,
                     (string)$provider['method'],
-                    (string)$provider['body'],
-                    [
-                        'Content-Type: application/x-www-form-urlencoded',
-                        'Referer: https://html.duckduckgo.com/',
-                        'Origin: https://html.duckduckgo.com',
-                        'Sec-Fetch-Site: same-origin',
-                        'Sec-Fetch-Mode: navigate',
-                        'Sec-Fetch-Dest: document',
-                    ]
+                    $provider['body']===null?null:(string)$provider['body'],
+                    (string)$provider['name']==='bing-html'
+                        ? ['Referer: https://www.bing.com/','Sec-Fetch-Site: same-origin','Sec-Fetch-Mode: navigate','Sec-Fetch-Dest: document']
+                        : ['Content-Type: application/x-www-form-urlencoded','Referer: https://html.duckduckgo.com/','Origin: https://html.duckduckgo.com','Sec-Fetch-Site: same-origin','Sec-Fetch-Mode: navigate','Sec-Fetch-Dest: document']
                 );
-                $results=$this->parseSearchResults($html,$limit);
+                $results=(string)$provider['name']==='bing-html'
+                    ? $this->parseBingResults($html,$limit)
+                    : $this->parseSearchResults($html,$limit);
                 if($results!==[])return $results;
                 $errors[]=(string)$provider['name'].': no parseable results';
             }catch(RuntimeException $e){
@@ -70,6 +74,24 @@ final class WebResearcher
         $text=html_entity_decode(strip_tags($html),ENT_QUOTES|ENT_HTML5,'UTF-8');
         $text=preg_replace('/\s+/u',' ',$text)??$text;
         return trim(substr($text,0,$maxChars));
+    }
+
+    /** @return array<int,array{url:string,title:string,excerpt:string}> */
+    private function parseBingResults(string $html,int $limit): array
+    {
+        $results=[];$seen=[];
+        if(preg_match_all('#<li\\b[^>]*class=["\\'][^"\\']*b_algo[^"\\']*["\\'][^>]*>.*?<h2[^>]*>\\s*<a\\b[^>]*href=["\\']([^"\\']+)["\\'][^>]*>(.*?)</a>#is',$html,$matches,PREG_SET_ORDER)){
+            foreach($matches as $match){
+                $url=html_entity_decode((string)$match[1],ENT_QUOTES|ENT_HTML5,'UTF-8');
+                $title=trim(html_entity_decode(strip_tags((string)$match[2]),ENT_QUOTES|ENT_HTML5,'UTF-8'));
+                $title=preg_replace('/\\s+/u',' ',$title)??$title;
+                if($title===''||!$this->isSafePublicUrl($url)||isset($seen[$url]))continue;
+                $seen[$url]=true;
+                $results[]=['url'=>$url,'title'=>$title,'excerpt'=>''];
+                if(count($results)>=$limit)break;
+            }
+        }
+        return $results;
     }
 
     /** @return array<int,array{url:string,title:string,excerpt:string}> */
