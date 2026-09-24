@@ -280,7 +280,8 @@ final class SenderQueueRepository
         $this->ensureSchema();
         $stmt = Database::connection()->prepare(
             "UPDATE sender_email_queue
-             SET status='queued',next_attempt_at=NULL,last_error=NULL,
+             SET status='queued',attempts=0,next_attempt_at=NULL,last_error=NULL,
+                 provider_message_id=NULL,
                  validation_status=NULL,validation_reason=NULL,validation_checked_at=NULL
              WHERE id=:id AND status IN ('blocked','failed')"
         );
