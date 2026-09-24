@@ -149,13 +149,21 @@ if ($method === 'POST') {
                 'template_id' => $templateId,
                 'added' => $result['added'],
                 'duplicates' => $result['duplicates'],
-                'invalid' => $result['invalid'],
+                'invalid_syntax' => $result['invalid'],
+                'rejected_before_queue' => $result['rejected'],
+                'risky' => $result['risky'],
+                'cleaner_invalid' => $result['cleaner_invalid'],
+                'unknown' => $result['unknown'],
             ]);
 
             $redirect(
-                'Queued ' . $result['added'] . ' recipient(s). ' .
+                'Cleaner passed and queued ' . $result['added'] . ' recipient(s). ' .
                 $result['duplicates'] . ' duplicate(s) skipped; ' .
-                $result['invalid'] . ' invalid line(s) skipped.',
+                $result['invalid'] . ' invalid line(s); ' .
+                $result['rejected'] . ' rejected by cleaner before queueing ' .
+                '(' . $result['risky'] . ' risky, ' .
+                $result['cleaner_invalid'] . ' invalid, ' .
+                $result['unknown'] . ' unknown).',
                 'queue'
             );
         }
@@ -163,7 +171,7 @@ if ($method === 'POST') {
         if ($action === 'queue_subscribers') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
             $template = $sender->transactionalTemplate($templateId);
-            $eligible = $newsletter->all('', 'active', 'clean');
+            $eligible = $newsletter->all('', 'active', 'all');
             $result = $queue->queueSubscribers(
                 $templateId,
                 (string)($template['title'] ?? $template['subject'] ?? $templateId),
@@ -172,15 +180,23 @@ if ($method === 'POST') {
                 !empty($_POST['consent_confirmed'])
             );
 
-            Audit::record('sender.queue.subscribers', 'sender_template', null, 'Queued clean newsletter subscribers', [
+            Audit::record('sender.queue.subscribers', 'sender_template', null, 'Queued newsletter subscribers after live cleaning', [
                 'template_id' => $templateId,
                 'added' => $result['added'],
                 'duplicates' => $result['duplicates'],
+                'rejected_before_queue' => $result['rejected'],
+                'risky' => $result['risky'],
+                'cleaner_invalid' => $result['cleaner_invalid'],
+                'unknown' => $result['unknown'],
             ]);
 
             $redirect(
-                'Queued ' . $result['added'] . ' clean active subscriber(s). ' .
-                $result['duplicates'] . ' already queued/sent for this template.',
+                'Cleaner passed and queued ' . $result['added'] . ' active subscriber(s). ' .
+                $result['duplicates'] . ' already queued/sent; ' .
+                $result['rejected'] . ' rejected before queueing ' .
+                '(' . $result['risky'] . ' risky, ' .
+                $result['cleaner_invalid'] . ' invalid, ' .
+                $result['unknown'] . ' unknown).',
                 'queue'
             );
         }
