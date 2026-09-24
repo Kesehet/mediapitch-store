@@ -31,7 +31,7 @@ final class ProductBackfillService
         $row=$db->query(
             "SELECT
                 COUNT(*) AS total,
-                SUM(CASE WHEN brand_id IS NULL OR category_id IS NULL OR asin IS NULL OR asin='' OR short_description IS NULL OR short_description='' OR main_image_url IS NULL OR main_image_url='' OR features_json IS NULL OR features_json='' THEN 1 ELSE 0 END) AS needs_backfill,
+                SUM(CASE WHEN brand_id IS NULL OR category_id IS NULL OR asin IS NULL OR asin='' OR short_description IS NULL OR short_description='' OR full_description IS NULL OR full_description='' OR main_image_url IS NULL OR main_image_url='' OR features_json IS NULL OR features_json='' THEN 1 ELSE 0 END) AS needs_backfill,
                 SUM(CASE WHEN COALESCE(NULLIF(amazon_url,''),NULLIF(affiliate_url,'')) IS NOT NULL THEN 1 ELSE 0 END) AS with_link,
                 SUM(CASE WHEN asin IS NOT NULL AND asin<>'' THEN 1 ELSE 0 END) AS with_asin
              FROM products"
@@ -58,15 +58,15 @@ final class ProductBackfillService
               FROM products p
               LEFT JOIN brands b ON b.id=p.brand_id
               LEFT JOIN categories c ON c.id=p.category_id
-              WHERE p.brand_id IS NULL OR p.category_id IS NULL OR p.asin IS NULL OR p.asin='' OR p.short_description IS NULL OR p.short_description='' OR p.main_image_url IS NULL OR p.main_image_url='' OR p.features_json IS NULL OR p.features_json=''
+              WHERE p.brand_id IS NULL OR p.category_id IS NULL OR p.asin IS NULL OR p.asin='' OR p.short_description IS NULL OR p.short_description='' OR p.full_description IS NULL OR p.full_description='' OR p.main_image_url IS NULL OR p.main_image_url='' OR p.features_json IS NULL OR p.features_json=''
               ORDER BY
                 (CASE WHEN COALESCE(NULLIF(p.amazon_url,''),NULLIF(p.affiliate_url,'')) IS NOT NULL THEN 0 ELSE 1 END),
                 p.updated_at DESC
               LIMIT ".$limit;
         $rows=Database::connection()->query($sql)->fetchAll(PDO::FETCH_ASSOC);
         foreach($rows as &$row){
-            $present=0;$total=8;
-            foreach(['brand_id','category_id','asin','short_description','main_image_url','features_json','price'] as $field){
+            $present=0;$total=9;
+            foreach(['brand_id','category_id','asin','short_description','full_description','main_image_url','features_json','price'] as $field){
                 if(isset($row[$field])&&$row[$field]!==null&&$row[$field]!=='')$present++;
             }
             if(!empty($row['amazon_url'])||!empty($row['affiliate_url']))$present++;
@@ -213,7 +213,24 @@ final class ProductBackfillService
         }
 
         if(!$changes){
-            return ['product_id'=>$productId,'title'=>$product['title'],'status'=>'no_change','fields_updated'=>0,'evidence_count'=>count($evidence)];
+            $diagnostics=[];
+            if($sourceUrl==='')$diagnostics[]='No source URL is stored for this product.';
+            foreach($evidence as $entry){
+                $type=(string)($entry['type']??'');
+                if($type==='metadata_error'&&!empty($entry['error']))$diagnostics[]='Metadata: '.(string)$entry['error'];
+                if($type==='research_error'&&!empty($entry['error']))$diagnostics[]='Web research: '.(string)$entry['error'];
+                if($type==='ai_error'&&!empty($entry['error']))$diagnostics[]='Ollama: '.(string)$entry['error'];
+            }
+            if(!empty($metadata['warning']))$diagnostics[]='Metadata warning: '.(string)$metadata['warning'];
+            if(!$diagnostics)$diagnostics[]='Sources returned no new values for fields that are currently blank.';
+            return [
+                'product_id'=>$productId,
+                'title'=>$product['title'],
+                'status'=>'no_change',
+                'fields_updated'=>0,
+                'evidence_count'=>count($evidence),
+                'diagnostic'=>implode(' ',array_values(array_unique($diagnostics))),
+            ];
         }
 
         $sets=[];$params=['id'=>$productId];
