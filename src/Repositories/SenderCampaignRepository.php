@@ -365,7 +365,7 @@ final class SenderCampaignRepository
         $stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $pending = (int)($stats['pending'] ?? 0);
         $statusSql = $pending === 0
-            ? ",status=IF(status IN ('cancelled','failed'),status,'completed'),completed_at=IF(status IN ('cancelled','failed'),completed_at,UTC_TIMESTAMP())"
+            ? ",status=IF(status IN ('cancelled','failed','paused'),status,'completed'),completed_at=IF(status IN ('cancelled','failed','paused'),completed_at,UTC_TIMESTAMP())"
             : ",status=IF(status='queued','active',status)";
         $update = Database::connection()->prepare(
             "UPDATE sender_campaign_runs SET
