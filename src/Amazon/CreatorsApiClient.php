@@ -155,8 +155,28 @@ final class CreatorsApiClient
     private function errorMessage(mixed $json): string
     {
         if(!is_array($json))return 'Unexpected response from Amazon.';
-        if(isset($json['errors'][0]['message']))return (string)$json['errors'][0]['message'];
-        return (string)($json['error_description']??$json['message']??$json['error']??'Request failed');
+
+        $error=is_array($json['errors'][0]??null)?$json['errors'][0]:$json;
+        $reason=trim((string)($error['reason']??$json['reason']??''));
+        $message=trim((string)($error['message']??$json['error_description']??$json['message']??$json['error']??'Request failed'));
+
+        $detail=match($reason){
+            'AssociateNotEligible' =>
+                'OAuth authentication succeeded, but Amazon denied catalog access because the Associates account does not currently meet Creators API eligibility. Amazon currently requires 10 qualified sales in the trailing 30 days.',
+            'InvalidPartnerTag' =>
+                'The Partner Tag is invalid or is not mapped to this Associate store. Use the Amazon Associates Store ID / Tracking ID for the marketplace, not the Creators API Application ID (for example, not a value ending in .mystore).',
+            'InvalidAssociate' =>
+                'The credential is not linked to the Partner Tag for this marketplace. Confirm that the Creators API app and the Associate store use the same primary Amazon account and marketplace Partner Tag.',
+            'TokenExpired' =>
+                'The OAuth token expired and should be refreshed automatically. Retry the request; if it repeats, check token caching.',
+            'InvalidToken','InvalidIssuer','InvalidClient','UnsupportedClient' =>
+                'Amazon rejected the OAuth credential/token. Re-check the Creators API Credential ID, secret and version.',
+            default => '',
+        };
+
+        $prefix=$reason!==''?'Amazon reason '.$reason.'. ':'';
+        $suffix=$detail!==''?' '.$detail:'';
+        return trim($prefix.$message.$suffix);
     }
 
     private function tokenRequest(string $version,string $id,string $secret): array
