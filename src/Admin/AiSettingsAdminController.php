@@ -45,12 +45,30 @@ final class AiSettingsAdminController
             try{
                 $settings=$this->settings->get();
                 $client=new OllamaClient((string)$settings['ollama_url'],(string)$settings['model'],(string)$settings['api_key']);
-                $result=$client->test();$models=$result['models']??[];$found=in_array((string)$settings['model'],$models,true);
-                $client->testGeneration();
+                $result=$client->test();
+                $models=$result['models']??[];
+                $modelsSupported=!empty($result['models_supported']);
+                $found=in_array((string)$settings['model'],$models,true);
+                $endpoint=(string)($result['generation_endpoint']??'');
                 $research=(new WebResearcher())->search('consumer product buying guide',2);
                 if(!$research)throw new \RuntimeException('The AI model works, but the server could not obtain web research search results. Check outbound HTTPS/DNS access or the research search provider.');
-                $this->setFlash('success','AI readiness test passed: remote Ollama is reachable, structured content generation works, and web research is reachable. '.count($models).' model(s) available.'.($found?' Configured model found.':' Configured model was not listed, but it successfully generated the test response.'));
-                Audit::record('ai.ollama.test','settings',null,'Tested remote Ollama generation and web research',['model'=>$settings['model'],'configured_model_found'=>$found,'research_results'=>count($research)]);
+
+                $modelInfo=$modelsSupported
+                    ? count($models).' model(s) reported by the endpoint.'.($found?' Configured model found.':' The configured model was not listed, but it generated successfully.')
+                    : ' Model listing is not exposed by this proxy, which is fine.';
+
+                $this->setFlash(
+                    'success',
+                    'AI readiness test passed: authenticated generation works via '.($endpoint?:'the configured Ollama endpoint').
+                    ', structured JSON works, and web research is reachable.'.$modelInfo
+                );
+                Audit::record('ai.ollama.test','settings',null,'Tested remote Ollama generation and web research',[
+                    'model'=>$settings['model'],
+                    'configured_model_found'=>$found,
+                    'model_listing_supported'=>$modelsSupported,
+                    'generation_endpoint'=>$endpoint,
+                    'research_results'=>count($research),
+                ]);
             }
             catch(Throwable $e){$this->setFlash('error','AI readiness test failed: '.$e->getMessage());}
             $this->redirect('/admin/settings/ai');
