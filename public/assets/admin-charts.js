@@ -235,7 +235,7 @@ function render(specs){
 
   const panel=document.createElement('section');
   panel.className='admin-insights';
-  panel.innerHTML='<div class="admin-insights-head"><div><span class="admin-insights-eyebrow">Useful signals</span><h2>What deserves attention</h2><p>Only charts tied to a real CMS decision are shown here.</p></div><span class="admin-insights-hint">Hover for exact values</span></div><div class="admin-chart-grid"></div>';
+  panel.innerHTML='<div class="admin-chart-grid"></div>';
 
   const grid=panel.querySelector('.admin-chart-grid');
   grid.classList.add('chart-count-'+Math.min(specs.length,3));
