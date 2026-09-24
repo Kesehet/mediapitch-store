@@ -7,19 +7,26 @@ namespace MediaPitch\Services;
 use DateTimeImmutable;
 use DateTimeZone;
 use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SettingsRepository;
 
 final class SenderQueueService
 {
     public function __construct(
         private readonly SenderQueueRepository $repo = new SenderQueueRepository(),
         private readonly SenderClient $sender = new SenderClient(),
-        private readonly EmailValidationClient $validator = new EmailValidationClient()
+        private readonly EmailValidationClient $validator = new EmailValidationClient(),
+        private readonly SettingsRepository $settings = new SettingsRepository()
     ) {
     }
 
     public function dailyLimit(): int
     {
-        return max(1, min(1000, (int)\env('SENDER_DAILY_LIMIT', 50)));
+        return (int)$this->settings->sender()['daily_limit'];
+    }
+
+    public function batchSize(): int
+    {
+        return (int)$this->settings->sender()['batch_size'];
     }
 
     /** @return array{start_utc:string,end_utc:string,date:string} */
