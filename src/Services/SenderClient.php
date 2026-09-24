@@ -140,7 +140,7 @@ final class SenderClient
             throw new \InvalidArgumentException('At least one valid subscriber email is required.');
         }
 
-        return $this->request(
+        $response = $this->request(
             'POST',
             '/subscribers/groups/' . rawurlencode($groupId),
             [
@@ -148,6 +148,10 @@ final class SenderClient
                 'trigger_automation' => $triggerAutomation,
             ]
         );
+        if (array_key_exists('success', $response) && $response['success'] === false) {
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the group update.')));
+        }
+        return $response;
     }
 
     /** @param array<int,string> $groups @return array<string,mixed> */
@@ -173,7 +177,11 @@ final class SenderClient
         }
         if ($groupIds !== []) $payload['groups'] = array_values($groupIds);
 
-        return $this->request('POST', '/subscribers', $payload);
+        $response = $this->request('POST', '/subscribers', $payload);
+        if (array_key_exists('success', $response) && $response['success'] === false) {
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the subscriber.')));
+        }
+        return $response;
     }
 
     /** @param array<string,mixed> $payload @return array<string,mixed> */
@@ -188,14 +196,22 @@ final class SenderClient
             throw new \InvalidArgumentException('Sender campaign content type must be html or text.');
         }
 
-        return $this->request('POST', '/campaigns', $payload);
+        $response = $this->request('POST', '/campaigns', $payload);
+        if (array_key_exists('success', $response) && $response['success'] === false) {
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign.')));
+        }
+        return $response;
     }
 
     /** @return array<string,mixed> */
     public function sendCampaign(string $campaignId): array
     {
         $campaignId = $this->cleanId($campaignId);
-        return $this->request('POST', '/campaigns/' . rawurlencode($campaignId) . '/send', []);
+        $response = $this->request('POST', '/campaigns/' . rawurlencode($campaignId) . '/send', []);
+        if (array_key_exists('success', $response) && $response['success'] === false) {
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign send.')));
+        }
+        return $response;
     }
 
     /** @return array<string,mixed> */
