@@ -50,6 +50,8 @@ if($canCatalog && preg_match('#^/admin/products/(\d+)/edit$#',$currentPath,$sync
       <a class="<?= str_starts_with($currentPath,'/admin/blog')?'active':'' ?>" href="<?= e(url('admin/blog')) ?>">Blog</a>
     <?php endif;?>
     <?php if($canMedia):?><a class="<?= str_starts_with($currentPath,'/admin/media')?'active':'' ?>" href="<?= e(url('admin/media')) ?>">Media</a><?php endif;?>
+    <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/sender')?'active':'' ?>" href="<?= e(url('admin/sender')) ?>">Email / Sender</a><?php endif;?>
+    <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/newsletter')?'active':'' ?>" href="<?= e(url('admin/newsletter')) ?>">Newsletter Subscribers</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/analytics')?'active':'' ?>" href="<?= e(url('admin/analytics')) ?>">Analytics</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/audit')?'active':'' ?>" href="<?= e(url('admin/audit')) ?>">Audit Log</a><?php endif;?>
     <?php if($isAdmin):?><a class="<?= str_starts_with($currentPath,'/admin/redirects')?'active':'' ?>" href="<?= e(url('admin/redirects')) ?>">Redirects</a><?php endif;?>

@@ -157,6 +157,64 @@ final class SettingsRepository
         if($marketplace===''||strlen($marketplace)>100||!preg_match('/^[a-z0-9.-]+$/',$marketplace))throw new InvalidArgumentException('Amazon marketplace must be a valid hostname, for example www.amazon.in.');return $marketplace;
     }
 
+    /** @return array{api_token:string,api_token_configured:bool,daily_limit:int,batch_size:int} */
+    public function sender(): array
+    {
+        $stmt=Database::connection()->query("SELECT setting_key,setting_value,encrypted FROM settings WHERE setting_key LIKE 'sender.%'");
+        $values=[];
+        foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $row){
+            $key=substr((string)$row['setting_key'],7);
+            $raw=(string)($row['setting_value']??'');
+            $values[$key]=!empty($row['encrypted'])&&$raw!==''?SecretBox::decrypt($raw):$raw;
+        }
+
+        $dbToken=trim((string)($values['api_token']??''));
+        $envToken=trim((string)\env('SENDER_API_TOKEN',''));
+        $token=$dbToken!==''?$dbToken:$envToken;
+
+        $dailyRaw=$values['daily_limit']??\env('SENDER_DAILY_LIMIT',50);
+        $batchRaw=$values['batch_size']??\env('SENDER_QUEUE_BATCH_SIZE',50);
+
+        return [
+            'api_token'=>$token,
+            'api_token_configured'=>$token!=='',
+            'daily_limit'=>max(1,min(1000,(int)$dailyRaw)),
+            'batch_size'=>max(1,min(100,(int)$batchRaw)),
+        ];
+    }
+
+    public function saveSender(array $data): void
+    {
+        $current=$this->sender();
+        $dailyLimit=(int)($data['daily_limit']??50);
+        $batchSize=(int)($data['batch_size']??50);
+
+        if($dailyLimit<1||$dailyLimit>1000){
+            throw new InvalidArgumentException('Sender daily limit must be between 1 and 1,000.');
+        }
+        if($batchSize<1||$batchSize>100){
+            throw new InvalidArgumentException('Sender worker batch size must be between 1 and 100.');
+        }
+
+        $submittedToken=trim((string)($data['api_token']??''));
+        $removeToken=!empty($data['remove_api_token']);
+
+        if($removeToken){
+            $this->put('sender.api_token','',true);
+        }elseif($submittedToken!==''){
+            if(strlen($submittedToken)<12){
+                throw new InvalidArgumentException('Sender API token looks too short.');
+            }
+            $this->put('sender.api_token',SecretBox::encrypt($submittedToken),true);
+        }elseif(!$current['api_token_configured']){
+            // Keep the setting empty; an environment fallback may still be added later.
+            $this->put('sender.api_token','',true);
+        }
+
+        $this->put('sender.daily_limit',(string)$dailyLimit,false);
+        $this->put('sender.batch_size',(string)$batchSize,false);
+    }
+
     private function normalizeConversionLabel(string $label,string $name): string
     {
         $label=trim($label);

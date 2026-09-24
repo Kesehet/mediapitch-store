@@ -23,6 +23,7 @@
     "prune-analytics": "@php database/prune-analytics.php",
     "refresh-amazon": "@php database/refresh-amazon.php",
     "ai-worker": "@php database/ai-worker.php",
-    "smoke-test": "@php database/smoke-test.php"
+    "smoke-test": "@php database/smoke-test.php",
+    "sender-worker": "@php database/sender-worker.php"
   }
 }
