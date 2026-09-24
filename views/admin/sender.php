@@ -32,11 +32,11 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
   </div>
 </section>
 
-<nav class="admin-card" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;padding:12px">
+<nav class="email-tabs" aria-label="Email Center sections">
   <?php foreach($tabLabels as $tabKey=>$tabLabel): ?>
-    <a class="button <?= $tab===$tabKey?'':'secondary' ?>" href="<?= e(url('admin/sender').'?tab='.$tabKey) ?>"><?= e($tabLabel) ?></a>
+    <a class="email-tab-link <?= $tab===$tabKey?'is-active':'' ?>" href="<?= e(url('admin/sender').'?tab='.$tabKey) ?>"><?= e($tabLabel) ?></a>
   <?php endforeach; ?>
-  <a class="button secondary" href="<?= e(url('admin/newsletter')) ?>">Newsletter Subscribers</a>
+  <a class="email-tab-link <?= str_starts_with(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '', '/admin/newsletter')?'is-active':'' ?>" href="<?= e(url('admin/newsletter')) ?>">Subscribers</a>
 </nav>
 
 <?php if($providerError): ?>
@@ -88,7 +88,7 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
   </div>
 
   <?php if(!$providerConfigured): ?>
-    <div class="empty-state">Set <code>SENDER_API_TOKEN</code> in the server environment, then return here.</div>
+    <div class="empty-state">Open <strong>Settings</strong>, add your Sender API token, save it, then return here.</div>
   <?php elseif(empty($templates)): ?>
     <div class="empty-state">No Sender transactional templates were returned. Create one in Sender and refresh this page.</div>
   <?php else: ?>
