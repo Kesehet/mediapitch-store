@@ -6,6 +6,7 @@ namespace MediaPitch\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
 use MediaPitch\Repositories\SettingsRepository;
 
@@ -15,7 +16,8 @@ final class SenderQueueService
         private readonly SenderQueueRepository $repo = new SenderQueueRepository(),
         private readonly SenderClient $sender = new SenderClient(),
         private readonly EmailValidationClient $validator = new EmailValidationClient(),
-        private readonly SettingsRepository $settings = new SettingsRepository()
+        private readonly SettingsRepository $settings = new SettingsRepository(),
+        private readonly SenderCampaignRepository $campaigns = new SenderCampaignRepository()
     ) {
     }
 
@@ -49,6 +51,11 @@ final class SenderQueueService
     {
         $window = $this->dailyWindow();
         $stats = $this->repo->stats($window['start_utc'], $window['end_utc']);
+        $transactionalToday = (int)$stats['sent_today'];
+        $campaignToday = $this->campaigns->countDispatchedBetween($window['start_utc'], $window['end_utc']);
+        $stats['transactional_sent_today'] = $transactionalToday;
+        $stats['campaign_sent_today'] = $campaignToday;
+        $stats['sent_today'] = $transactionalToday + $campaignToday;
         $stats['daily_limit'] = $this->dailyLimit();
         $stats['remaining_today'] = max(0, $this->dailyLimit() - (int)$stats['sent_today']);
         $stats['local_date'] = $window['date'];
@@ -158,7 +165,8 @@ final class SenderQueueService
 
         try {
             $window = $this->dailyWindow();
-            $sentToday = $this->repo->countSentBetween($window['start_utc'], $window['end_utc']);
+            $sentToday = $this->repo->countSentBetween($window['start_utc'], $window['end_utc'])
+                + $this->campaigns->countDispatchedBetween($window['start_utc'], $window['end_utc']);
             $remaining = max(0, $this->dailyLimit() - $sentToday);
             $summary['remaining_today'] = $remaining;
 

@@ -1,6 +1,7 @@
 <?php use MediaPitch\Core\Csrf; ?>
 <nav class="email-tabs" aria-label="Email Center sections">
   <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=dashboard') ?>">Dashboard</a>
+  <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=campaigns') ?>">Campaigns</a>
   <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=templates') ?>">Templates</a>
   <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=queue') ?>">Send Queue</a>
   <a class="email-tab-link" href="<?= e(url('admin/sender').'?tab=history') ?>">History</a>

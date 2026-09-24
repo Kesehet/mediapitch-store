@@ -7,8 +7,10 @@ use MediaPitch\Core\Auth;
 use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\NewsletterRepository;
+use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
 
@@ -26,7 +28,9 @@ if (!Auth::isAdministrator()) {
 $settingsRepo = new SettingsRepository();
 $sender = new SenderClient($settingsRepo);
 $queueRepo = new SenderQueueRepository();
+$campaignRepo = new SenderCampaignRepository();
 $queue = new SenderQueueService($queueRepo, $sender);
+$campaignQueue = new SenderCampaignService($campaignRepo, $sender);
 $newsletter = new NewsletterRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
@@ -65,6 +69,56 @@ if ($method === 'POST') {
         if ($action === 'test_connection') {
             $connection = $sender->testConnection();
             $redirect('Sender connection is working. Templates available: ' . (int)$connection['templates'] . '.', 'settings');
+        }
+
+        if ($action === 'queue_campaign') {
+            $campaignId = trim((string)($_POST['campaign_id'] ?? ''));
+            $run = $campaignQueue->queueCampaign(
+                $campaignId,
+                (int)(Auth::user()['id'] ?? 0),
+                !empty($_POST['consent_confirmed']),
+                !empty($_POST['auto_continue'])
+            );
+
+            Audit::record('sender.campaign.queue', 'sender_campaign', (int)$run['id'], 'Queued Sender marketing campaign', [
+                'source_campaign_id' => $campaignId,
+                'recipients' => (int)($run['total_recipients'] ?? 0),
+                'auto_continue' => !empty($_POST['auto_continue']),
+            ]);
+
+            $redirect(
+                'Campaign queued for ' . (int)($run['total_recipients'] ?? 0) . ' clean active subscriber(s).',
+                'campaigns'
+            );
+        }
+
+        if ($action === 'process_campaign') {
+            $runId = (int)($_POST['run_id'] ?? 0);
+            $requested = max(1, min(100, (int)($_POST['limit'] ?? 50)));
+            $result = $campaignQueue->processRun($runId, $requested);
+
+            Audit::record('sender.campaign.process', 'sender_campaign', $runId, 'Processed Sender campaign batch', $result);
+
+            $redirect(
+                'Campaign batch processed: ' . $result['dispatched'] . ' dispatched, ' .
+                $result['blocked'] . ' blocked, ' .
+                $result['retried'] . ' retrying, ' .
+                $result['failed'] . ' failed. ' .
+                $result['remaining_today'] . ' send(s) remain today.',
+                'campaigns'
+            );
+        }
+
+        if (in_array($action, ['pause_campaign','resume_campaign','cancel_campaign'], true)) {
+            $runId = (int)($_POST['run_id'] ?? 0);
+            if ($runId < 1) throw new InvalidArgumentException('Campaign queue not found.');
+
+            if ($action === 'pause_campaign') $campaignQueue->pause($runId);
+            elseif ($action === 'resume_campaign') $campaignQueue->resume($runId);
+            else $campaignQueue->cancel($runId);
+
+            Audit::record('sender.campaign.' . str_replace('_campaign', '', $action), 'sender_campaign', $runId, 'Updated Sender campaign queue');
+            $redirect('Campaign queue updated.', 'campaigns');
         }
 
         if ($action === 'queue_manual') {
@@ -163,7 +217,7 @@ if ($method === 'POST') {
 }
 
 $tab = (string)($_GET['tab'] ?? 'dashboard');
-if (!in_array($tab, ['dashboard','templates','queue','history','settings'], true)) {
+if (!in_array($tab, ['dashboard','campaigns','templates','queue','history','settings'], true)) {
     $tab = 'dashboard';
 }
 
@@ -174,6 +228,23 @@ if ($sender->configured()) {
     try {
         $templates = $sender->transactionalTemplates(100);
         $connection = ['ok' => true, 'templates' => count($templates)];
+    } catch (Throwable $e) {
+        $providerError = $e->getMessage();
+    }
+}
+
+$campaigns = [];
+$selectedCampaign = null;
+if ($tab === 'campaigns' && $sender->configured()) {
+    try {
+        $campaigns = array_values(array_filter(
+            $sender->campaigns(100),
+            static fn(array $campaign): bool => !str_starts_with((string)($campaign['title'] ?? ''), '[MediaPitch batch]')
+        ));
+        $campaignId = trim((string)($_GET['campaign'] ?? ''));
+        if ($campaignId !== '') {
+            $selectedCampaign = $sender->campaign($campaignId);
+        }
     } catch (Throwable $e) {
         $providerError = $e->getMessage();
     }
@@ -200,6 +271,10 @@ View::render('admin/sender', [
     'tab' => $tab,
     'templates' => $templates,
     'selectedTemplate' => $selectedTemplate,
+    'campaigns' => $campaigns,
+    'selectedCampaign' => $selectedCampaign,
+    'campaignRuns' => $campaignRepo->runs(100),
+    'campaignStats' => $campaignQueue->stats(),
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
     'providerError' => $providerError,

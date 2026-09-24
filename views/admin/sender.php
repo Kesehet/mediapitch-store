@@ -3,6 +3,7 @@ use MediaPitch\Core\Csrf;
 
 $tabLabels = [
     'dashboard' => 'Dashboard',
+    'campaigns' => 'Campaigns',
     'templates' => 'Templates',
     'queue' => 'Send Queue',
     'history' => 'History',
@@ -11,6 +12,11 @@ $tabLabels = [
 $previewContent = '';
 if (is_array($selectedTemplate)) {
     $previewContent = (string)($selectedTemplate['content'] ?? $selectedTemplate['html'] ?? '');
+}
+$campaignPreviewContent = '';
+if (is_array($selectedCampaign)) {
+    $campaignHtml = is_array($selectedCampaign['html'] ?? null) ? $selectedCampaign['html'] : [];
+    $campaignPreviewContent = (string)($campaignHtml['html_content'] ?? $selectedCampaign['html_content'] ?? $selectedCampaign['content'] ?? '');
 }
 $remainingToday = (int)($stats['remaining_today'] ?? 0);
 $dailyLimit = (int)($stats['daily_limit'] ?? 50);
@@ -21,8 +27,8 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
     <div>
       <h2 style="margin:0 0 6px">Sender Email Center</h2>
       <p class="muted" style="margin:0;max-width:780px">
-        Design transactional templates in Sender, queue recipients here, and let MediaPitch validate every address with the list cleaner before delivery.
-        Only addresses returning <strong>clean</strong> are sent.
+        Control Sender transactional templates and marketing campaigns from MediaPitch. The same validated send queue and daily cap protect both paths.
+        Only addresses returning <strong>clean</strong> are dispatched.
       </p>
     </div>
     <div style="text-align:right">
@@ -46,7 +52,7 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
 <?php if($tab==='dashboard'): ?>
 <section class="admin-card">
   <div class="admin-grid stats-grid" style="margin-bottom:22px">
-    <div class="stat-card"><span>Sent today</span><strong><?= number_format((int)($stats['sent_today']??0)) ?></strong></div>
+    <div class="stat-card"><span>Sent today</span><strong><?= number_format((int)($stats['sent_today']??0)) ?></strong><small><?= number_format((int)($stats['transactional_sent_today']??0)) ?> template · <?= number_format((int)($stats['campaign_sent_today']??0)) ?> campaign</small></div>
     <div class="stat-card"><span>Remaining today</span><strong><?= number_format($remainingToday) ?></strong></div>
     <div class="stat-card"><span>Queued</span><strong><?= number_format((int)($stats['queued']??0)) ?></strong></div>
     <div class="stat-card"><span>Blocked by cleaner</span><strong><?= number_format((int)($stats['blocked']??0)) ?></strong></div>
@@ -75,6 +81,124 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       </form>
     </div>
   </div>
+</section>
+
+<?php elseif($tab==='campaigns'): ?>
+<section class="admin-card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px">
+    <div>
+      <h2 style="margin:0 0 4px">Sender email campaigns</h2>
+      <p class="muted" style="margin:0;max-width:760px">Choose an existing Sender campaign as the master design. MediaPitch snapshots its subject, sender details and HTML, then dispatches the local clean subscriber audience in daily batches without sending the master campaign itself.</p>
+    </div>
+    <div style="text-align:right">
+      <strong><?= number_format(count($campaigns)) ?> campaign(s)</strong>
+      <div class="muted" style="font-size:13px">Shared allowance remaining today: <?= number_format((int)($campaignStats['remaining_today']??0)) ?></div>
+    </div>
+  </div>
+
+  <?php if(!$providerConfigured): ?>
+    <div class="empty-state">Open <strong>Settings</strong>, add your Sender API token, save it, then return here.</div>
+  <?php elseif(empty($campaigns)): ?>
+    <div class="empty-state">No Sender email campaigns were returned. Create the email design in Sender first, then refresh this page.</div>
+  <?php else: ?>
+    <div class="admin-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+      <?php foreach($campaigns as $campaign): $campaignId=(string)($campaign['id']??''); ?>
+        <article style="border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+          <div class="muted" style="font-size:12px;margin-bottom:5px"><?= e((string)($campaign['status']??'Campaign')) ?> · <?= e($campaignId) ?></div>
+          <h3 style="margin:0 0 6px"><?= e((string)($campaign['title']??$campaign['subject']??'Untitled campaign')) ?></h3>
+          <p style="margin:0 0 8px"><?= e((string)($campaign['subject']??'')) ?></p>
+          <div class="muted" style="font-size:12px;margin-bottom:12px">Sender audience: <?= number_format((int)($campaign['recipient_count']??0)) ?> · This number is not used by the MediaPitch queue.</div>
+          <a class="button" href="<?= e(url('admin/sender').'?'.http_build_query(['tab'=>'campaigns','campaign'=>$campaignId])) ?>">Preview &amp; queue</a>
+        </article>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+</section>
+
+<?php if($selectedCampaign): ?>
+<section class="admin-card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+    <div>
+      <div class="muted" style="font-size:12px"><?= e((string)($selectedCampaign['id']??'')) ?></div>
+      <h2 style="margin:4px 0"><?= e((string)($selectedCampaign['title']??$selectedCampaign['subject']??'Campaign')) ?></h2>
+      <p style="margin:0"><strong>Subject:</strong> <?= e((string)($selectedCampaign['subject']??'')) ?></p>
+    </div>
+    <form method="post" action="<?= e(url('admin/sender/action')) ?>" style="min-width:min(100%,360px)">
+      <?= Csrf::field() ?>
+      <input type="hidden" name="action" value="queue_campaign">
+      <input type="hidden" name="tab" value="campaigns">
+      <input type="hidden" name="campaign_id" value="<?= e((string)($selectedCampaign['id']??'')) ?>">
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
+        <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto;margin-top:3px">
+        <span>Use all currently active, clean MediaPitch newsletter subscribers as the campaign audience.</span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
+        <input type="checkbox" name="auto_continue" value="1" checked style="width:auto;margin-top:3px">
+        <span>Continue automatically on future worker runs until the audience is finished.</span>
+      </label>
+      <button class="button" type="submit">Queue campaign</button>
+    </form>
+  </div>
+  <?php if($campaignPreviewContent!==''): ?>
+    <iframe sandbox title="Sender campaign preview" srcdoc="<?= e($campaignPreviewContent) ?>" style="width:100%;height:650px;border:1px solid #e5e7eb;border-radius:10px;margin-top:16px;background:white"></iframe>
+  <?php else: ?>
+    <div class="empty-state" style="margin-top:16px">Sender did not expose reusable campaign content for this email. MediaPitch will refuse to queue it unless Sender returns the subject, sender, reply-to and content safely.</div>
+  <?php endif; ?>
+</section>
+<?php endif; ?>
+
+<section class="admin-card">
+  <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px">
+    <div>
+      <h2 style="margin:0 0 4px">Campaign queues</h2>
+      <p class="muted" style="margin:0">Each queue is a snapshot of one Sender design plus the clean MediaPitch audience at the moment it was queued.</p>
+    </div>
+    <div class="muted" style="font-size:13px">
+      Active: <?= number_format((int)($campaignStats['active_runs']??0)) ?> ·
+      Dispatched: <?= number_format((int)($campaignStats['dispatched']??0)) ?>
+    </div>
+  </div>
+
+  <?php if(empty($campaignRuns)): ?>
+    <div class="empty-state">No campaign queues yet.</div>
+  <?php else: ?>
+    <div class="table-wrap"><table class="admin-table">
+      <thead><tr><th>Campaign</th><th>Progress</th><th>Status</th><th>Last issue</th><th>Controls</th></tr></thead>
+      <tbody>
+      <?php foreach($campaignRuns as $run): $runStatus=(string)$run['status']; $remaining=max(0,(int)($run['remaining_recipients']??0)); ?>
+        <tr>
+          <td>
+            <strong><?= e((string)($run['source_title']?:$run['subject'])) ?></strong>
+            <div class="muted" style="font-size:11px">Source <?= e((string)$run['source_campaign_id']) ?> · <?= (int)($run['batch_count']??0) ?> batch(es)</div>
+          </td>
+          <td>
+            <strong><?= number_format((int)$run['dispatched_recipients']) ?> / <?= number_format((int)$run['total_recipients']) ?></strong>
+            <div class="muted" style="font-size:12px"><?= number_format($remaining) ?> remaining · <?= number_format((int)$run['blocked_recipients']) ?> blocked · <?= number_format((int)$run['failed_recipients']) ?> failed</div>
+          </td>
+          <td><strong><?= e(ucfirst($runStatus)) ?></strong><div class="muted" style="font-size:12px"><?= !empty($run['auto_continue'])?'Auto continue':'Manual' ?></div></td>
+          <td><?php if(!empty($run['last_error'])):?><span style="max-width:320px;display:block"><?= e((string)$run['last_error']) ?></span><?php else:?><span class="muted">—</span><?php endif;?></td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <?php if(in_array($runStatus,['queued','active'],true)&&$remaining>0): ?>
+                <form method="post" action="<?= e(url('admin/sender/action')) ?>">
+                  <?= Csrf::field() ?><input type="hidden" name="action" value="process_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>">
+                  <input type="hidden" name="limit" value="<?= max(1,min(50,(int)($campaignStats['remaining_today']??50))) ?>">
+                  <button class="button" <?= (int)($campaignStats['remaining_today']??0)<1?'disabled':'' ?>>Send today's batch</button>
+                </form>
+                <form method="post" action="<?= e(url('admin/sender/action')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="pause_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>"><button class="button secondary">Pause</button></form>
+              <?php elseif($runStatus==='paused'&&$remaining>0): ?>
+                <form method="post" action="<?= e(url('admin/sender/action')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="resume_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>"><button class="button">Resume</button></form>
+              <?php endif; ?>
+              <?php if(!in_array($runStatus,['completed','cancelled'],true)): ?>
+                <form method="post" action="<?= e(url('admin/sender/action')) ?>" onsubmit="return confirm('Cancel the remaining unsent recipients for this campaign queue?')"><?= Csrf::field() ?><input type="hidden" name="action" value="cancel_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>"><button class="button secondary">Cancel</button></form>
+              <?php endif; ?>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php endif; ?>
 </section>
 
 <?php elseif($tab==='templates'): ?>
