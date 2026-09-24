@@ -1,6 +1,6 @@
 <?php use MediaPitch\Core\Csrf; ?>
 <section class="panel">
-  <div class="panel-head"><div><h2>Products</h2><p>Manual, Amazon API and hybrid product records.</p></div><div class="form-actions"><a class="secondary-button" href="<?= e(url('admin/product-tools')) ?>">CSV tools</a><a class="primary-button" href="<?= e(url('admin/products/new')) ?>">+ Add product</a></div></div>
+  <div class="panel-head"><div><h2>Products</h2><p>Manual, Amazon API and hybrid product records.</p></div><div class="form-actions"><a class="secondary-button" href="<?= e(url('admin/product-tools')) ?>">Tools & backfill</a><a class="primary-button" href="<?= e(url('admin/products/new')) ?>">+ Add product</a></div></div>
   <form method="post" action="<?= e(url('admin/product-tools/bulk')) ?>"><?= Csrf::field() ?>
     <div class="form-actions" style="justify-content:flex-start;margin-bottom:12px"><select name="bulk_action" required><option value="">Bulk action…</option><option value="archive">Archive selected</option><option value="restore">Restore selected</option></select><button class="secondary-button" type="submit">Apply</button><button class="link-button" type="button" id="select-all-products">Select all</button></div>
     <div class="table-wrap"><table class="data-table"><thead><tr><th><span class="sr-only">Select</span></th><th>Product</th><th>Category</th><th>Source</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead><tbody>
