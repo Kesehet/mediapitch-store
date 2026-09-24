@@ -13,6 +13,7 @@ use MediaPitch\Repositories\SettingsRepository;
 use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
+use MediaPitch\Services\SubscriberMergeService;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -29,9 +30,10 @@ $settingsRepo = new SettingsRepository();
 $sender = new SenderClient($settingsRepo);
 $queueRepo = new SenderQueueRepository();
 $campaignRepo = new SenderCampaignRepository();
+$newsletter = new NewsletterRepository();
+$subscriberMerge = new SubscriberMergeService($newsletter, $sender);
 $queue = new SenderQueueService($queueRepo, $sender);
 $campaignQueue = new SenderCampaignService($campaignRepo, $sender);
-$newsletter = new NewsletterRepository();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 $redirect = static function (string $message, string $tab = 'dashboard', bool $error = false): never {
@@ -82,12 +84,22 @@ if ($method === 'POST') {
 
             Audit::record('sender.campaign.queue', 'sender_campaign', (int)$run['id'], 'Queued Sender marketing campaign', [
                 'source_campaign_id' => $campaignId,
-                'recipients' => (int)($run['total_recipients'] ?? 0),
+                'audience_candidates' => (int)($run['audience_candidates'] ?? 0),
+                'clean_queued' => (int)($run['clean_queued'] ?? $run['total_recipients'] ?? 0),
+                'rejected_before_queue' => (int)($run['rejected_before_queue'] ?? 0),
+                'unknown_before_queue' => (int)($run['unknown_before_queue'] ?? 0),
+                'risky_before_queue' => (int)($run['risky_before_queue'] ?? 0),
+                'invalid_before_queue' => (int)($run['invalid_before_queue'] ?? 0),
                 'auto_continue' => !empty($_POST['auto_continue']),
             ]);
 
             $redirect(
-                'Campaign queued for ' . (int)($run['total_recipients'] ?? 0) . ' clean active subscriber(s).',
+                'Merged audience: ' . (int)($run['audience_candidates'] ?? 0) . ' active. ' .
+                'Cleaner passed and queued ' . (int)($run['clean_queued'] ?? $run['total_recipients'] ?? 0) . '. ' .
+                (int)($run['rejected_before_queue'] ?? 0) . ' rejected before queueing ' .
+                '(' . (int)($run['risky_before_queue'] ?? 0) . ' risky, ' .
+                (int)($run['invalid_before_queue'] ?? 0) . ' invalid, ' .
+                (int)($run['unknown_before_queue'] ?? 0) . ' unknown).',
                 'campaigns'
             );
         }
@@ -137,13 +149,21 @@ if ($method === 'POST') {
                 'template_id' => $templateId,
                 'added' => $result['added'],
                 'duplicates' => $result['duplicates'],
-                'invalid' => $result['invalid'],
+                'invalid_syntax' => $result['invalid'],
+                'rejected_before_queue' => $result['rejected'],
+                'risky' => $result['risky'],
+                'cleaner_invalid' => $result['cleaner_invalid'],
+                'unknown' => $result['unknown'],
             ]);
 
             $redirect(
-                'Queued ' . $result['added'] . ' recipient(s). ' .
+                'Cleaner passed and queued ' . $result['added'] . ' recipient(s). ' .
                 $result['duplicates'] . ' duplicate(s) skipped; ' .
-                $result['invalid'] . ' invalid line(s) skipped.',
+                $result['invalid'] . ' invalid line(s); ' .
+                $result['rejected'] . ' rejected by cleaner before queueing ' .
+                '(' . $result['risky'] . ' risky, ' .
+                $result['cleaner_invalid'] . ' invalid, ' .
+                $result['unknown'] . ' unknown).',
                 'queue'
             );
         }
@@ -151,7 +171,7 @@ if ($method === 'POST') {
         if ($action === 'queue_subscribers') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
             $template = $sender->transactionalTemplate($templateId);
-            $eligible = $newsletter->all('', 'active', 'clean');
+            $eligible = $newsletter->all('', 'active', 'all');
             $result = $queue->queueSubscribers(
                 $templateId,
                 (string)($template['title'] ?? $template['subject'] ?? $templateId),
@@ -160,15 +180,23 @@ if ($method === 'POST') {
                 !empty($_POST['consent_confirmed'])
             );
 
-            Audit::record('sender.queue.subscribers', 'sender_template', null, 'Queued clean newsletter subscribers', [
+            Audit::record('sender.queue.subscribers', 'sender_template', null, 'Queued newsletter subscribers after live cleaning', [
                 'template_id' => $templateId,
                 'added' => $result['added'],
                 'duplicates' => $result['duplicates'],
+                'rejected_before_queue' => $result['rejected'],
+                'risky' => $result['risky'],
+                'cleaner_invalid' => $result['cleaner_invalid'],
+                'unknown' => $result['unknown'],
             ]);
 
             $redirect(
-                'Queued ' . $result['added'] . ' clean active subscriber(s). ' .
-                $result['duplicates'] . ' already queued/sent for this template.',
+                'Cleaner passed and queued ' . $result['added'] . ' active subscriber(s). ' .
+                $result['duplicates'] . ' already queued/sent; ' .
+                $result['rejected'] . ' rejected before queueing ' .
+                '(' . $result['risky'] . ' risky, ' .
+                $result['cleaner_invalid'] . ' invalid, ' .
+                $result['unknown'] . ' unknown).',
                 'queue'
             );
         }
@@ -235,6 +263,9 @@ if ($sender->configured()) {
 
 $campaigns = [];
 $selectedCampaign = null;
+$mergedAudienceStats = [];
+$mergedAudienceError = null;
+$mergedAudienceTruncated = false;
 if ($tab === 'campaigns' && $sender->configured()) {
     try {
         $campaigns = array_values(array_filter(
@@ -245,6 +276,11 @@ if ($tab === 'campaigns' && $sender->configured()) {
         if ($campaignId !== '') {
             $selectedCampaign = $sender->campaign($campaignId);
         }
+
+        $audience = $subscriberMerge->merged();
+        $mergedAudienceStats = $audience['stats'];
+        $mergedAudienceError = $audience['sender_error'];
+        $mergedAudienceTruncated = (bool)$audience['sender_truncated'];
     } catch (Throwable $e) {
         $providerError = $e->getMessage();
     }
@@ -275,6 +311,9 @@ View::render('admin/sender', [
     'selectedCampaign' => $selectedCampaign,
     'campaignRuns' => $campaignRepo->runs(100),
     'campaignStats' => $campaignQueue->stats(),
+    'mergedAudienceStats' => $mergedAudienceStats,
+    'mergedAudienceError' => $mergedAudienceError,
+    'mergedAudienceTruncated' => $mergedAudienceTruncated,
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
     'providerError' => $providerError,

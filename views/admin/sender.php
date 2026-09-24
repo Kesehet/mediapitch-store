@@ -130,13 +130,23 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       <input type="hidden" name="campaign_id" value="<?= e((string)($selectedCampaign['id']??'')) ?>">
       <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">
         <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto;margin-top:3px">
-        <span>Use all currently active, clean MediaPitch newsletter subscribers as the campaign audience.</span>
+        <span>Use the full merged active audience from MediaPitch + Sender. Every address will be run through the MediaPitch cleaner now, and only addresses returning <strong>clean</strong> will be queued.</span>
       </label>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
         <input type="checkbox" name="auto_continue" value="1" checked style="width:auto;margin-top:3px">
         <span>Continue automatically on future worker runs until the audience is finished.</span>
       </label>
-      <button class="button" type="submit">Queue campaign</button>
+      <?php if($mergedAudienceError): ?>
+        <div class="flash error" style="margin-bottom:10px">Merged audience unavailable: <?= e((string)$mergedAudienceError) ?></div>
+      <?php elseif($mergedAudienceTruncated): ?>
+        <div class="flash error" style="margin-bottom:10px">Sender subscriber data is incomplete, so campaign queueing is disabled until the full merged audience can be loaded.</div>
+      <?php else: ?>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">
+          Current merged audience: <strong><?= number_format((int)($mergedAudienceStats['unique_total']??0)) ?></strong> unique ·
+          <strong><?= number_format((int)($mergedAudienceStats['effective_active']??0)) ?></strong> active candidates before live cleaning.
+        </div>
+      <?php endif; ?>
+      <button class="button" type="submit" <?= $mergedAudienceError||$mergedAudienceTruncated?'disabled':'' ?>>Clean &amp; queue campaign</button>
     </form>
   </div>
   <?php if($campaignPreviewContent!==''): ?>
@@ -151,7 +161,7 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
   <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px">
     <div>
       <h2 style="margin:0 0 4px">Campaign queues</h2>
-      <p class="muted" style="margin:0">Each queue is a snapshot of one Sender design plus the clean MediaPitch audience at the moment it was queued.</p>
+      <p class="muted" style="margin:0">Each queue is a snapshot of one Sender design plus the merged MediaPitch + Sender audience that passed the live cleaner before queueing. The worker validates addresses again immediately before sending.</p>
     </div>
     <div class="muted" style="font-size:13px">
       Active: <?= number_format((int)($campaignStats['active_runs']??0)) ?> ·
@@ -260,7 +270,7 @@ $requestedTemplate=(string)($_GET['template']??'');
 ?>
 <section class="admin-card" style="margin-bottom:18px">
   <h2 style="margin-top:0">Queue new recipients</h2>
-  <p class="muted">Accepted formats: one email per line, <code>email,name</code>, <code>name,email</code>, or <code>Name &lt;email&gt;</code>. Addresses are validated again immediately before sending.</p>
+  <p class="muted">Accepted formats: one email per line, <code>email,name</code>, <code>name,email</code>, or <code>Name &lt;email&gt;</code>. Every address must pass the live cleaner as <strong>clean</strong> before it is inserted into the queue, and is validated again immediately before sending.</p>
   <form method="post" action="<?= e(url('admin/sender/action')) ?>">
     <?= Csrf::field() ?>
     <input type="hidden" name="action" value="queue_manual"><input type="hidden" name="tab" value="queue">
@@ -284,13 +294,13 @@ $requestedTemplate=(string)($_GET['template']??'');
       <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto;margin-top:3px">
       <span>I confirm these recipients are permitted to receive this email. MediaPitch will still block every address that does not pass the list cleaner as <strong>clean</strong>.</span>
     </label>
-    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Add to queue</button>
+    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Clean &amp; add to queue</button>
   </form>
 </section>
 
 <section class="admin-card" style="margin-bottom:18px">
   <h2 style="margin-top:0">Queue existing newsletter subscribers</h2>
-  <p class="muted">This selects currently active subscribers whose latest stored validation status is clean. The worker revalidates every address before the actual send.</p>
+  <p class="muted">This selects currently active local subscribers, runs the live cleaner on every address before queueing, and inserts only addresses returning <strong>clean</strong>. The worker validates them again before the actual send.</p>
   <form method="post" action="<?= e(url('admin/sender/action')) ?>" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <?= Csrf::field() ?>
     <input type="hidden" name="action" value="queue_subscribers"><input type="hidden" name="tab" value="queue">
@@ -306,7 +316,7 @@ $requestedTemplate=(string)($_GET['template']??'');
       <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto">
       <span>Confirm these active newsletter subscribers may receive this email.</span>
     </label>
-    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Queue clean subscribers</button>
+    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Clean &amp; queue subscribers</button>
   </form>
   <p class="muted" style="margin-bottom:0;margin-top:12px">
     Current subscriber records: <?= number_format((int)($newsletterStats['total']??0)) ?> total · <?= number_format((int)($newsletterStats['active']??0)) ?> active.

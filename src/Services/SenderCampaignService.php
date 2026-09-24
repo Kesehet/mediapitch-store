@@ -19,7 +19,8 @@ final class SenderCampaignService
         private readonly EmailValidationClient $validator = new EmailValidationClient(),
         private readonly SettingsRepository $settings = new SettingsRepository(),
         private readonly SenderQueueRepository $queueRepo = new SenderQueueRepository(),
-        private readonly NewsletterRepository $newsletter = new NewsletterRepository()
+        private readonly NewsletterRepository $newsletter = new NewsletterRepository(),
+        private readonly SubscriberMergeService $subscribers = new SubscriberMergeService()
     ) {
     }
 
@@ -71,16 +72,71 @@ final class SenderCampaignService
 
         $campaign = $this->sender->campaign($campaignId);
         $snapshot = $this->snapshotCampaign($campaign);
-        $recipients = $this->newsletter->cleanActive(20000);
+        $candidates = $this->subscribers->campaignCandidates();
+
+        if ($candidates === []) {
+            throw new \InvalidArgumentException('There are no active merged subscribers to clean and queue.');
+        }
+
+        $emails = array_values(array_unique(array_map(
+            static fn(array $row): string => strtolower(trim((string)($row['email'] ?? ''))),
+            $candidates
+        )));
+        $validations = $this->validator->validateMany($emails, 10);
+
+        $recipients = [];
+        $rejected = 0;
+        $unknown = 0;
+        $risky = 0;
+        $invalid = 0;
+
+        foreach ($candidates as $candidate) {
+            $email = strtolower(trim((string)($candidate['email'] ?? '')));
+            $validation = $validations[$email] ?? [
+                'status' => 'unknown',
+                'reason' => 'No validation result was returned',
+            ];
+            $status = strtolower(trim((string)($validation['status'] ?? 'unknown')));
+            $reason = trim((string)($validation['reason'] ?? ''));
+
+            $localId = (int)($candidate['id'] ?? 0);
+            if ($localId > 0) {
+                $this->newsletter->recordValidation($localId, $status, $reason);
+            }
+
+            if ($status !== 'clean') {
+                $rejected++;
+                if ($status === 'unknown') $unknown++;
+                elseif ($status === 'risky') $risky++;
+                elseif ($status === 'invalid') $invalid++;
+                continue;
+            }
+
+            $recipients[] = [
+                'email' => $email,
+                'name' => trim((string)($candidate['name'] ?? '')),
+                'id' => $localId,
+            ];
+        }
 
         if ($recipients === []) {
-            throw new \InvalidArgumentException('There are no clean active newsletter subscribers to queue.');
+            throw new \InvalidArgumentException(
+                'The merged audience had ' . count($candidates) .
+                ' active subscriber(s), but none passed the live email cleaner as clean.'
+            );
         }
 
         $run = $this->repo->createRun($snapshot, $recipients, $createdBy, $autoContinue);
         if (empty($run['id']) || (int)($run['total_recipients'] ?? 0) < 1) {
             throw new \RuntimeException('Campaign queue could not be created.');
         }
+
+        $run['audience_candidates'] = count($candidates);
+        $run['clean_queued'] = count($recipients);
+        $run['rejected_before_queue'] = $rejected;
+        $run['unknown_before_queue'] = $unknown;
+        $run['risky_before_queue'] = $risky;
+        $run['invalid_before_queue'] = $invalid;
 
         return $run;
     }

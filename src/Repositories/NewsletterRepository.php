@@ -142,6 +142,27 @@ final class NewsletterRepository
         return Database::connection()->query("SELECT COUNT(*) total,SUM(status='active') active,SUM(status='unsubscribed') unsubscribed,SUM(validation_status='risky') risky,SUM(validation_status='invalid') invalid_count,SUM(validation_status='unknown') unknown_count,SUM(validation_status IS NULL) not_checked FROM newsletter_subscribers")->fetch(PDO::FETCH_ASSOC) ?: ['total'=>0,'active'=>0,'unsubscribed'=>0,'risky'=>0,'invalid_count'=>0,'unknown_count'=>0,'not_checked'=>0];
     }
 
+    public function recordValidation(int $id, string $status, string $reason = ''): void
+    {
+        $this->ensureSchema();
+        if ($id < 1) return;
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['clean','risky','unknown','invalid'], true)) $status = 'unknown';
+
+        $stmt = Database::connection()->prepare(
+            'UPDATE newsletter_subscribers
+             SET validation_status=:validation_status,
+                 validation_reason=:validation_reason,
+                 validation_checked_at=NOW()
+             WHERE id=:id'
+        );
+        $stmt->execute([
+            'validation_status' => $status,
+            'validation_reason' => substr(trim($reason), 0, 255) ?: null,
+            'id' => $id,
+        ]);
+    }
+
     public function revalidate(int $id): void
     {
         $this->ensureSchema();

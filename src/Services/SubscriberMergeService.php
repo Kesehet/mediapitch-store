@@ -208,6 +208,48 @@ final class SubscriberMergeService
         ];
     }
 
+    /**
+     * Build the deduplicated active audience before email validation.
+     * Sender must load completely so we never miss a remote unsubscribe/suppression.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function campaignCandidates(): array
+    {
+        $result = $this->merged();
+
+        if (!empty($result['sender_error'])) {
+            throw new \RuntimeException(
+                'Cannot build the merged campaign audience because Sender subscribers could not be loaded: ' .
+                (string)$result['sender_error']
+            );
+        }
+        if (!empty($result['sender_truncated'])) {
+            throw new \RuntimeException(
+                'Cannot build the merged campaign audience because the Sender subscriber list was truncated.'
+            );
+        }
+
+        $out = [];
+        foreach ($result['rows'] as $row) {
+            if ((string)($row['effective_status'] ?? '') !== 'active') continue;
+
+            $email = $this->normalizeEmail((string)($row['email'] ?? ''));
+            if ($email === '') continue;
+
+            $out[] = [
+                'email' => $email,
+                'name' => trim((string)($row['display_name'] ?? '')),
+                'id' => (int)($row['local_id'] ?? 0),
+                'presence' => (string)($row['presence'] ?? ''),
+                'sender_status' => (string)($row['sender_status'] ?? ''),
+                'local_status' => (string)($row['local_status'] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
     private function normalizeEmail(string $email): string
     {
         $email = strtolower(trim($email));
