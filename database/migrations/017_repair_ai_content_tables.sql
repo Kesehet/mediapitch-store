@@ -1,3 +1,7 @@
+-- Repair AI content tables on deployments where migration history and the
+-- physical schema drifted. This migration is intentionally non-destructive and
+-- safe to run on databases where either table already exists.
+
 CREATE TABLE IF NOT EXISTS ai_jobs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     job_type VARCHAR(50) NOT NULL DEFAULT 'content_draft',
