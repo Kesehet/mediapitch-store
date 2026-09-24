@@ -44,7 +44,8 @@
             if(empty($p['brand_id']))$missing[]='brand';
             if(empty($p['category_id']))$missing[]='category';
             if(empty($p['asin']))$missing[]='ASIN';
-            if(empty($p['short_description']))$missing[]='description';
+            if(empty($p['short_description']))$missing[]='short description';
+            if(empty($p['full_description']))$missing[]='full description';
             if(empty($p['main_image_url']))$missing[]='image';
             if(empty($p['features_json']))$missing[]='features';
             if($p['price']===null||$p['price']==='')$missing[]='price';
