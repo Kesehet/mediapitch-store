@@ -53,7 +53,7 @@ final class ProductBackfillService
     public function candidates(int $limit=50): array
     {
         $limit=max(1,min(200,$limit));
-        $sql="SELECT p.id,p.title,p.display_title,p.asin,p.brand_id,p.category_id,p.short_description,p.main_image_url,p.features_json,p.price,p.amazon_url,p.affiliate_url,
+        $sql="SELECT p.id,p.title,p.display_title,p.asin,p.brand_id,p.category_id,p.short_description,p.full_description,p.main_image_url,p.features_json,p.price,p.amazon_url,p.affiliate_url,
                     b.name AS brand_name,c.name AS category_name
               FROM products p
               LEFT JOIN brands b ON b.id=p.brand_id
@@ -122,6 +122,7 @@ final class ProductBackfillService
         $changes=[];
         $evidence=[];
         $metadata=[];
+        $metadataDiscovered=false;
         $sourceUrl=trim((string)($product['amazon_url']?:$product['affiliate_url']?:''));
 
         if($sourceUrl!==''){
@@ -149,9 +150,26 @@ final class ProductBackfillService
 
         if($this->metadataSparse($metadata)&&$query!==''){
             try{
-                $results=$this->research->search($query,3);
+                $results=$this->research->search($query,5);
                 foreach($results as $result){
                     $entry=['type'=>'web_search','url'=>$result['url'],'title'=>$result['title'],'excerpt'=>$result['excerpt']??''];
+
+                    if($this->metadataSparse($metadata)){
+                        try{
+                            $discovered=$this->metadata->fetch((string)$result['url']);
+                            if($this->metadataMatchesProduct($product,$discovered,$asin)){
+                                $entry['structured_match']=true;
+                                $entry['structured_title']=(string)($discovered['title']??'');
+                                $metadata=$this->mergeMetadata($metadata,$discovered);
+                                $metadataDiscovered=true;
+                            }else{
+                                $entry['structured_match']=false;
+                            }
+                        }catch(Throwable $e){
+                            $entry['metadata_error']=$e->getMessage();
+                        }
+                    }
+
                     try{$entry['text']=$this->research->read((string)$result['url'],4500);}catch(Throwable $e){$entry['read_error']=$e->getMessage();}
                     $evidence[]=$entry;
                 }
@@ -194,7 +212,7 @@ final class ProductBackfillService
         if(!$this->hasValue($product['amazon_url']??null)&&!empty($metadata['amazon_url'])){
             $url=$this->safeUrl((string)$metadata['amazon_url']);if($url!=='')$changes['amazon_url']=['value'=>$url,'source'=>'metadata','url'=>$url,'confidence'=>0.99];
         }
-        if(!$this->hasValue($product['affiliate_url']??null)&&!empty($metadata['affiliate_url'])){
+        if(!$metadataDiscovered&&!$this->hasValue($product['affiliate_url']??null)&&!empty($metadata['affiliate_url'])){
             $url=$this->safeUrl((string)$metadata['affiliate_url']);if($url!=='')$changes['affiliate_url']=['value'=>$url,'source'=>'metadata','url'=>$url,'confidence'=>0.99];
         }
 
@@ -214,7 +232,7 @@ final class ProductBackfillService
 
         if(!$changes){
             $diagnostics=[];
-            if($sourceUrl==='')$diagnostics[]='No source URL is stored for this product.';
+            if($sourceUrl==='')$diagnostics[]='No stored source URL; title-based discovery was attempted.';
             foreach($evidence as $entry){
                 $type=(string)($entry['type']??'');
                 if($type==='metadata_error'&&!empty($entry['error']))$diagnostics[]='Metadata: '.(string)$entry['error'];
@@ -373,6 +391,46 @@ final class ProductBackfillService
             $stmt=Database::connection()->prepare('INSERT INTO product_enrichment_log (product_id,field_name,old_value,new_value,source_type,source_url,confidence,status) VALUES (:product_id,:field_name,:old_value,:new_value,:source_type,:source_url,:confidence,:status)');
             $stmt->execute(['product_id'=>$productId,'field_name'=>$field,'old_value'=>$encode($old),'new_value'=>$encode($new),'source_type'=>$source,'source_url'=>$url,'confidence'=>$confidence,'status'=>$status]);
         }catch(Throwable){}
+    }
+
+    private function metadataMatchesProduct(array $product,array $metadata,string $knownAsin=''): bool
+    {
+        $candidateAsin=$this->cleanAsin((string)($metadata['asin']??''));
+        if($knownAsin!==''&&$candidateAsin!==''&&hash_equals($knownAsin,$candidateAsin))return true;
+
+        $productTitle=$this->searchTokens((string)($product['title']??''));
+        $candidateTitle=$this->searchTokens((string)($metadata['title']??''));
+        if(!$productTitle||!$candidateTitle)return false;
+
+        $matches=count(array_intersect($productTitle,$candidateTitle));
+        $required=max(2,(int)ceil(min(count($productTitle),6)*0.5));
+        return $matches>=$required;
+    }
+
+    private function searchTokens(string $value): array
+    {
+        $value=strtolower($this->cleanText($value,1000));
+        $parts=preg_split('/[^a-z0-9]+/',$value)?:[];
+        $stop=['the','and','with','for','from','this','that','new','latest','india','online','buy','price','best'];
+        $out=[];
+        foreach($parts as $part){
+            if(strlen($part)<2||in_array($part,$stop,true))continue;
+            $out[$part]=true;
+        }
+        return array_keys($out);
+    }
+
+    private function mergeMetadata(array $base,array $candidate): array
+    {
+        foreach(['asin','title','brand','main_image_url','short_description','currency','amazon_url'] as $field){
+            if(!$this->hasValue($base[$field]??null)&&$this->hasValue($candidate[$field]??null))$base[$field]=$candidate[$field];
+        }
+        if(!$this->hasValue($base['price']??null)&&isset($candidate['price'])&&is_numeric($candidate['price'])&&(float)$candidate['price']>0)$base['price']=(float)$candidate['price'];
+        if((empty($base['features'])||!is_array($base['features']))&&!empty($candidate['features'])&&is_array($candidate['features']))$base['features']=$candidate['features'];
+        if(!$this->hasValue($base['source_url']??null)&&$this->hasValue($candidate['source_url']??null))$base['source_url']=$candidate['source_url'];
+        if(!$this->hasValue($base['resolved_url']??null)&&$this->hasValue($candidate['resolved_url']??null))$base['resolved_url']=$candidate['resolved_url'];
+        if(!$this->hasValue($base['provider']??null)&&$this->hasValue($candidate['provider']??null))$base['provider']='discovered_'.$candidate['provider'];
+        return $base;
     }
 
     private function metadataSparse(array $metadata): bool
