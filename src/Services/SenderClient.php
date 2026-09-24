@@ -29,6 +29,67 @@ final class SenderClient
         ];
     }
 
+    /** @return array<string,mixed> */
+    public function subscribersPage(int $limit = 100, int $page = 1): array
+    {
+        return $this->request('GET', '/subscribers', null, [
+            'limit' => max(1, min(100, $limit)),
+            'page' => max(1, $page),
+            'order' => 'created',
+            'direction' => 'desc',
+        ]);
+    }
+
+    /**
+     * @return array{rows:array<int,array<string,mixed>>,reported_total:int,truncated:bool,pages:int}
+     */
+    public function allSubscribers(int $maxRows = 20000): array
+    {
+        $maxRows = max(100, min(50000, $maxRows));
+        $rows = [];
+        $page = 1;
+        $reportedTotal = 0;
+        $lastPage = 1;
+        $truncated = false;
+
+        do {
+            $response = $this->subscribersPage(100, $page);
+            $data = $response['data'] ?? [];
+            if (!is_array($data)) {
+                throw new SenderApiException('Sender returned an unreadable subscriber-list response.');
+            }
+
+            foreach ($data as $row) {
+                if (!is_array($row)) continue;
+                $rows[] = $row;
+                if (count($rows) >= $maxRows) {
+                    $truncated = true;
+                    break 2;
+                }
+            }
+
+            $meta = is_array($response['meta'] ?? null) ? $response['meta'] : [];
+            $reportedTotal = max($reportedTotal, (int)($meta['total'] ?? count($rows)));
+            $lastPage = max($page, (int)($meta['last_page'] ?? $page));
+            $hasMore = array_key_exists('has_more_resources', $response)
+                ? (bool)$response['has_more_resources']
+                : $page < $lastPage;
+
+            $page++;
+        } while ($hasMore && $page <= $lastPage && count($rows) < $maxRows);
+
+        if ($reportedTotal > count($rows)) {
+            $truncated = true;
+        }
+
+        return [
+            'rows' => $rows,
+            'reported_total' => $reportedTotal ?: count($rows),
+            'truncated' => $truncated,
+            'pages' => max(1, $page - 1),
+        ];
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function transactionalTemplates(int $limit = 100): array
     {
