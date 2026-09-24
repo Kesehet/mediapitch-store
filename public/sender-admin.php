@@ -8,6 +8,7 @@ use MediaPitch\Core\Csrf;
 use MediaPitch\Core\View;
 use MediaPitch\Repositories\NewsletterRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SettingsRepository;
 use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
 
@@ -22,7 +23,8 @@ if (!Auth::isAdministrator()) {
     exit('Forbidden');
 }
 
-$sender = new SenderClient();
+$settingsRepo = new SettingsRepository();
+$sender = new SenderClient($settingsRepo);
 $queueRepo = new SenderQueueRepository();
 $queue = new SenderQueueService($queueRepo, $sender);
 $newsletter = new NewsletterRepository();
@@ -46,6 +48,20 @@ if ($method === 'POST') {
     $action = (string)($_POST['action'] ?? '');
 
     try {
+        if ($action === 'save_settings') {
+            $settingsRepo->saveSender($_POST);
+            $saved = $settingsRepo->sender();
+
+            Audit::record('settings.sender.update', 'settings', null, 'Updated Sender email settings', [
+                'api_token_configured' => !empty($saved['api_token_configured']),
+                'daily_limit' => (int)$saved['daily_limit'],
+                'batch_size' => (int)$saved['batch_size'],
+                'api_token' => '[redacted]',
+            ]);
+
+            $redirect('Sender settings saved securely.', 'settings');
+        }
+
         if ($action === 'test_connection') {
             $connection = $sender->testConnection();
             $redirect('Sender connection is working. Templates available: ' . (int)$connection['templates'] . '.', 'settings');
@@ -185,6 +201,7 @@ View::render('admin/sender', [
     'templates' => $templates,
     'selectedTemplate' => $selectedTemplate,
     'providerConfigured' => $sender->configured(),
+    'senderSettings' => $settingsRepo->sender(),
     'providerError' => $providerError,
     'connection' => $connection,
     'stats' => $queue->stats(),
