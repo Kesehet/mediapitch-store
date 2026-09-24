@@ -7,8 +7,9 @@ use MediaPitch\Services\SenderQueueService;
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 try {
-    $requested = isset($argv[1]) ? max(1, (int)$argv[1]) : (int)\env('SENDER_QUEUE_BATCH_SIZE', 50);
-    $result = (new SenderQueueService())->process($requested);
+    $service = new SenderQueueService();
+    $requested = isset($argv[1]) ? max(1, (int)$argv[1]) : $service->batchSize();
+    $result = $service->process($requested);
     fwrite(STDOUT, json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL);
     exit(0);
 } catch (Throwable $e) {
