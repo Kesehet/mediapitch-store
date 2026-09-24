@@ -81,7 +81,12 @@ final class SettingsRepository
         $secret=trim((string)($data['credential_secret']??''));if($secret==='')$secret=(string)($existing['credential_secret']??'');
         $id=trim((string)($data['credential_id']??''));if($id==='')$id=(string)($existing['credential_id']??'');
         $version=trim((string)($data['credential_version']??($existing['credential_version']??'3.2')));if(!in_array($version,['2.1','2.2','2.3','3.1','3.2','3.3'],true))throw new InvalidArgumentException('Unsupported Creators API credential version.');
-        $profiles[$marketplace]=['enabled'=>!empty($data['enabled']),'marketplace'=>$marketplace,'partner_tag'=>substr(trim((string)($data['partner_tag']??'')),0,255),'credential_id'=>$id,'credential_secret'=>$secret,'credential_version'=>$version,'last_success'=>(string)($existing['last_success']??''),'last_error'=>(string)($existing['last_error']??'')];
+        $partnerTag=trim((string)($data['partner_tag']??''));
+        if(!empty($data['enabled'])&&$partnerTag==='')throw new InvalidArgumentException('Amazon Associate / Partner Tag is required for an enabled Creators API profile.');
+        if(str_ends_with(strtolower($partnerTag),'.mystore')){
+            throw new InvalidArgumentException('That looks like a Creators API Application ID. Partner Tag must be your Amazon Associates Store ID or Tracking ID for this marketplace, not a value ending in .mystore.');
+        }
+        $profiles[$marketplace]=['enabled'=>!empty($data['enabled']),'marketplace'=>$marketplace,'partner_tag'=>substr($partnerTag,0,255),'credential_id'=>$id,'credential_secret'=>$secret,'credential_version'=>$version,'last_success'=>(string)($existing['last_success']??''),'last_error'=>(string)($existing['last_error']??'')];
         $this->saveAmazonProfilesMap($profiles);$this->put('amazon.active_marketplace',$marketplace,false);$this->mirrorLegacyAmazon($profiles[$marketplace]);
     }
 
