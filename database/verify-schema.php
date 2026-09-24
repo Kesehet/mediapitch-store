@@ -11,7 +11,7 @@ $requiredTables=[
     'users','categories','brands','products','specification_definitions','product_specifications',
     'content','content_products','affiliate_clicks','settings','redirects','media',
     'search_queries','admin_audit_log','password_reset_tokens','tags','content_tags','schema_migrations',
-    'newsletter_subscribers',
+    'newsletter_subscribers','ai_jobs','ai_research_sources','sender_email_queue',
 ];
 $requiredColumns=[
     'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
