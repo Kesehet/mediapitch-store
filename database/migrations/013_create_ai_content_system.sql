@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS ai_research_sources (
     publisher VARCHAR(255) NULL,
     excerpt MEDIUMTEXT NULL,
     retrieved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_ai_source_job_url (job_id, url(500)),
+    UNIQUE KEY uq_ai_source_job_url (job_id, url(191)),
     INDEX idx_ai_sources_job (job_id),
     CONSTRAINT fk_ai_sources_job FOREIGN KEY (job_id) REFERENCES ai_jobs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
