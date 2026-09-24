@@ -39,7 +39,12 @@ if(!in_array($status,['all','active','unsubscribed','bounced','suppressed','unkn
 if(!in_array($validation,['all','clean','risky','invalid','unknown','not_checked'],true))$validation='all';
 
 $merged=(new SubscriberMergeService($repo))->merged($query,$presence,$status,$validation);
-$rows=$merged['rows'];
+$allRows=$merged['rows'];
+$filteredTotal=count($allRows);
+$page=max(1,(int)($_GET['page']??1));
+$pageSize=100;
+$totalPages=max(1,(int)ceil($filteredTotal/$pageSize));
+if($page>$totalPages)$page=$totalPages;
 
 if(($_GET['export']??'')==='csv'){
     header('Content-Type: text/csv; charset=utf-8');
@@ -49,7 +54,7 @@ if(($_GET['export']??'')==='csv'){
         'Email','Name','Presence','Effective status','Local status','Sender status',
         'Local source','Validation','Validation reason','Local subscribed at','Sender created at'
     ]);
-    foreach($rows as $row){
+    foreach($allRows as $row){
         fputcsv($out,[
             $row['email'],
             $row['display_name']??'',
@@ -68,11 +73,16 @@ if(($_GET['export']??'')==='csv'){
     exit;
 }
 
+$rows=array_slice($allRows,($page-1)*$pageSize,$pageSize);
+
 View::render('admin/newsletter',[
     'pageTitle'=>'Merged Subscribers',
     'adminUser'=>Auth::user(),
     'subscribers'=>$rows,
     'stats'=>$merged['stats'],
+    'filteredTotal'=>$filteredTotal,
+    'page'=>$page,
+    'totalPages'=>$totalPages,
     'query'=>$query,
     'presence'=>$presence,
     'status'=>$status,
