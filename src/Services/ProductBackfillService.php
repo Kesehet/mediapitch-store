@@ -166,7 +166,9 @@ final class ProductBackfillService
         }
 
         $this->queueBlankChange($changes,$product,'asin',$this->cleanAsin((string)($metadata['asin']??$ai['asin']??'')),'metadata',($metadata['source_url']??$sourceUrl)?:null,0.98);
-        $this->queueBlankChange($changes,$product,'short_description',$this->cleanText((string)($metadata['short_description']??$ai['short_description']??''),4000),'metadata',($metadata['source_url']??$sourceUrl)?:null,0.90);
+        $description=trim((string)($metadata['short_description']??''))!==''?(string)$metadata['short_description']:(string)($ai['short_description']??'');
+        $descriptionSource=trim((string)($metadata['short_description']??''))!==''?'metadata':'ai';
+        $this->queueBlankChange($changes,$product,'short_description',$this->cleanText($description,4000),$descriptionSource,($metadata['source_url']??$sourceUrl)?:null,$descriptionSource==='metadata'?0.90:0.78);
         $this->queueBlankChange($changes,$product,'full_description',$this->cleanText((string)($ai['full_description']??''),20000),'ai',null,0.78);
         $this->queueBlankChange($changes,$product,'main_image_url',$this->safeUrl((string)($metadata['main_image_url']??'')),'metadata',($metadata['source_url']??$sourceUrl)?:null,0.95);
 
@@ -194,7 +196,8 @@ final class ProductBackfillService
         }
 
         if(!$this->hasValue($product['brand_id']??null)){
-            $brand=$this->cleanText((string)($metadata['brand']??$ai['brand']??''),150);
+            $rawBrand=trim((string)($metadata['brand']??''))!==''?(string)$metadata['brand']:(string)($ai['brand']??'');
+            $brand=$this->cleanText($rawBrand,150);
             if($brand!==''){
                 $brandId=$this->findOrCreateBrand($brand);
                 if($brandId)$changes['brand_id']=['value'=>$brandId,'source'=>!empty($metadata['brand'])?'metadata':'ai','url'=>($metadata['source_url']??null),'confidence'=>!empty($metadata['brand'])?0.95:0.80];
@@ -374,7 +377,7 @@ final class ProductBackfillService
     {
         $value=html_entity_decode(strip_tags($value),ENT_QUOTES|ENT_HTML5,'UTF-8');
         $value=trim(preg_replace('/\s+/u',' ',$value)??$value);
-        return mb_substr($value,0,$max);
+        return substr($value,0,$max);
     }
 
     private function cleanList(array $items,int $maxItems,int $maxChars): array
