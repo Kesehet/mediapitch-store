@@ -210,7 +210,7 @@ function pageSpecs(){
     const risky=statValue('Needs review')||0;
     const unknown=statValue('Unknown / not checked')||0;
     if(total>0&&active>0&&unsubscribed>0)specs.push(makeDistribution('Subscriber status',[{label:'Active',value:active},{label:'Unsubscribed',value:unsubscribed}],'Active audience versus people who have unsubscribed.'));
-    const clean=Math.max(0,active-risky-unknown);
+    const clean=Math.max(0,total-risky-unknown);
     const validation=[{label:'Clean',value:clean},{label:'Needs review',value:risky},{label:'Unknown / not checked',value:unknown}].filter(item=>item.value>0);
     if(validation.length>=2)specs.push(makeDistribution('Subscriber validation health',validation,'Shows how much of the active list is clean versus requiring validation attention.'));
     return specs.filter(Boolean);
