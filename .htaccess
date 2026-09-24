@@ -11,6 +11,7 @@ RewriteRule ^newsletter-subscribe\.php$ public/newsletter-subscribe.php [QSA,L]
 
 # Admin routes that use dedicated entry points.
 RewriteRule ^admin/newsletter(?:/.*)?$ public/newsletter-admin.php [QSA,L]
+RewriteRule ^admin/sender(?:/.*)?$ public/sender-admin.php [QSA,L]
 RewriteRule ^admin/settings/ai(?:/.*)?$ public/ai-settings.php [QSA,L]
 RewriteRule ^admin/settings/google-ads(?:/.*)?$ public/google-ads.php [QSA,L]
 
