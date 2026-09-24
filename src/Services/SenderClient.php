@@ -84,6 +84,120 @@ final class SenderClient
         );
     }
 
+    /** @return array<int,array<string,mixed>> */
+    public function campaigns(int $limit = 100): array
+    {
+        $limit = max(1, min(100, $limit));
+        $response = $this->request('GET', '/campaigns', null, ['limit' => $limit]);
+        $rows = $response['data'] ?? [];
+
+        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+    }
+
+    /** @return array<string,mixed> */
+    public function campaign(string $id): array
+    {
+        $id = $this->cleanId($id);
+        $response = $this->request('GET', '/campaigns/' . rawurlencode($id));
+        $row = $response['data'] ?? null;
+
+        if (!is_array($row)) {
+            throw new SenderApiException('Sender returned an unreadable campaign response.');
+        }
+
+        return $row;
+    }
+
+    public function createGroup(string $title): string
+    {
+        $title = trim($title);
+        if ($title === '') {
+            throw new \InvalidArgumentException('Sender group title is required.');
+        }
+
+        $response = $this->request('POST', '/groups', [
+            'title' => substr($title, 0, 255),
+        ]);
+        $id = trim((string)($response['data']['id'] ?? $response['id'] ?? ''));
+
+        if ($id === '') {
+            throw new SenderApiException('Sender created the group but did not return its ID.');
+        }
+
+        return $id;
+    }
+
+    /** @param array<int,string> $emails @return array<string,mixed> */
+    public function addSubscribersToGroup(string $groupId, array $emails, bool $triggerAutomation = false): array
+    {
+        $groupId = $this->cleanId($groupId);
+        $clean = [];
+        foreach ($emails as $email) {
+            $email = strtolower(trim((string)$email));
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) $clean[$email] = $email;
+        }
+        if ($clean === []) {
+            throw new \InvalidArgumentException('At least one valid subscriber email is required.');
+        }
+
+        return $this->request(
+            'POST',
+            '/subscribers/groups/' . rawurlencode($groupId),
+            [
+                'subscribers' => array_values($clean),
+                'trigger_automation' => $triggerAutomation,
+            ]
+        );
+    }
+
+    /** @param array<int,string> $groups @return array<string,mixed> */
+    public function createSubscriber(string $email, string $name = '', array $groups = [], bool $triggerAutomation = false): array
+    {
+        $email = strtolower(trim($email));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('Subscriber email is invalid.');
+        }
+
+        $parts = preg_split('/\s+/', trim($name), 2) ?: [];
+        $payload = [
+            'email' => $email,
+            'trigger_automation' => $triggerAutomation,
+        ];
+        if (($parts[0] ?? '') !== '') $payload['firstname'] = substr((string)$parts[0], 0, 100);
+        if (($parts[1] ?? '') !== '') $payload['lastname'] = substr((string)$parts[1], 0, 100);
+
+        $groupIds = [];
+        foreach ($groups as $group) {
+            $group = $this->cleanId((string)$group);
+            $groupIds[$group] = $group;
+        }
+        if ($groupIds !== []) $payload['groups'] = array_values($groupIds);
+
+        return $this->request('POST', '/subscribers', $payload);
+    }
+
+    /** @param array<string,mixed> $payload @return array<string,mixed> */
+    public function createCampaign(array $payload): array
+    {
+        foreach (['subject','from','reply_to','content_type','content'] as $required) {
+            if (trim((string)($payload[$required] ?? '')) === '') {
+                throw new \InvalidArgumentException('Sender campaign field ' . $required . ' is required.');
+            }
+        }
+        if (!in_array((string)$payload['content_type'], ['html','text'], true)) {
+            throw new \InvalidArgumentException('Sender campaign content type must be html or text.');
+        }
+
+        return $this->request('POST', '/campaigns', $payload);
+    }
+
+    /** @return array<string,mixed> */
+    public function sendCampaign(string $campaignId): array
+    {
+        $campaignId = $this->cleanId($campaignId);
+        return $this->request('POST', '/campaigns/' . rawurlencode($campaignId) . '/send', []);
+    }
+
     /** @return array<string,mixed> */
     public function sentMessages(string $templateId, int $limit = 25, int $page = 1, ?string $email = null): array
     {
