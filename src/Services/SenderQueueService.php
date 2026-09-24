@@ -64,7 +64,7 @@ final class SenderQueueService
     }
 
     /**
-     * @return array{added:int,duplicates:int,invalid:int}
+     * @return array{added:int,duplicates:int,invalid:int,rejected:int,risky:int,cleaner_invalid:int,unknown:int}
      */
     public function queueFromText(
         string $templateId,
@@ -83,11 +83,16 @@ final class SenderQueueService
             throw new \InvalidArgumentException('Add at least one valid recipient email.');
         }
 
+        $cleaning = $this->cleanBeforeQueue($recipients['valid']);
+        if ($cleaning['clean'] === []) {
+            throw new \InvalidArgumentException('No recipient passed the live email cleaner as clean, so nothing was queued.');
+        }
+
         $variables = $this->parseVariables($variablesJson);
         $result = $this->repo->queueMany(
             trim($templateId),
             trim($templateTitle),
-            $recipients['valid'],
+            $cleaning['clean'],
             $variables,
             $createdBy,
             true
@@ -97,12 +102,16 @@ final class SenderQueueService
             'added' => $result['added'],
             'duplicates' => $result['duplicates'],
             'invalid' => $recipients['invalid'],
+            'rejected' => $cleaning['rejected'],
+            'risky' => $cleaning['risky'],
+            'cleaner_invalid' => $cleaning['invalid'],
+            'unknown' => $cleaning['unknown'],
         ];
     }
 
     /**
      * @param array<int,array<string,mixed>> $subscribers
-     * @return array{added:int,duplicates:int}
+     * @return array{added:int,duplicates:int,rejected:int,risky:int,cleaner_invalid:int,unknown:int}
      */
     public function queueSubscribers(
         string $templateId,
@@ -125,17 +134,31 @@ final class SenderQueueService
         }
 
         if ($recipients === []) {
-            throw new \InvalidArgumentException('There are no clean active newsletter subscribers to queue.');
+            throw new \InvalidArgumentException('There are no active newsletter subscribers to clean and queue.');
         }
 
-        return $this->repo->queueMany(
+        $cleaning = $this->cleanBeforeQueue($recipients);
+        if ($cleaning['clean'] === []) {
+            throw new \InvalidArgumentException('No newsletter subscriber passed the live email cleaner as clean, so nothing was queued.');
+        }
+
+        $result = $this->repo->queueMany(
             trim($templateId),
             trim($templateTitle),
-            $recipients,
+            $cleaning['clean'],
             [],
             $createdBy,
             true
         );
+
+        return [
+            'added' => $result['added'],
+            'duplicates' => $result['duplicates'],
+            'rejected' => $cleaning['rejected'],
+            'risky' => $cleaning['risky'],
+            'cleaner_invalid' => $cleaning['invalid'],
+            'unknown' => $cleaning['unknown'],
+        ];
     }
 
     /**
@@ -273,6 +296,47 @@ final class SenderQueueService
         } finally {
             $this->repo->releaseWorkerLock();
         }
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $recipients
+     * @return array{clean:array<int,array<string,mixed>>,rejected:int,risky:int,invalid:int,unknown:int}
+     */
+    private function cleanBeforeQueue(array $recipients): array
+    {
+        $emails = [];
+        foreach ($recipients as $recipient) {
+            $email = strtolower(trim((string)($recipient['email'] ?? '')));
+            if ($email !== '') $emails[$email] = $email;
+        }
+
+        $results = $this->validator->validateMany(array_values($emails), 10);
+        $clean = [];
+        $counts = ['rejected' => 0, 'risky' => 0, 'invalid' => 0, 'unknown' => 0];
+
+        foreach ($recipients as $recipient) {
+            $email = strtolower(trim((string)($recipient['email'] ?? '')));
+            $validation = $results[$email] ?? ['status' => 'unknown'];
+            $status = strtolower(trim((string)($validation['status'] ?? 'unknown')));
+
+            if ($status === 'clean') {
+                $clean[] = $recipient;
+                continue;
+            }
+
+            $counts['rejected']++;
+            if ($status === 'risky') $counts['risky']++;
+            elseif ($status === 'invalid') $counts['invalid']++;
+            else $counts['unknown']++;
+        }
+
+        return [
+            'clean' => $clean,
+            'rejected' => $counts['rejected'],
+            'risky' => $counts['risky'],
+            'invalid' => $counts['invalid'],
+            'unknown' => $counts['unknown'],
+        ];
     }
 
     /**
