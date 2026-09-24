@@ -114,6 +114,18 @@ final class NewsletterRepository
         $stmt=Database::connection()->prepare($sql);$stmt->execute($params);return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** @return array<int,array<string,mixed>> */
+    public function cleanActive(int $limit = 20000): array
+    {
+        $this->ensureSchema();
+        $limit = max(1, min(50000, $limit));
+        return Database::connection()->query(
+            "SELECT * FROM newsletter_subscribers
+             WHERE status='active' AND validation_status='clean'
+             ORDER BY id ASC LIMIT " . $limit
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function stats(): array
     {
         $this->ensureSchema();
