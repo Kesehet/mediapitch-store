@@ -80,7 +80,7 @@ final class WebResearcher
     private function parseBingResults(string $html,int $limit): array
     {
         $results=[];$seen=[];
-        if(preg_match_all('#<li\\b[^>]*class=["\\'][^"\\']*b_algo[^"\\']*["\\'][^>]*>.*?<h2[^>]*>\\s*<a\\b[^>]*href=["\\']([^"\\']+)["\\'][^>]*>(.*?)</a>#is',$html,$matches,PREG_SET_ORDER)){
+        if(preg_match_all("#<li\\b[^>]*class=[\"'][^\"']*b_algo[^\"']*[\"'][^>]*>.*?<h2[^>]*>\\s*<a\\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>#is",$html,$matches,PREG_SET_ORDER)){
             foreach($matches as $match){
                 $url=html_entity_decode((string)$match[1],ENT_QUOTES|ENT_HTML5,'UTF-8');
                 $title=trim(html_entity_decode(strip_tags((string)$match[2]),ENT_QUOTES|ENT_HTML5,'UTF-8'));
