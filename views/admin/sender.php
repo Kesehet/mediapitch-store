@@ -14,6 +14,7 @@ if (is_array($selectedTemplate)) {
 }
 $remainingToday = (int)($stats['remaining_today'] ?? 0);
 $dailyLimit = (int)($stats['daily_limit'] ?? 50);
+$batchSize = (int)($senderSettings['batch_size'] ?? 50);
 ?>
 <section class="admin-card" style="margin-bottom:18px">
   <div style="display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">
@@ -262,20 +263,57 @@ $requestedTemplate=(string)($_GET['template']??'');
 </section>
 
 <?php elseif($tab==='settings'): ?>
-<section class="admin-card">
+<section class="admin-card" style="margin-bottom:18px">
   <h2 style="margin-top:0">Sender configuration</h2>
-  <div class="admin-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:20px">
+  <div class="admin-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:20px">
     <div class="stat-card"><span>API token</span><strong><?= $providerConfigured?'Configured':'Missing' ?></strong></div>
     <div class="stat-card"><span>Connection</span><strong><?= $providerConfigured && !$providerError?'Available':($providerConfigured?'Error':'Waiting for token') ?></strong></div>
     <div class="stat-card"><span>Templates visible</span><strong><?= number_format(count($templates)) ?></strong></div>
     <div class="stat-card"><span>Daily send limit</span><strong><?= number_format($dailyLimit) ?></strong></div>
   </div>
 
+  <form method="post" action="<?= e(url('admin/sender/action')) ?>">
+    <?= Csrf::field() ?>
+    <input type="hidden" name="action" value="save_settings">
+    <input type="hidden" name="tab" value="settings">
+
+    <div class="admin-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      <label style="grid-column:1/-1">Sender API token
+        <input type="password" name="api_token" autocomplete="new-password" placeholder="<?= $providerConfigured?'•••••••••••••••• — leave blank to keep current token':'Paste Sender API token' ?>">
+        <small><?= $providerConfigured?'A token is already stored securely. Enter a new token only to replace it.':'The token will be encrypted before it is stored.' ?></small>
+      </label>
+
+      <label>Daily successful-send limit
+        <input type="number" name="daily_limit" min="1" max="1000" value="<?= (int)($senderSettings['daily_limit']??50) ?>" required>
+        <small>Maximum successful Sender deliveries per Asia/Kolkata calendar day.</small>
+      </label>
+
+      <label>Worker batch size
+        <input type="number" name="batch_size" min="1" max="100" value="<?= (int)($senderSettings['batch_size']??50) ?>" required>
+        <small>Maximum queue rows examined each time the cron worker runs.</small>
+      </label>
+    </div>
+
+    <?php if($providerConfigured): ?>
+      <label style="display:flex;gap:8px;align-items:center;margin:14px 0">
+        <input type="checkbox" name="remove_api_token" value="1" style="width:auto">
+        <span>Remove the stored Sender API token</span>
+      </label>
+    <?php endif; ?>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+      <button class="button" type="submit">Save Sender settings</button>
+    </div>
+  </form>
+</section>
+
+<section class="admin-card">
+  <h2 style="margin-top:0">Connection &amp; worker</h2>
   <table class="admin-table" style="margin-bottom:20px">
     <tbody>
-      <tr><th style="width:260px">Sender API token</th><td><code>SENDER_API_TOKEN</code> · <?= $providerConfigured?'present and hidden':'not configured' ?></td></tr>
-      <tr><th>Daily successful-send cap</th><td><code>SENDER_DAILY_LIMIT=<?= number_format($dailyLimit) ?></code></td></tr>
-      <tr><th>Worker batch size</th><td><code>SENDER_QUEUE_BATCH_SIZE=<?= e((string)env('SENDER_QUEUE_BATCH_SIZE','50')) ?></code></td></tr>
+      <tr><th style="width:260px">API token storage</th><td><?= $providerConfigured?'Encrypted and hidden':'Not configured' ?></td></tr>
+      <tr><th>Daily successful-send cap</th><td><?= number_format($dailyLimit) ?></td></tr>
+      <tr><th>Worker batch size</th><td><?= number_format($batchSize) ?></td></tr>
       <tr><th>List cleaner</th><td><code><?= e((string)env('EMAIL_VALIDATOR_API_URL','https://mediapitch.in/mail-list-cleaner/api.php')) ?></code></td></tr>
       <tr><th>Timezone used for daily cap</th><td><code><?= e((string)env('CONTENT_TIMEZONE','Asia/Kolkata')) ?></code></td></tr>
       <tr><th>Cron command</th><td><code>php database/sender-worker.php</code></td></tr>
@@ -288,8 +326,8 @@ $requestedTemplate=(string)($_GET['template']??'');
   </form>
 
   <p class="muted" style="margin-top:18px">
-    The API token is intentionally read only from the server environment and is never displayed or saved by this dashboard.
-    For marketing/newsletter use, keep the appropriate unsubscribe and permission handling in the Sender template and subscriber workflow.
+    The API token is encrypted with the application's existing secret-storage mechanism and is never shown back in the dashboard.
+    Environment variables remain supported only as a fallback for existing deployments.
   </p>
 </section>
 <?php endif; ?>
