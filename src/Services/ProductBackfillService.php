@@ -194,6 +194,9 @@ final class ProductBackfillService
         if(!$this->hasValue($product['amazon_url']??null)&&!empty($metadata['amazon_url'])){
             $url=$this->safeUrl((string)$metadata['amazon_url']);if($url!=='')$changes['amazon_url']=['value'=>$url,'source'=>'metadata','url'=>$url,'confidence'=>0.99];
         }
+        if(!$this->hasValue($product['affiliate_url']??null)&&!empty($metadata['affiliate_url'])){
+            $url=$this->safeUrl((string)$metadata['affiliate_url']);if($url!=='')$changes['affiliate_url']=['value'=>$url,'source'=>'metadata','url'=>$url,'confidence'=>0.99];
+        }
 
         if(!$this->hasValue($product['brand_id']??null)){
             $rawBrand=trim((string)($metadata['brand']??''))!==''?(string)$metadata['brand']:(string)($ai['brand']??'');
