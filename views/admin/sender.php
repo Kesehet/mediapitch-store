@@ -270,7 +270,7 @@ $requestedTemplate=(string)($_GET['template']??'');
 ?>
 <section class="admin-card" style="margin-bottom:18px">
   <h2 style="margin-top:0">Queue new recipients</h2>
-  <p class="muted">Accepted formats: one email per line, <code>email,name</code>, <code>name,email</code>, or <code>Name &lt;email&gt;</code>. Addresses are validated again immediately before sending.</p>
+  <p class="muted">Accepted formats: one email per line, <code>email,name</code>, <code>name,email</code>, or <code>Name &lt;email&gt;</code>. Every address must pass the live cleaner as <strong>clean</strong> before it is inserted into the queue, and is validated again immediately before sending.</p>
   <form method="post" action="<?= e(url('admin/sender/action')) ?>">
     <?= Csrf::field() ?>
     <input type="hidden" name="action" value="queue_manual"><input type="hidden" name="tab" value="queue">
@@ -294,13 +294,13 @@ $requestedTemplate=(string)($_GET['template']??'');
       <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto;margin-top:3px">
       <span>I confirm these recipients are permitted to receive this email. MediaPitch will still block every address that does not pass the list cleaner as <strong>clean</strong>.</span>
     </label>
-    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Add to queue</button>
+    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Clean &amp; add to queue</button>
   </form>
 </section>
 
 <section class="admin-card" style="margin-bottom:18px">
   <h2 style="margin-top:0">Queue existing newsletter subscribers</h2>
-  <p class="muted">This selects currently active subscribers whose latest stored validation status is clean. The worker revalidates every address before the actual send.</p>
+  <p class="muted">This selects currently active local subscribers, runs the live cleaner on every address before queueing, and inserts only addresses returning <strong>clean</strong>. The worker validates them again before the actual send.</p>
   <form method="post" action="<?= e(url('admin/sender/action')) ?>" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <?= Csrf::field() ?>
     <input type="hidden" name="action" value="queue_subscribers"><input type="hidden" name="tab" value="queue">
@@ -316,7 +316,7 @@ $requestedTemplate=(string)($_GET['template']??'');
       <input type="checkbox" name="consent_confirmed" value="1" required style="width:auto">
       <span>Confirm these active newsletter subscribers may receive this email.</span>
     </label>
-    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Queue clean subscribers</button>
+    <button class="button" type="submit" <?= empty($templates)?'disabled':'' ?>>Clean &amp; queue subscribers</button>
   </form>
   <p class="muted" style="margin-bottom:0;margin-top:12px">
     Current subscriber records: <?= number_format((int)($newsletterStats['total']??0)) ?> total · <?= number_format((int)($newsletterStats['active']??0)) ?> active.
