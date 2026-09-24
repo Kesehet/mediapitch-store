@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace MediaPitch\Services;
 
+use MediaPitch\Repositories\SettingsRepository;
+
 final class SenderClient
 {
+    public function __construct(private readonly SettingsRepository $settings = new SettingsRepository())
+    {
+    }
     private const BASE_URL = 'https://api.sender.net/v2';
 
     public function configured(): bool
     {
-        return trim((string) \env('SENDER_API_TOKEN', '')) !== '';
+        return !empty($this->settings->sender()['api_token_configured']);
     }
 
     /** @return array<string,mixed> */
@@ -108,7 +113,7 @@ final class SenderClient
      */
     private function request(string $method, string $path, ?array $payload = null, array $query = []): array
     {
-        $token = trim((string) \env('SENDER_API_TOKEN', ''));
+        $token = trim((string)($this->settings->sender()['api_token'] ?? ''));
         if ($token === '') {
             throw new SenderApiException('Sender API token is not configured.');
         }
