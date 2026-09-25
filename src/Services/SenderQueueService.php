@@ -382,9 +382,16 @@ final class SenderQueueService
                 continue;
             }
 
+            // Sender's sent-message index can lag briefly after accepting a send.
+            // Hold a recent interrupted row rather than risk a duplicate resend.
+            if($processingTs===false || (time()-$processingTs)<300){
+                $result['uncertain']++;
+                continue;
+            }
+
             $this->repo->returnProcessingToQueue(
                 $id,
-                'Recovered interrupted transactional send; Sender shows no matching sent message.'
+                'Recovered interrupted transactional send after reconciliation grace period; Sender shows no matching sent message.'
             );
             $result['requeued']++;
         }
