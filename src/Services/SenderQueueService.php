@@ -313,6 +313,7 @@ final class SenderQueueService
                         // Auth/permission errors also prove the send was not accepted.
                         $this->repo->markRetry($id, 'Sender credentials require attention: ' . $e->getMessage(), 3600);
                         $summary['retried']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
                         break;
                     }
 
@@ -323,6 +324,7 @@ final class SenderQueueService
                         // before any replay.
                         $this->repo->markProcessingIssue($id, 'Ambiguous Sender response: ' . $e->getMessage());
                         $summary['uncertain_processing']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
                         break;
                     }
 
