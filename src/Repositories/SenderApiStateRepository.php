@@ -130,6 +130,10 @@ final class SenderApiStateRepository
             $cooldownTs = time() + 60;
         } elseif ($remaining === 0 && $resetTs !== null && $resetTs > time()) {
             $cooldownTs = $resetTs;
+        } elseif ($remaining === 0) {
+            // If Sender reports an exhausted budget without a reset timestamp, avoid
+            // knowingly making the next rejected request. Re-probe after a short pause.
+            $cooldownTs = time() + 60;
         } elseif ($existingCooldownTs !== null) {
             // A concurrent request may finish successfully after another request has
             // already received a 429. Preserve the future cooldown rather than
