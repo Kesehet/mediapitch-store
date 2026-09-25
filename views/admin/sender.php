@@ -31,6 +31,8 @@ $apiLimit = isset($senderApiStatus['rate_limit_limit']) && $senderApiStatus['rat
     ? (int)$senderApiStatus['rate_limit_limit']
     : null;
 $apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
+$apiLastStatus = (int)($senderApiStatus['last_status'] ?? 0);
+$apiLastError = trim((string)($senderApiStatus['last_error'] ?? ''));
 $workerLastSuccess = trim((string)($senderWorkerStatus['last_success_at'] ?? ''));
 $workerLastError = trim((string)($senderWorkerStatus['last_error'] ?? ''));
 $workerLastSuccessTs = $workerLastSuccess !== '' ? strtotime($workerLastSuccess . ' UTC') : false;
@@ -83,8 +85,15 @@ $workerLooksStale = $hasPendingSenderWork && ($workerAgeSeconds===null || $worke
 
 <?php if($senderApiCooling): ?>
   <div class="flash error" style="margin-bottom:18px">
-    Sender API is temporarily rate-limited until <?= e($apiCooldownUntil) ?> UTC.
+    <?php if($apiLastStatus===429): ?>
+      Sender API is rate-limited until <?= e($apiCooldownUntil) ?> UTC.
+    <?php elseif(in_array($apiLastStatus,[401,403],true)): ?>
+      Sender API calls are paused until <?= e($apiCooldownUntil) ?> UTC after an authentication/permission error.
+    <?php else: ?>
+      Sender API calls are temporarily paused until <?= e($apiCooldownUntil) ?> UTC after a provider/network failure.
+    <?php endif; ?>
     Existing queues and cached Sender data are preserved; workers will resume after the cooldown.
+    <?php if($apiLastError!==''): ?><div style="margin-top:5px"><?= e($apiLastError) ?></div><?php endif; ?>
   </div>
 <?php elseif($providerError): ?>
   <div class="flash error" style="margin-bottom:18px"><?= e($providerError) ?></div>
@@ -516,7 +525,7 @@ $requestedTemplate=(string)($_GET['template']??'');
 
   <form method="post" action="<?= e(url('admin/sender/action')) ?>">
     <?= Csrf::field() ?><input type="hidden" name="action" value="test_connection"><input type="hidden" name="tab" value="settings">
-    <button class="button" <?= !$providerConfigured?'disabled':'' ?>>Test Sender connection</button>
+    <button class="button" <?= !$providerConfigured||$senderApiCooling?'disabled':'' ?>>Test Sender connection</button>
   </form>
 
   <p class="muted" style="margin-top:18px">
