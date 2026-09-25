@@ -605,9 +605,20 @@ final class SenderCampaignService
             }
 
             if(in_array($status,['DRAFT','NEW','CREATED',''],true)){
+                $createdAt=trim((string)($batch['created_at']??''));
+                $createdTs=$createdAt!==''?strtotime($createdAt.' UTC'):false;
+
+                // Sender campaign status can lag briefly after a send request.
+                // Keep a fresh interrupted batch attached until the provider has
+                // had time to settle, rather than risk creating a duplicate.
+                if($createdTs===false || (time()-$createdTs)<300){
+                    $result['unresolved']++;
+                    continue;
+                }
+
                 $result['requeued'] += $this->repo->requeueAttachedBatch(
                     $batchId,
-                    'Recovered interrupted batch that Sender still reports as draft.',
+                    'Recovered interrupted batch after reconciliation grace period; Sender still reports draft.',
                     60
                 );
                 continue;
