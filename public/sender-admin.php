@@ -9,6 +9,7 @@ use MediaPitch\Core\View;
 use MediaPitch\Repositories\NewsletterRepository;
 use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SenderSubscriberCacheRepository;
 use MediaPitch\Repositories\SettingsRepository;
 use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderClient;
@@ -62,6 +63,8 @@ if ($method === 'POST') {
             $afterTokenHash = hash('sha256', (string)($saved['api_token'] ?? ''));
             if (!hash_equals($beforeTokenHash, $afterTokenHash)) {
                 $sender->clearApiCooldown();
+                $sender->clearCachedResources();
+                (new SenderSubscriberCacheRepository())->clearSnapshot();
             }
 
             Audit::record('settings.sender.update', 'settings', null, 'Updated Sender email settings', [
