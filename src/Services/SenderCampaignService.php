@@ -358,6 +358,12 @@ final class SenderCampaignService
             $candidates
         ))));
         $localActive=$this->newsletter->activeIdMap($localIds);
+        $candidateEmails=array_values(array_unique(array_map(
+            static fn(array $row): string => strtolower(trim((string)($row['recipient_email']??''))),
+            $candidates
+        )));
+        $senderStatuses=$this->subscriberCache->statusMap($candidateEmails);
+        $senderSuppressedStatuses=['unsubscribed','unsubscribe','bounced','bounce','spam','complaint','suppressed','inactive','blocked'];
 
         $ready = [];
 
@@ -375,6 +381,16 @@ final class SenderCampaignService
                 $this->repo->markBlocked(
                     $id,
                     'Local newsletter subscriber is no longer active; suppressed before campaign send.'
+                );
+                $summary['blocked']++;
+                continue;
+            }
+
+            $cachedSenderStatus=strtolower(trim((string)($senderStatuses[$email]??'')));
+            if($cachedSenderStatus!=='' && in_array($cachedSenderStatus,$senderSuppressedStatuses,true)){
+                $this->repo->markBlocked(
+                    $id,
+                    'Latest Sender subscriber snapshot is suppressed (' . $cachedSenderStatus . '); blocked before campaign send.'
                 );
                 $summary['blocked']++;
                 continue;
