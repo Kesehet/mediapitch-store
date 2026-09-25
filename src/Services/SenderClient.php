@@ -4,18 +4,37 @@ declare(strict_types=1);
 
 namespace MediaPitch\Services;
 
+use MediaPitch\Repositories\SenderApiStateRepository;
+use MediaPitch\Repositories\SenderResourceCacheRepository;
 use MediaPitch\Repositories\SettingsRepository;
 
 final class SenderClient
 {
-    public function __construct(private readonly SettingsRepository $settings = new SettingsRepository())
-    {
-    }
     private const BASE_URL = 'https://api.sender.net/v2';
+    private const CATALOG_FRESH_SECONDS = 900;
+    private const CATALOG_MAX_STALE_SECONDS = 604800;
+
+    public function __construct(
+        private readonly SettingsRepository $settings = new SettingsRepository(),
+        private readonly SenderApiStateRepository $apiState = new SenderApiStateRepository(),
+        private readonly SenderResourceCacheRepository $resourceCache = new SenderResourceCacheRepository()
+    ) {
+    }
 
     public function configured(): bool
     {
         return !empty($this->settings->sender()['api_token_configured']);
+    }
+
+    /** @return array<string,mixed> */
+    public function apiStatus(): array
+    {
+        return $this->apiState->status();
+    }
+
+    public function clearApiCooldown(): void
+    {
+        $this->apiState->clearCooldown();
     }
 
     /** @return array<string,mixed> */
@@ -94,24 +113,40 @@ final class SenderClient
     public function transactionalTemplates(int $limit = 100): array
     {
         $limit = max(1, min(100, $limit));
-        $response = $this->request('GET', '/transactional', null, ['limit' => $limit]);
-        $rows = $response['data'] ?? [];
+        $payload = $this->cachedRead(
+            'transactional:list:' . $limit,
+            self::CATALOG_FRESH_SECONDS,
+            self::CATALOG_MAX_STALE_SECONDS,
+            function () use ($limit): array {
+                $response = $this->request('GET', '/transactional', null, ['limit' => $limit]);
+                $rows = $response['data'] ?? [];
+                return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+            }
+        );
 
-        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+        return array_values(array_filter($payload, 'is_array'));
     }
 
     /** @return array<string,mixed> */
     public function transactionalTemplate(string $id): array
     {
         $id = $this->cleanId($id);
-        $response = $this->request('GET', '/transactional/' . rawurlencode($id));
-        $row = $response['data'] ?? null;
+        $payload = $this->cachedRead(
+            'transactional:item:' . $id,
+            self::CATALOG_FRESH_SECONDS,
+            self::CATALOG_MAX_STALE_SECONDS,
+            function () use ($id): array {
+                $response = $this->request('GET', '/transactional/' . rawurlencode($id));
+                $row = $response['data'] ?? null;
+                if (!is_array($row)) {
+                    throw new SenderApiException('Sender returned an unreadable template response.');
+                }
+                return $row;
+            },
+            true
+        );
 
-        if (!is_array($row)) {
-            throw new SenderApiException('Sender returned an unreadable template response.');
-        }
-
-        return $row;
+        return $payload;
     }
 
     /**
@@ -149,24 +184,40 @@ final class SenderClient
     public function campaigns(int $limit = 100): array
     {
         $limit = max(1, min(100, $limit));
-        $response = $this->request('GET', '/campaigns', null, ['limit' => $limit]);
-        $rows = $response['data'] ?? [];
+        $payload = $this->cachedRead(
+            'campaigns:list:' . $limit,
+            self::CATALOG_FRESH_SECONDS,
+            self::CATALOG_MAX_STALE_SECONDS,
+            function () use ($limit): array {
+                $response = $this->request('GET', '/campaigns', null, ['limit' => $limit]);
+                $rows = $response['data'] ?? [];
+                return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+            }
+        );
 
-        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+        return array_values(array_filter($payload, 'is_array'));
     }
 
     /** @return array<string,mixed> */
     public function campaign(string $id): array
     {
         $id = $this->cleanId($id);
-        $response = $this->request('GET', '/campaigns/' . rawurlencode($id));
-        $row = $response['data'] ?? null;
+        $payload = $this->cachedRead(
+            'campaigns:item:' . $id,
+            self::CATALOG_FRESH_SECONDS,
+            self::CATALOG_MAX_STALE_SECONDS,
+            function () use ($id): array {
+                $response = $this->request('GET', '/campaigns/' . rawurlencode($id));
+                $row = $response['data'] ?? null;
+                if (!is_array($row)) {
+                    throw new SenderApiException('Sender returned an unreadable campaign response.');
+                }
+                return $row;
+            },
+            true
+        );
 
-        if (!is_array($row)) {
-            throw new SenderApiException('Sender returned an unreadable campaign response.');
-        }
-
-        return $row;
+        return $payload;
     }
 
     public function createGroup(string $title): string
@@ -309,6 +360,8 @@ final class SenderClient
             throw new SenderApiException('Sender API token is not configured.');
         }
 
+        $this->apiState->assertRequestAllowed();
+
         $url = self::BASE_URL . '/' . ltrim($path, '/');
         if ($query !== []) {
             $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
@@ -357,14 +410,14 @@ final class SenderClient
         }
 
         $body = curl_exec($curl);
-        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $curlError = curl_error($curl);
         curl_close($curl);
 
         if (!is_string($body)) {
-            throw new SenderApiException(
-                $curlError !== '' ? 'Sender request failed: ' . $curlError : 'Sender request failed.'
-            );
+            $message = $curlError !== '' ? 'Sender request failed: ' . $curlError : 'Sender request failed.';
+            $this->apiState->recordResponse(0, $responseHeaders, $message);
+            throw new SenderApiException($message);
         }
 
         $decoded = $body !== '' ? json_decode($body, true) : [];
@@ -378,28 +431,98 @@ final class SenderClient
                 $message = 'Sender API returned HTTP ' . $status . '.';
             }
 
-            $retryAfter = null;
-            if (isset($responseHeaders['retry-after']) && ctype_digit((string)$responseHeaders['retry-after'])) {
-                $retryAfter = max(1, (int)$responseHeaders['retry-after']);
-            }
-            if ($retryAfter === null && !empty($responseHeaders['x-ratelimit-reset'])) {
-                $resetAt = strtotime((string)$responseHeaders['x-ratelimit-reset']);
-                if ($resetAt !== false && $resetAt > time()) {
-                    $retryAfter = max(1, $resetAt - time());
-                }
-            }
-
-            throw new SenderApiException(substr($message, 0, 500), $status, $retryAfter);
+            $this->apiState->recordResponse($status, $responseHeaders, $message);
+            throw new SenderApiException(
+                substr($message, 0, 500),
+                $status,
+                $this->retryAfterSeconds($responseHeaders)
+            );
         }
 
+        $this->apiState->recordResponse($status, $responseHeaders);
         return $decoded;
+    }
+
+    /**
+     * @return array<string,mixed>|array<int,mixed>
+     */
+    private function cachedRead(
+        string $key,
+        int $freshSeconds,
+        int $maxStaleSeconds,
+        callable $loader,
+        bool $annotate = false
+    ): array {
+        $cached = $this->resourceCache->get($key);
+        if ($cached !== null && $cached['age_seconds'] <= $freshSeconds) {
+            return $this->annotateCachePayload($cached['payload'], $cached, false, $annotate);
+        }
+
+        try {
+            $payload = $loader();
+            if (!is_array($payload)) {
+                throw new SenderApiException('Sender returned an unreadable cached resource.');
+            }
+            $this->resourceCache->put($key, $payload);
+            if ($annotate && !array_is_list($payload)) {
+                $payload['_sender_cache_source'] = 'live';
+                $payload['_sender_cache_stale'] = false;
+                $payload['_sender_cache_age_seconds'] = 0;
+            }
+            return $payload;
+        } catch (SenderApiException $e) {
+            if ($cached !== null && $cached['age_seconds'] <= $maxStaleSeconds && $e->retryable()) {
+                return $this->annotateCachePayload($cached['payload'], $cached, true, $annotate);
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * @param array<string,mixed>|array<int,mixed> $payload
+     * @param array{payload:array<string,mixed>|array<int,mixed>,synced_at:string,age_seconds:int} $meta
+     * @return array<string,mixed>|array<int,mixed>
+     */
+    private function annotateCachePayload(array $payload, array $meta, bool $stale, bool $annotate): array
+    {
+        if (!$annotate || array_is_list($payload)) return $payload;
+
+        $payload['_sender_cache_source'] = 'cache';
+        $payload['_sender_cache_stale'] = $stale;
+        $payload['_sender_cache_age_seconds'] = (int)$meta['age_seconds'];
+        $payload['_sender_cache_synced_at'] = (string)$meta['synced_at'];
+        return $payload;
+    }
+
+    /** @param array<string,string> $headers */
+    private function retryAfterSeconds(array $headers): ?int
+    {
+        $retry = trim((string)($headers['retry-after'] ?? ''));
+        if ($retry !== '') {
+            if (ctype_digit($retry)) return max(1, (int)$retry);
+            $ts = strtotime($retry);
+            if ($ts !== false && $ts > time()) return max(1, $ts - time());
+        }
+
+        $reset = trim((string)($headers['x-ratelimit-reset'] ?? ''));
+        if ($reset !== '') {
+            if (ctype_digit($reset)) {
+                $number = (int)$reset;
+                $ts = $number > 1000000000 ? $number : time() + max(1, $number);
+            } else {
+                $ts = strtotime($reset);
+            }
+            if ($ts !== false && $ts > time()) return max(1, $ts - time());
+        }
+
+        return null;
     }
 
     private function cleanId(string $id): string
     {
         $id = trim($id);
         if ($id === '' || strlen($id) > 100 || !preg_match('/^[A-Za-z0-9_-]+$/', $id)) {
-            throw new \InvalidArgumentException('Sender template ID is invalid.');
+            throw new \InvalidArgumentException('Sender resource ID is invalid.');
         }
 
         return $id;
