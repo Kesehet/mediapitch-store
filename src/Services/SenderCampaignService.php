@@ -424,7 +424,9 @@ final class SenderCampaignService
                             false
                         );
                     } catch (SenderApiException $e) {
-                        if (!in_array($e->statusCode, [409, 422], true)) throw $e;
+                        // 409 means the subscriber already exists, which is harmless.
+                        // A 422 is a real validation/business error and must pause the run.
+                        if ($e->statusCode !== 409) throw $e;
                     }
                 }
 
