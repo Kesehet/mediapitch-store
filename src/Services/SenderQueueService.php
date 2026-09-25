@@ -164,7 +164,7 @@ final class SenderQueueService
     /**
      * Process queued messages. Only cleaner status "clean" can reach Sender.
      *
-     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int}
+     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int,sender_cooldown_until:?string}
      */
     public function process(int $requested = 50): array
     {
@@ -184,6 +184,7 @@ final class SenderQueueService
             'failed' => 0,
             'remaining_today' => 0,
             'daily_limit' => $this->dailyLimit(),
+            'sender_cooldown_until' => null,
         ];
 
         try {
@@ -195,6 +196,16 @@ final class SenderQueueService
 
             if ($remaining === 0) {
                 return $summary;
+            }
+
+            try {
+                $this->sender->assertApiAvailable();
+            } catch (SenderApiException $e) {
+                if ($e->statusCode === 429) {
+                    $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                    return $summary;
+                }
+                throw $e;
             }
 
             $requested = max(1, min(100, $requested));
@@ -273,6 +284,14 @@ final class SenderQueueService
                         break;
                     }
                 } catch (SenderApiException $e) {
+                    if ($e->statusCode === 429) {
+                        $delay = $e->retryAfter ?? 900;
+                        $this->repo->markRetry($id, 'Sender rate limit: ' . $e->getMessage(), $delay);
+                        $summary['retried']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                        break;
+                    }
+
                     if ($e->retryable() && $attempt < 3) {
                         $delay = $e->retryAfter ?? min(3600, 300 * (2 ** max(0, $attempt - 1)));
                         $this->repo->markRetry($id, $e->getMessage(), $delay);
@@ -280,6 +299,10 @@ final class SenderQueueService
                     } else {
                         $this->repo->markFailed($id, $e->getMessage());
                         $summary['failed']++;
+
+                        if (in_array($e->statusCode, [401, 403], true)) {
+                            break;
+                        }
                     }
                 } catch (\Throwable $e) {
                     if ($attempt < 3) {
@@ -296,6 +319,13 @@ final class SenderQueueService
         } finally {
             $this->repo->releaseWorkerLock();
         }
+    }
+
+    private function senderCooldownUntil(): ?string
+    {
+        $status = $this->sender->apiStatus();
+        $until = trim((string)($status['cooldown_until'] ?? ''));
+        return $until !== '' ? $until : null;
     }
 
     /**
