@@ -59,6 +59,21 @@ final class SenderApiStateRepository
             }
         }
 
+        $cooldown = trim((string)($row['cooldown_until'] ?? ''));
+        if ($cooldown !== '') {
+            $cooldownTs = strtotime($cooldown . ' UTC');
+            if ($cooldownTs !== false && $cooldownTs <= time()) {
+                $this->clearExpiredCooldownAndBudget();
+                $row['cooldown_until'] = null;
+                $row['rate_limit_remaining'] = null;
+                $reset = trim((string)($row['rate_limit_reset_at'] ?? ''));
+                if ($reset !== '') {
+                    $resetTs = strtotime($reset . ' UTC');
+                    if ($resetTs !== false && $resetTs <= time()) $row['rate_limit_reset_at'] = null;
+                }
+            }
+        }
+
         return $row;
     }
 
@@ -70,7 +85,7 @@ final class SenderApiStateRepository
 
         $ts = strtotime($until . ' UTC');
         if ($ts === false || $ts <= time()) {
-            $this->clearCooldown();
+            $this->clearExpiredCooldownAndBudget();
             return;
         }
 
@@ -132,6 +147,18 @@ final class SenderApiStateRepository
             'last_status' => max(0, $status),
             'last_error' => $message !== null && trim($message) !== '' ? substr(trim($message), 0, 500) : null,
         ]);
+    }
+
+    private function clearExpiredCooldownAndBudget(): void
+    {
+        $this->ensureSchema();
+        Database::connection()->exec(
+            "UPDATE sender_api_state
+             SET cooldown_until=NULL,
+                 rate_limit_remaining=NULL,
+                 rate_limit_reset_at=IF(rate_limit_reset_at<=UTC_TIMESTAMP(),NULL,rate_limit_reset_at)
+             WHERE id=1"
+        );
     }
 
     public function clearCooldown(): void
