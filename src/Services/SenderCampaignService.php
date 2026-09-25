@@ -412,17 +412,22 @@ final class SenderCampaignService
             $this->repo->markBatchFailed($batchId, $message);
 
             if ($e instanceof SenderApiException && $e->statusCode === 429) {
-                // HTTP 429 means Sender rejected the request before accepting the send.
-                // It is safe to return these recipients to the queue after Sender's cooldown.
+                // Sender rejected the request because the account API budget is exhausted.
+                // No send is accepted on a 429, so returning recipients to retry is safe.
                 $delay = $e->retryAfter ?? 900;
                 $this->repo->requeueMany($recipientIds, 'Sender rate limit: ' . $message, $delay);
                 $summary['retried'] += count($recipientIds);
+            } elseif ($e instanceof SenderApiException && !$e->retryable()) {
+                // 4xx errors such as invalid credentials, invalid sender domain, or invalid
+                // campaign payload require an admin fix. Keep recipients queued and pause
+                // the run instead of retrying forever or losing the audience.
+                $this->repo->returnToQueueMany($recipientIds, 'Sender requires attention: ' . $message);
+                $this->repo->setRunStatus($runId, 'paused', 'Sender requires attention: ' . $message);
             } elseif ($providerCampaignId !== null) {
-                // For non-429 failures after a provider campaign exists, the send outcome
-                // can be ambiguous. Pause rather than risk duplicate marketing email.
-                $this->repo->markFailedMany($recipientIds, 'Campaign batch needs review: ' . $message);
+                // For transient/network failures after a provider campaign exists, the send
+                // outcome can be ambiguous. Pause rather than risk a duplicate campaign.
+                $this->repo->returnToQueueMany($recipientIds, 'Campaign batch needs review: ' . $message);
                 $this->repo->setRunStatus($runId, 'paused', 'Batch needs review before retrying: ' . $message);
-                $summary['failed'] += count($recipientIds);
             } else {
                 $delay = $e instanceof SenderApiException && $e->retryAfter
                     ? $e->retryAfter
