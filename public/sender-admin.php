@@ -63,7 +63,7 @@ if ($method === 'POST') {
             $saved = $settingsRepo->sender();
             $afterTokenHash = hash('sha256', (string)($saved['api_token'] ?? ''));
             if (!hash_equals($beforeTokenHash, $afterTokenHash)) {
-                $sender->clearApiCooldown();
+                $sender->resetApiState();
                 $sender->clearCachedResources();
                 (new SenderSubscriberCacheRepository())->clearSnapshot();
             }
