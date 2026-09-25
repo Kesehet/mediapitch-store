@@ -11,6 +11,7 @@ use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
 use MediaPitch\Repositories\SenderSubscriberCacheRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Services\SenderApiException;
 use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
@@ -108,7 +109,8 @@ if ($method === 'POST') {
                 (int)($run['rejected_before_queue'] ?? 0) . ' rejected before queueing ' .
                 '(' . (int)($run['risky_before_queue'] ?? 0) . ' risky, ' .
                 (int)($run['invalid_before_queue'] ?? 0) . ' invalid, ' .
-                (int)($run['unknown_before_queue'] ?? 0) . ' unknown).',
+                (int)($run['unknown_before_queue'] ?? 0) . ' unknown).' .
+                (!empty($run['source_snapshot_fallback']) ? ' Sender was unavailable, so the previously stored campaign design snapshot was used.' : ''),
                 'campaigns'
             );
         }
@@ -171,10 +173,16 @@ if ($method === 'POST') {
 
         if ($action === 'queue_manual') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
-            $template = $sender->transactionalTemplate($templateId);
+            $templateTitle = $templateId;
+            try {
+                $template = $sender->transactionalTemplate($templateId);
+                $templateTitle = (string)($template['title'] ?? $template['subject'] ?? $templateId);
+            } catch (SenderApiException $e) {
+                if (!$e->retryable()) throw $e;
+            }
             $result = $queue->queueFromText(
                 $templateId,
-                (string)($template['title'] ?? $template['subject'] ?? $templateId),
+                $templateTitle,
                 (string)($_POST['recipients'] ?? ''),
                 (string)($_POST['variables_json'] ?? ''),
                 (int)(Auth::user()['id'] ?? 0),
@@ -206,11 +214,17 @@ if ($method === 'POST') {
 
         if ($action === 'queue_subscribers') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
-            $template = $sender->transactionalTemplate($templateId);
+            $templateTitle = $templateId;
+            try {
+                $template = $sender->transactionalTemplate($templateId);
+                $templateTitle = (string)($template['title'] ?? $template['subject'] ?? $templateId);
+            } catch (SenderApiException $e) {
+                if (!$e->retryable()) throw $e;
+            }
             $eligible = $newsletter->all('', 'active', 'all');
             $result = $queue->queueSubscribers(
                 $templateId,
-                (string)($template['title'] ?? $template['subject'] ?? $templateId),
+                $templateTitle,
                 $eligible,
                 (int)(Auth::user()['id'] ?? 0),
                 !empty($_POST['consent_confirmed'])
