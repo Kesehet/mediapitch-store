@@ -537,6 +537,20 @@ final class SenderCampaignRepository
         }
     }
 
+    public function markBatchIssue(int $batchId, string $error): void
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            "UPDATE sender_campaign_batches
+             SET last_error=:error
+             WHERE id=:id"
+        );
+        $stmt->execute([
+            'error'=>substr($error,0,500),
+            'id'=>$batchId,
+        ]);
+    }
+
     public function markBatchFailed(int $batchId, string $error): void
     {
         $this->ensureSchema();
