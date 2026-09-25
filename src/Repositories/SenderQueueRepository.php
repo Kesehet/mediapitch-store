@@ -217,6 +217,20 @@ final class SenderQueueRepository
         $stmt->execute(['id' => $id]);
     }
 
+    public function markProcessingIssue(int $id,string $error):void
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            "UPDATE sender_email_queue
+             SET last_error=:last_error
+             WHERE id=:id AND status='processing'"
+        );
+        $stmt->execute([
+            'last_error'=>substr($error,0,500),
+            'id'=>$id,
+        ]);
+    }
+
     public function returnProcessingToQueue(int $id,string $error):void
     {
         $this->ensureSchema();
