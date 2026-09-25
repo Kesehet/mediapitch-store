@@ -154,6 +154,25 @@ final class SenderCampaignRepository
         return $row ?: null;
     }
 
+    /** @return array<string,mixed>|null */
+    public function latestSourceSnapshot(string $sourceCampaignId): ?array
+    {
+        $this->ensureSchema();
+        $sourceCampaignId=trim($sourceCampaignId);
+        if($sourceCampaignId==='')return null;
+
+        $stmt=Database::connection()->prepare(
+            "SELECT source_campaign_id,source_title,subject,preheader,from_name,reply_to,content_type,content
+             FROM sender_campaign_runs
+             WHERE source_campaign_id=:source_campaign_id
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+        $stmt->execute(['source_campaign_id'=>$sourceCampaignId]);
+        $row=$stmt->fetch(PDO::FETCH_ASSOC);
+        return $row?:null;
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function runs(int $limit = 50): array
     {
