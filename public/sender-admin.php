@@ -274,7 +274,8 @@ if (!in_array($tab, ['dashboard','campaigns','templates','queue','history','sett
 $templates = [];
 $providerError = null;
 $connection = null;
-if ($sender->configured()) {
+$needsTemplates = in_array($tab, ['dashboard','templates','queue','history','settings'], true);
+if ($sender->configured() && $needsTemplates) {
     try {
         $templates = $sender->transactionalTemplates(100);
         $connection = ['ok' => true, 'templates' => count($templates)];
