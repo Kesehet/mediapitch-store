@@ -143,7 +143,7 @@ final class SenderSubscriberCacheRepository
                     'provider_subscriber_id' => substr(trim((string)($row['id'] ?? '')), 0, 100) ?: null,
                     'firstname' => substr(trim((string)($row['firstname'] ?? $row['first_name'] ?? '')), 0, 100) ?: null,
                     'lastname' => substr(trim((string)($row['lastname'] ?? $row['last_name'] ?? '')), 0, 100) ?: null,
-                    'status' => substr(strtolower(trim((string)($row['status'] ?? ''))), 0, 40) ?: null,
+                    'status' => $this->normalizeStatus($row),
                     'groups_json' => $groups !== [] ? json_encode($groups, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
                     'provider_created_at' => substr(trim((string)($row['created'] ?? $row['created_at'] ?? '')), 0, 64) ?: null,
                 ]);
@@ -171,6 +171,24 @@ final class SenderSubscriberCacheRepository
             if ($pdo->inTransaction()) $pdo->rollBack();
             throw $e;
         }
+    }
+
+    /** @param array<string,mixed> $row */
+    private function normalizeStatus(array $row): ?string
+    {
+        if (!empty($row['bounced_at'])) return 'bounced';
+        if (!empty($row['unsubscribed_at'])) return 'unsubscribed';
+
+        $raw = $row['status'] ?? '';
+        if (is_array($raw)) {
+            $raw = $raw['email'] ?? $raw['temail'] ?? reset($raw) ?: '';
+        }
+
+        $status = strtolower(trim((string)$raw));
+        if ($status === 'unsubscribe') $status = 'unsubscribed';
+        if ($status === 'bounce') $status = 'bounced';
+
+        return $status !== '' ? substr($status, 0, 40) : null;
     }
 
     public function recordFailure(string $message, int $cooldownSeconds = 300): void
