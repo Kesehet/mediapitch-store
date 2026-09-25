@@ -495,6 +495,18 @@ final class SenderCampaignRepository
         }
     }
 
+    public function setBatchRecipientCount(int $batchId,int $recipientCount):void
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            'UPDATE sender_campaign_batches SET recipient_count=:recipient_count WHERE id=:id'
+        );
+        $stmt->execute([
+            'recipient_count'=>max(0,$recipientCount),
+            'id'=>$batchId,
+        ]);
+    }
+
     public function setBatchGroup(int $batchId, string $groupId): void
     {
         $this->ensureSchema();
