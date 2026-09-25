@@ -31,6 +31,12 @@ $apiLimit = isset($senderApiStatus['rate_limit_limit']) && $senderApiStatus['rat
     ? (int)$senderApiStatus['rate_limit_limit']
     : null;
 $apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
+$workerLastSuccess = trim((string)($senderWorkerStatus['last_success_at'] ?? ''));
+$workerLastError = trim((string)($senderWorkerStatus['last_error'] ?? ''));
+$workerLastSuccessTs = $workerLastSuccess !== '' ? strtotime($workerLastSuccess . ' UTC') : false;
+$workerAgeSeconds = $workerLastSuccessTs !== false ? max(0,time()-$workerLastSuccessTs) : null;
+$hasPendingSenderWork = (int)($stats['queued']??0)>0 || (int)($campaignStats['active_runs']??0)>0;
+$workerLooksStale = $hasPendingSenderWork && ($workerAgeSeconds===null || $workerAgeSeconds>7200);
 ?>
 <section class="admin-card" style="margin-bottom:18px">
   <div style="display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">
@@ -47,6 +53,14 @@ $apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
       <?php if($apiRemaining!==null): ?>
         <div class="muted" style="font-size:12px">API requests: <?= number_format($apiRemaining) ?><?= $apiLimit!==null?' / '.number_format($apiLimit):'' ?> remaining<?= $apiResetAt!==''?' · reset '.$apiResetAt.' UTC':'' ?></div>
       <?php endif; ?>
+      <div class="muted" style="font-size:12px">
+        Worker:
+        <?php if($workerLastSuccess!==''): ?>
+          last success <?= e($workerLastSuccess) ?> UTC
+        <?php else: ?>
+          no successful run recorded yet
+        <?php endif; ?>
+      </div>
     </div>
   </div>
 </section>
@@ -57,6 +71,15 @@ $apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
   <?php endforeach; ?>
   <a class="email-tab-link <?= str_starts_with(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '', '/admin/newsletter')?'is-active':'' ?>" href="<?= e(url('admin/newsletter')) ?>">Subscribers</a>
 </nav>
+
+<?php if($workerLastError!==''): ?>
+  <div class="flash error" style="margin-bottom:18px">Last Sender worker error: <?= e($workerLastError) ?></div>
+<?php elseif($workerLooksStale): ?>
+  <div class="flash" style="margin-bottom:18px">
+    Sender has pending work, but no successful worker heartbeat has been recorded in the last 2 hours.
+    Check the Hostinger cron for <code>php database/sender-worker.php</code>; you can still use the manual process buttons below.
+  </div>
+<?php endif; ?>
 
 <?php if($senderApiCooling): ?>
   <div class="flash error" style="margin-bottom:18px">
