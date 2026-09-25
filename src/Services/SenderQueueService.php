@@ -247,12 +247,12 @@ final class SenderQueueService
                         $message .= ': ' . $validationReason;
                     }
 
-                    if ($validationStatus === 'unknown' && $attempt < 3) {
-                        $this->repo->markRetry($id, $message, 1800);
+                    if ($validationStatus === 'unknown') {
+                        // Unknown is not evidence that an address is bad. Keep it safely
+                        // queued with backoff until the cleaner can make a definite call.
+                        $delay = min(21600, 1800 * (2 ** min(4, max(0, $attempt - 1))));
+                        $this->repo->markRetry($id, $message, $delay);
                         $summary['retried']++;
-                    } elseif ($validationStatus === 'unknown') {
-                        $this->repo->markFailed($id, $message);
-                        $summary['failed']++;
                     } else {
                         $this->repo->markBlocked($id, $message);
                         $summary['blocked']++;
