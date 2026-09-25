@@ -164,7 +164,7 @@ final class SenderQueueService
     /**
      * Process queued messages. Only cleaner status "clean" can reach Sender.
      *
-     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int,sender_cooldown_until:?string}
+     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int,sender_cooldown_until:?string,recovered_sent:int,requeued_processing:int,uncertain_processing:int}
      */
     public function process(int $requested = 50): array
     {
@@ -185,6 +185,9 @@ final class SenderQueueService
             'remaining_today' => 0,
             'daily_limit' => $this->dailyLimit(),
             'sender_cooldown_until' => null,
+            'recovered_sent' => 0,
+            'requeued_processing' => 0,
+            'uncertain_processing' => 0,
         ];
 
         try {
@@ -206,6 +209,19 @@ final class SenderQueueService
                     return $summary;
                 }
                 throw $e;
+            }
+
+            $reconciled = $this->reconcileInterruptedProcessing();
+            $summary['recovered_sent'] = $reconciled['sent'];
+            $summary['requeued_processing'] = $reconciled['requeued'];
+            $summary['uncertain_processing'] = $reconciled['uncertain'];
+
+            if ($reconciled['sent'] > 0 || $reconciled['requeued'] > 0 || $reconciled['uncertain'] > 0) {
+                $sentToday = $this->repo->countSentBetween($window['start_utc'], $window['end_utc'])
+                    + $this->campaigns->countDispatchedBetween($window['start_utc'], $window['end_utc']);
+                $summary['remaining_today'] = max(0, $this->dailyLimit() - $sentToday);
+                $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                return $summary;
             }
 
             $requested = max(1, min(100, $requested));
@@ -323,6 +339,57 @@ final class SenderQueueService
         } finally {
             $this->repo->releaseWorkerLock();
         }
+    }
+
+    /** @return array{sent:int,requeued:int,uncertain:int} */
+    private function reconcileInterruptedProcessing(): array
+    {
+        $result=['sent'=>0,'requeued'=>0,'uncertain'=>0];
+
+        foreach($this->repo->processingRows(50) as $row){
+            $id=(int)$row['id'];
+            $templateId=trim((string)$row['template_id']);
+            $email=strtolower(trim((string)$row['recipient_email']));
+            $processingAt=trim((string)($row['updated_at']??''));
+            $processingTs=$processingAt!==''?strtotime($processingAt.' UTC'):false;
+            $match=null;
+
+            try{
+                $response=$this->sender->sentMessages($templateId,5,1,$email);
+                $messages=is_array($response['data']??null)?$response['data']:[];
+                foreach($messages as $message){
+                    if(!is_array($message))continue;
+                    if(strtolower(trim((string)($message['email']??'')))!==$email)continue;
+
+                    $created=trim((string)($message['created']??''));
+                    $createdTs=$created!==''?strtotime($created.' UTC'):false;
+                    if($processingTs!==false && $createdTs!==false && $createdTs < ($processingTs-90))continue;
+
+                    $match=$message;
+                    break;
+                }
+            }catch(SenderApiException $e){
+                // Ambiguous delivery state: never requeue until Sender can be queried.
+                $result['uncertain']++;
+                if($e->statusCode===429)break;
+                continue;
+            }
+
+            if(is_array($match)){
+                $providerId=trim((string)($match['emailId']??''));
+                $this->repo->markSent($id,$providerId!==''?$providerId:null);
+                $result['sent']++;
+                continue;
+            }
+
+            $this->repo->returnProcessingToQueue(
+                $id,
+                'Recovered interrupted transactional send; Sender shows no matching sent message.'
+            );
+            $result['requeued']++;
+        }
+
+        return $result;
     }
 
     private function senderCooldownUntil(): ?string
