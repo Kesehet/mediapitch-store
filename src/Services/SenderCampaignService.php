@@ -9,6 +9,7 @@ use DateTimeZone;
 use MediaPitch\Repositories\NewsletterRepository;
 use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SenderSubscriberCacheRepository;
 use MediaPitch\Repositories\SettingsRepository;
 
 final class SenderCampaignService
@@ -20,7 +21,8 @@ final class SenderCampaignService
         private readonly SettingsRepository $settings = new SettingsRepository(),
         private readonly SenderQueueRepository $queueRepo = new SenderQueueRepository(),
         private readonly NewsletterRepository $newsletter = new NewsletterRepository(),
-        private readonly SubscriberMergeService $subscribers = new SubscriberMergeService()
+        private readonly SubscriberMergeService $subscribers = new SubscriberMergeService(),
+        private readonly SenderSubscriberCacheRepository $subscriberCache = new SenderSubscriberCacheRepository()
     ) {
     }
 
@@ -141,7 +143,7 @@ final class SenderCampaignService
         return $run;
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int} */
     public function processRun(int $runId, int $requested = 50): array
     {
         if (!$this->repo->acquireWorkerLock()) {
@@ -155,7 +157,7 @@ final class SenderCampaignService
         }
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int} */
     public function processReadyRuns(int $requested = 50): array
     {
         if (!$this->sender->configured()) {
@@ -178,6 +180,9 @@ final class SenderCampaignService
             'queued_waiting' => 0,
             'processing' => 0,
             'next_retry_at' => null,
+            'sender_cooldown_until' => null,
+            'api_remaining' => null,
+            'api_deferred' => 0,
         ];
 
         try {
@@ -196,6 +201,9 @@ final class SenderCampaignService
                 $summary['queued_waiting'] = (int)$result['queued_waiting'];
                 $summary['processing'] = (int)$result['processing'];
                 $summary['next_retry_at'] = $result['next_retry_at'];
+                $summary['sender_cooldown_until'] = $result['sender_cooldown_until'];
+                $summary['api_remaining'] = $result['api_remaining'];
+                $summary['api_deferred'] += (int)$result['api_deferred'];
                 $remainingRequest = max(0, $remainingRequest - (int)$result['dispatched']);
             }
 
@@ -233,7 +241,7 @@ final class SenderCampaignService
     /**
      * Called only while the shared Sender worker lock is held.
      *
-     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string}
+     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int}
      */
     private function processRunUnlocked(int $runId, int $requested): array
     {
@@ -263,9 +271,30 @@ final class SenderCampaignService
             'queued_waiting' => 0,
             'processing' => 0,
             'next_retry_at' => null,
+            'sender_cooldown_until' => null,
+            'api_remaining' => null,
+            'api_deferred' => 0,
         ];
 
         if ($target < 1) return $summary;
+
+        try {
+            $this->sender->assertApiAvailable();
+        } catch (SenderApiException $e) {
+            if ($e->statusCode === 429) {
+                $api = $this->sender->apiStatus();
+                $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+                $summary['api_remaining'] = isset($api['rate_limit_remaining']) ? (int)$api['rate_limit_remaining'] : null;
+                $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId);
+                $state = $this->repo->recipientState($runId);
+                $summary['queued_ready'] = $state['queued_ready'];
+                $summary['queued_waiting'] = $state['queued_waiting'];
+                $summary['processing'] = $state['processing'];
+                $summary['next_retry_at'] = $state['next_retry_at'];
+                return $summary;
+            }
+            throw $e;
+        }
 
         $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId);
         $state = $this->repo->recipientState($runId);
@@ -324,8 +353,40 @@ final class SenderCampaignService
             $summary['queued_waiting'] = $state['queued_waiting'];
             $summary['processing'] = $state['processing'];
             $summary['next_retry_at'] = $state['next_retry_at'];
+            $api = $this->sender->apiStatus();
+            $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+            $summary['api_remaining'] = isset($api['rate_limit_remaining']) ? (int)$api['rate_limit_remaining'] : $summary['api_remaining'];
             return $summary;
         }
+
+        $budgeted = $this->fitReadyToApiBudget($ready);
+        $selectedReady = $budgeted['selected'];
+        $deferredReady = $budgeted['deferred'];
+        $summary['api_remaining'] = $budgeted['api_remaining'];
+
+        if ($deferredReady !== []) {
+            $delay = $this->senderApiRetryDelay();
+            $this->repo->requeueMany(
+                array_map(static fn(array $row): int => (int)$row['id'], $deferredReady),
+                'Deferred to preserve Sender API request budget.',
+                $delay
+            );
+            $summary['api_deferred'] += count($deferredReady);
+        }
+
+        if ($selectedReady === []) {
+            $this->repo->refreshRunStats($runId);
+            $state = $this->repo->recipientState($runId);
+            $summary['queued_ready'] = $state['queued_ready'];
+            $summary['queued_waiting'] = $state['queued_waiting'];
+            $summary['processing'] = $state['processing'];
+            $summary['next_retry_at'] = $state['next_retry_at'];
+            $api = $this->sender->apiStatus();
+            $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+            return $summary;
+        }
+
+        $ready = $selectedReady;
 
         $batchNo = $this->repo->nextBatchNo($runId);
         $groupTitle = sprintf(
@@ -405,6 +466,9 @@ final class SenderCampaignService
             $summary['queued_waiting'] = $state['queued_waiting'];
             $summary['processing'] = $state['processing'];
             $summary['next_retry_at'] = $state['next_retry_at'];
+            $api = $this->sender->apiStatus();
+            $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+            $summary['api_remaining'] = isset($api['rate_limit_remaining']) ? (int)$api['rate_limit_remaining'] : $summary['api_remaining'];
 
             return $summary;
         } catch (\Throwable $e) {
@@ -444,6 +508,85 @@ final class SenderCampaignService
             $summary['next_retry_at'] = $state['next_retry_at'];
             return $summary;
         }
+    }
+
+    /**
+     * Keep a campaign batch inside the currently reported Sender API budget.
+     * Existing Sender subscribers cost no per-recipient create call; local-only
+     * subscribers are budgeted conservatively as one create call each.
+     *
+     * @param array<int,array<string,mixed>> $ready
+     * @return array{selected:array<int,array<string,mixed>>,deferred:array<int,array<string,mixed>>,api_remaining:?int}
+     */
+    private function fitReadyToApiBudget(array $ready): array
+    {
+        $api = $this->sender->apiStatus();
+        $remaining = isset($api['rate_limit_remaining']) && $api['rate_limit_remaining'] !== null
+            ? max(0, (int)$api['rate_limit_remaining'])
+            : null;
+
+        if ($remaining === null) {
+            return ['selected' => $ready, 'deferred' => [], 'api_remaining' => null];
+        }
+
+        // Reserve one request so normal admin/status work is not forced straight
+        // into a provider 429. A campaign batch itself needs four API requests:
+        // create group, add group members, create campaign, start campaign.
+        $usable = max(0, $remaining - 1);
+        if ($usable < 4) {
+            return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
+        }
+
+        $emails = array_values(array_unique(array_map(
+            static fn(array $row): string => strtolower(trim((string)($row['recipient_email'] ?? ''))),
+            $ready
+        )));
+        $presence = $this->subscriberCache->presenceMap($emails);
+
+        $existing = [];
+        $missing = [];
+        foreach ($ready as $row) {
+            $email = strtolower(trim((string)($row['recipient_email'] ?? '')));
+            if (!empty($presence[$email])) $existing[] = $row;
+            else $missing[] = $row;
+        }
+
+        $selected = $existing;
+        $deferred = [];
+        $missingAllowance = max(0, $usable - 5); // extra add-to-group retry + one create per missing subscriber
+
+        foreach ($missing as $index => $row) {
+            if ($index < $missingAllowance) $selected[] = $row;
+            else $deferred[] = $row;
+        }
+
+        // If no cached-existing recipients and there is not enough budget for at
+        // least one missing subscriber, defer the whole batch.
+        if ($selected === [] && $missing !== []) {
+            return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
+        }
+
+        return ['selected' => $selected, 'deferred' => $deferred, 'api_remaining' => $remaining];
+    }
+
+    private function senderApiRetryDelay(): int
+    {
+        $api = $this->sender->apiStatus();
+        foreach (['cooldown_until','rate_limit_reset_at'] as $key) {
+            $value = trim((string)($api[$key] ?? ''));
+            if ($value === '') continue;
+            $ts = strtotime($value . ' UTC');
+            if ($ts !== false && $ts > time()) {
+                return max(60, min(86400, $ts - time() + 5));
+            }
+        }
+        return 300;
+    }
+
+    private function nonEmpty(string $value): ?string
+    {
+        $value = trim($value);
+        return $value !== '' ? $value : null;
     }
 
     /** @param array<string,mixed> $campaign @return array<string,mixed> */
