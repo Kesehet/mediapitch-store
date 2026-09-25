@@ -55,8 +55,14 @@ if ($method === 'POST') {
 
     try {
         if ($action === 'save_settings') {
+            $beforeSender = $settingsRepo->sender();
+            $beforeTokenHash = hash('sha256', (string)($beforeSender['api_token'] ?? ''));
             $settingsRepo->saveSender($_POST);
             $saved = $settingsRepo->sender();
+            $afterTokenHash = hash('sha256', (string)($saved['api_token'] ?? ''));
+            if (!hash_equals($beforeTokenHash, $afterTokenHash)) {
+                $sender->clearApiCooldown();
+            }
 
             Audit::record('settings.sender.update', 'settings', null, 'Updated Sender email settings', [
                 'api_token_configured' => !empty($saved['api_token_configured']),
@@ -127,7 +133,12 @@ if ($method === 'POST') {
                 if ((int)($result['processing'] ?? 0) > 0) {
                     $detail .= ' ' . (int)$result['processing'] . ' recipient(s) are still marked processing.';
                 }
-                if ((int)($result['queued_ready'] ?? 0) > 0) {
+                if ((int)($result['api_deferred'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['api_deferred'] . ' recipient(s) were deferred to preserve Sender API request budget.';
+                }
+                if (!empty($result['sender_cooldown_until'])) {
+                    $detail .= ' Sender API cooldown is active until ' . (string)$result['sender_cooldown_until'] . ' UTC.';
+                } elseif ((int)($result['queued_ready'] ?? 0) > 0) {
                     $detail .= ' ' . (int)$result['queued_ready'] . ' recipient(s) are ready; retry processing.';
                 }
                 $redirect($detail, 'campaigns', true);
@@ -228,6 +239,21 @@ if ($method === 'POST') {
             $result = $queue->process($requested);
 
             Audit::record('sender.queue.process', 'sender_queue', null, 'Processed Sender queue', $result);
+
+            if (
+                (int)$result['sent'] === 0 &&
+                (int)$result['blocked'] === 0 &&
+                (int)$result['retried'] === 0 &&
+                (int)$result['failed'] === 0 &&
+                !empty($result['sender_cooldown_until'])
+            ) {
+                $redirect(
+                    'Sender API cooldown is active until ' . (string)$result['sender_cooldown_until'] .
+                    ' UTC. Queue items were left untouched and will resume automatically.',
+                    'queue',
+                    true
+                );
+            }
 
             $redirect(
                 'Sender queue processed: ' . $result['sent'] . ' sent, ' .
@@ -348,6 +374,7 @@ View::render('admin/sender', [
     'mergedAudienceRefreshAfter' => $mergedAudienceRefreshAfter,
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
+    'senderApiStatus' => $sender->apiStatus(),
     'providerError' => $providerError,
     'connection' => $connection,
     'stats' => $queue->stats(),
