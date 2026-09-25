@@ -111,6 +111,28 @@ if ($method === 'POST') {
 
             Audit::record('sender.campaign.process', 'sender_campaign', $runId, 'Processed Sender campaign batch', $result);
 
+            $activity = (int)$result['dispatched'] + (int)$result['blocked'] + (int)$result['retried'] + (int)$result['failed'];
+            if ($activity === 0) {
+                $detail = 'No campaign recipient was ready to process.';
+                if ((int)($result['recovered_stale'] ?? 0) > 0) {
+                    $detail .= ' Recovered ' . (int)$result['recovered_stale'] . ' stale processing row(s).';
+                }
+                if ((int)($result['queued_waiting'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['queued_waiting'] . ' recipient(s) are waiting for cleaner retry';
+                    if (!empty($result['next_retry_at'])) {
+                        $detail .= ' at ' . (string)$result['next_retry_at'] . ' UTC';
+                    }
+                    $detail .= '.';
+                }
+                if ((int)($result['processing'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['processing'] . ' recipient(s) are still marked processing.';
+                }
+                if ((int)($result['queued_ready'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['queued_ready'] . ' recipient(s) are ready; retry processing.';
+                }
+                $redirect($detail, 'campaigns', true);
+            }
+
             $redirect(
                 'Campaign batch processed: ' . $result['dispatched'] . ' dispatched, ' .
                 $result['blocked'] . ' blocked, ' .
