@@ -2,10 +2,14 @@
 
 declare(strict_types=1);
 
+use MediaPitch\Repositories\SenderWorkerStateRepository;
 use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderQueueService;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
+
+$workerState = new SenderWorkerStateRepository();
+$workerState->started();
 
 try {
     $queue = new SenderQueueService();
@@ -29,13 +33,17 @@ try {
         );
     }
 
+    $remainingToday = (int)$campaign['remaining_today'];
+    $workerState->succeeded($transactional, $campaign, $remainingToday);
+
     fwrite(STDOUT, json_encode([
         'transactional' => $transactional,
         'campaigns' => $campaign,
-        'remaining_today' => (int)$campaign['remaining_today'],
+        'remaining_today' => $remainingToday,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL);
     exit(0);
 } catch (Throwable $e) {
+    try { $workerState->failed($e->getMessage()); } catch (Throwable) {}
     fwrite(STDERR, 'Sender worker failed: ' . $e->getMessage() . PHP_EOL);
     exit(1);
 }
