@@ -219,6 +219,17 @@ final class SenderCampaignService
                 $summary['reconciled_sent'] += (int)$result['reconciled_sent'];
                 $summary['uncertain_batches'] += (int)$result['uncertain_batches'];
                 $remainingRequest = max(0, $remainingRequest - (int)$result['dispatched']);
+
+                // Do not move to another campaign while the previous provider outcome is
+                // unknown, the API circuit breaker is active, or the reported API budget
+                // is too low to safely construct a batch.
+                if (
+                    (int)$result['uncertain_batches'] > 0 ||
+                    !empty($result['sender_cooldown_until']) ||
+                    ((int)$result['api_deferred'] > 0 && (int)$result['dispatched'] === 0)
+                ) {
+                    break;
+                }
             }
 
             return $summary;
