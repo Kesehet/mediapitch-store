@@ -184,6 +184,14 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
           <td>
             <strong><?= number_format((int)$run['dispatched_recipients']) ?> / <?= number_format((int)$run['total_recipients']) ?></strong>
             <div class="muted" style="font-size:12px"><?= number_format($remaining) ?> remaining · <?= number_format((int)$run['blocked_recipients']) ?> blocked · <?= number_format((int)$run['failed_recipients']) ?> failed</div>
+            <?php if($remaining>0): ?>
+              <div class="muted" style="font-size:11px;margin-top:3px">
+                <?= number_format((int)($run['ready_recipients']??0)) ?> ready ·
+                <?= number_format((int)($run['waiting_recipients']??0)) ?> waiting for retry ·
+                <?= number_format((int)($run['processing_recipients']??0)) ?> processing
+                <?php if(!empty($run['next_retry_at'])): ?> · next retry <?= e((string)$run['next_retry_at']) ?> UTC<?php endif; ?>
+              </div>
+            <?php endif; ?>
           </td>
           <td><strong><?= e(ucfirst($runStatus)) ?></strong><div class="muted" style="font-size:12px"><?= !empty($run['auto_continue'])?'Auto continue':'Manual' ?></div></td>
           <td><?php if(!empty($run['last_error'])):?><span style="max-width:320px;display:block"><?= e((string)$run['last_error']) ?></span><?php else:?><span class="muted">—</span><?php endif;?></td>

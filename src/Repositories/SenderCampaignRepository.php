@@ -161,7 +161,18 @@ final class SenderCampaignRepository
         $limit = max(1, min(200, $limit));
         $sql = "SELECT r.*,
                     (r.total_recipients-r.dispatched_recipients-r.blocked_recipients-r.failed_recipients) AS remaining_recipients,
-                    (SELECT COUNT(*) FROM sender_campaign_batches b WHERE b.run_id=r.id) AS batch_count
+                    (SELECT COUNT(*) FROM sender_campaign_batches b WHERE b.run_id=r.id) AS batch_count,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cr
+                     WHERE cr.run_id=r.id AND cr.status='queued'
+                       AND (cr.next_attempt_at IS NULL OR cr.next_attempt_at<=UTC_TIMESTAMP())) AS ready_recipients,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cw
+                     WHERE cw.run_id=r.id AND cw.status='queued'
+                       AND cw.next_attempt_at>UTC_TIMESTAMP()) AS waiting_recipients,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cp
+                     WHERE cp.run_id=r.id AND cp.status='processing') AS processing_recipients,
+                    (SELECT MIN(cn.next_attempt_at) FROM sender_campaign_recipients cn
+                     WHERE cn.run_id=r.id AND cn.status='queued'
+                       AND cn.next_attempt_at>UTC_TIMESTAMP()) AS next_retry_at
                 FROM sender_campaign_runs r
                 ORDER BY r.id DESC
                 LIMIT {$limit}";
@@ -177,6 +188,48 @@ final class SenderCampaignRepository
              WHERE status IN ('queued','active') AND auto_continue=1
              ORDER BY id ASC"
         )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function recoverStaleProcessing(int $runId): int
+    {
+        $this->ensureSchema();
+        // The caller holds the global Sender worker lock. Therefore any row still
+        // marked processing belongs to a previous interrupted worker and is safe
+        // to return to the ready queue.
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_recipients
+             SET status='queued',
+                 next_attempt_at=NULL,
+                 last_error=COALESCE(last_error,'Recovered after an interrupted worker run')
+             WHERE run_id=:run_id
+               AND status='processing'"
+        );
+        $stmt->execute(['run_id' => $runId]);
+        return $stmt->rowCount();
+    }
+
+    /** @return array{queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
+    public function recipientState(int $runId): array
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "SELECT
+                SUM(status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=UTC_TIMESTAMP())) AS queued_ready,
+                SUM(status='queued' AND next_attempt_at>UTC_TIMESTAMP()) AS queued_waiting,
+                SUM(status='processing') AS processing,
+                MIN(CASE WHEN status='queued' AND next_attempt_at>UTC_TIMESTAMP() THEN next_attempt_at END) AS next_retry_at
+             FROM sender_campaign_recipients
+             WHERE run_id=:run_id"
+        );
+        $stmt->execute(['run_id' => $runId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'queued_ready' => (int)($row['queued_ready'] ?? 0),
+            'queued_waiting' => (int)($row['queued_waiting'] ?? 0),
+            'processing' => (int)($row['processing'] ?? 0),
+            'next_retry_at' => !empty($row['next_retry_at']) ? (string)$row['next_retry_at'] : null,
+        ];
     }
 
     /** @return array<int,array<string,mixed>> */
