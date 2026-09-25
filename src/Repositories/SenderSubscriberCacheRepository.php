@@ -114,6 +114,34 @@ final class SenderSubscriberCacheRepository
         return $map;
     }
 
+    /**
+     * @param array<int,string> $emails
+     * @return array<string,string>
+     */
+    public function statusMap(array $emails): array
+    {
+        $this->ensureSchema();
+        $clean=[];
+        foreach($emails as $email){
+            $email=strtolower(trim((string)$email));
+            if(filter_var($email,FILTER_VALIDATE_EMAIL))$clean[$email]=$email;
+        }
+        if($clean===[])return [];
+
+        $map=[];
+        foreach(array_chunk(array_values($clean),500) as $chunk){
+            $placeholders=implode(',',array_fill(0,count($chunk),'?'));
+            $stmt=Database::connection()->prepare(
+                "SELECT email,status FROM sender_subscriber_cache WHERE email IN ({$placeholders})"
+            );
+            $stmt->execute($chunk);
+            foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $row){
+                $map[strtolower((string)$row['email'])]=strtolower(trim((string)($row['status']??'')));
+            }
+        }
+        return $map;
+    }
+
     public function hasSnapshot(): bool
     {
         $meta = $this->meta();
