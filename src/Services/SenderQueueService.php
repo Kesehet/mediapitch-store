@@ -292,6 +292,14 @@ final class SenderQueueService
                         break;
                     }
 
+                    if (in_array($e->statusCode, [401, 403], true)) {
+                        // Credentials/permissions can be fixed by an administrator. Do not
+                        // permanently lose this recipient just because the token is wrong.
+                        $this->repo->markRetry($id, 'Sender credentials require attention: ' . $e->getMessage(), 3600);
+                        $summary['retried']++;
+                        break;
+                    }
+
                     if ($e->retryable() && $attempt < 3) {
                         $delay = $e->retryAfter ?? min(3600, 300 * (2 ** max(0, $attempt - 1)));
                         $this->repo->markRetry($id, $e->getMessage(), $delay);
@@ -299,10 +307,6 @@ final class SenderQueueService
                     } else {
                         $this->repo->markFailed($id, $e->getMessage());
                         $summary['failed']++;
-
-                        if (in_array($e->statusCode, [401, 403], true)) {
-                            break;
-                        }
                     }
                 } catch (\Throwable $e) {
                     if ($attempt < 3) {
