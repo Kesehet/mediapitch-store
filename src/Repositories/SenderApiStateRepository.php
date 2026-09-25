@@ -37,7 +37,29 @@ final class SenderApiStateRepository
     {
         $this->ensureSchema();
         $row = Database::connection()->query("SELECT * FROM sender_api_state WHERE id=1 LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-        return $row ?: [];
+        if (!$row) return [];
+
+        $reset = trim((string)($row['rate_limit_reset_at'] ?? ''));
+        if ($reset !== '') {
+            $resetTs = strtotime($reset . ' UTC');
+            if ($resetTs !== false && $resetTs <= time()) {
+                Database::connection()->exec(
+                    "UPDATE sender_api_state
+                     SET rate_limit_remaining=NULL,rate_limit_reset_at=NULL,
+                         cooldown_until=IF(cooldown_until<=UTC_TIMESTAMP(),NULL,cooldown_until)
+                     WHERE id=1"
+                );
+                $row['rate_limit_remaining'] = null;
+                $row['rate_limit_reset_at'] = null;
+                $cooldown = trim((string)($row['cooldown_until'] ?? ''));
+                if ($cooldown !== '') {
+                    $cooldownTs = strtotime($cooldown . ' UTC');
+                    if ($cooldownTs !== false && $cooldownTs <= time()) $row['cooldown_until'] = null;
+                }
+            }
+        }
+
+        return $row;
     }
 
     public function assertRequestAllowed(): void
@@ -70,11 +92,25 @@ final class SenderApiStateRepository
         $resetTs = $this->parseReset($headers['x-ratelimit-reset'] ?? null);
         $retryTs = $this->parseRetryAfter($headers['retry-after'] ?? null);
 
+        $messageRetryTs = $this->parseMessageRetry($message);
+        $existing = $this->status();
+        $existingCooldownTs = null;
+        $existingCooldown = trim((string)($existing['cooldown_until'] ?? ''));
+        if ($existingCooldown !== '') {
+            $parsed = strtotime($existingCooldown . ' UTC');
+            if ($parsed !== false && $parsed > time()) $existingCooldownTs = $parsed;
+        }
+
         $cooldownTs = null;
         if ($status === 429) {
-            $cooldownTs = $retryTs ?? $resetTs ?? (time() + 60);
+            $cooldownTs = $retryTs ?? $resetTs ?? $messageRetryTs ?? (time() + 60);
         } elseif ($remaining === 0 && $resetTs !== null && $resetTs > time()) {
             $cooldownTs = $resetTs;
+        } elseif ($existingCooldownTs !== null) {
+            // A concurrent request may finish successfully after another request has
+            // already received a 429. Preserve the future cooldown rather than
+            // clearing it with that late success.
+            $cooldownTs = $existingCooldownTs;
         }
 
         $stmt = Database::connection()->prepare(
@@ -137,6 +173,23 @@ final class SenderApiStateRepository
 
         $ts = strtotime($raw);
         return $ts !== false ? $ts : null;
+    }
+
+    private function parseMessageRetry(?string $message): ?int
+    {
+        $message = trim((string)$message);
+        if ($message === '') return null;
+
+        if (preg_match('/retry\s+after\s+([0-9T:\-+.]+Z?)/i', $message, $matches)) {
+            $ts = strtotime($matches[1]);
+            if ($ts !== false && $ts > time()) return $ts;
+        }
+
+        if (preg_match('/retry\s+after\s+(\d+)\s*(?:second|seconds|sec|secs)/i', $message, $matches)) {
+            return time() + max(1, (int)$matches[1]);
+        }
+
+        return null;
     }
 
     private function parseRetryAfter(mixed $value): ?int
