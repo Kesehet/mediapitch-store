@@ -46,6 +46,12 @@ final class SenderResourceCacheRepository
         ];
     }
 
+    public function clearAll(): void
+    {
+        $this->ensureSchema();
+        Database::connection()->exec('DELETE FROM sender_resource_cache');
+    }
+
     /** @param array<string,mixed>|array<int,mixed> $payload */
     public function put(string $key, array $payload): void
     {
