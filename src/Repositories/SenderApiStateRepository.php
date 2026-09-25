@@ -219,6 +219,7 @@ final class SenderApiStateRepository
 
         if (ctype_digit($raw)) {
             $number = (int)$raw;
+            if ($number > 1000000000000) return (int)floor($number / 1000);
             if ($number > 1000000000) return $number;
             if ($number > 0) return time() + $number;
         }
