@@ -368,12 +368,13 @@ final class SenderCampaignService
             $message = 'List cleaner returned ' . ($status !== '' ? $status : 'unknown');
             if ($reason !== '') $message .= ': ' . $reason;
 
-            if ($status === 'unknown' && $attempt < 3) {
-                $this->repo->markRetry($id, $message, 1800);
+            if ($status === 'unknown') {
+                // Unknown means the cleaner could not make a reliable decision (including
+                // temporary service/network issues). Never send, but also never discard a
+                // subscriber merely because infrastructure was unavailable.
+                $delay = min(21600, 1800 * (2 ** min(4, max(0, $attempt - 1))));
+                $this->repo->markRetry($id, $message, $delay);
                 $summary['retried']++;
-            } elseif ($status === 'unknown') {
-                $this->repo->markFailedMany([$id], $message);
-                $summary['failed']++;
             } else {
                 $this->repo->markBlocked($id, $message);
                 $summary['blocked']++;
