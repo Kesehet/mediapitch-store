@@ -119,6 +119,15 @@ final class SenderApiStateRepository
         $cooldownTs = null;
         if ($status === 429) {
             $cooldownTs = $retryTs ?? $resetTs ?? $messageRetryTs ?? (time() + 60);
+        } elseif (in_array($status, [401,403], true)) {
+            // Credentials/permissions are account-wide. A brief circuit break prevents
+            // every worker/tab from repeating the same rejected request; changing the
+            // configured token clears this state immediately.
+            $cooldownTs = time() + 300;
+        } elseif ($status === 0 || $status === 408 || $status >= 500) {
+            // Short provider/network circuit breaker. Payload-specific 4xx errors are
+            // deliberately excluded because they should not disable unrelated jobs.
+            $cooldownTs = time() + 60;
         } elseif ($remaining === 0 && $resetTs !== null && $resetTs > time()) {
             $cooldownTs = $resetTs;
         } elseif ($existingCooldownTs !== null) {
