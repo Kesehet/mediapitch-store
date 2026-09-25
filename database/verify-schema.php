@@ -14,7 +14,7 @@ $requiredTables=[
     'newsletter_subscribers','ai_jobs','ai_research_sources','sender_email_queue',
     'sender_campaign_runs','sender_campaign_recipients','sender_campaign_batches',
     'sender_subscriber_cache','sender_subscriber_cache_meta',
-    'sender_api_state','sender_resource_cache',
+    'sender_api_state','sender_resource_cache','sender_worker_state',
 ];
 $requiredColumns=[
     'users'=>['last_login_at','failed_login_count','last_failed_login_at'],
