@@ -38,7 +38,8 @@ if(!in_array($presence,['all','local','sender','both'],true))$presence='all';
 if(!in_array($status,['all','active','unsubscribed','bounced','suppressed','unknown'],true))$status='all';
 if(!in_array($validation,['all','clean','risky','invalid','unknown','not_checked'],true))$validation='all';
 
-$merged=(new SubscriberMergeService($repo))->merged($query,$presence,$status,$validation);
+$forceSenderRefresh=!empty($_GET['refresh_sender']);
+$merged=(new SubscriberMergeService($repo))->merged($query,$presence,$status,$validation,$forceSenderRefresh);
 $allRows=$merged['rows'];
 $filteredTotal=count($allRows);
 $page=max(1,(int)($_GET['page']??1));
@@ -88,7 +89,12 @@ View::render('admin/newsletter',[
     'status'=>$status,
     'validation'=>$validation,
     'senderError'=>$merged['sender_error'],
+    'senderWarning'=>$merged['sender_warning'],
     'senderTruncated'=>$merged['sender_truncated'],
     'senderReportedTotal'=>$merged['sender_reported_total'],
+    'senderSnapshotSource'=>$merged['sender_snapshot_source'],
+    'senderLastSyncedAt'=>$merged['sender_last_synced_at'],
+    'senderCacheAgeSeconds'=>$merged['sender_cache_age_seconds'],
+    'senderRefreshAfter'=>$merged['sender_refresh_after'],
     'success'=>(string)($_GET['success']??''),
 ],'admin/layout');

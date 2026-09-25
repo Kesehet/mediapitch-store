@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace MediaPitch\Services;
 
 use MediaPitch\Repositories\NewsletterRepository;
+use MediaPitch\Repositories\SenderSubscriberCacheRepository;
 
 final class SubscriberMergeService
 {
+    private const CACHE_FRESH_SECONDS = 21600; // 6 hours
+    private const CAMPAIGN_MAX_CACHE_AGE_SECONDS = 86400; // 24 hours
+
     public function __construct(
         private readonly NewsletterRepository $local = new NewsletterRepository(),
-        private readonly SenderClient $sender = new SenderClient()
+        private readonly SenderClient $sender = new SenderClient(),
+        private readonly SenderSubscriberCacheRepository $cache = new SenderSubscriberCacheRepository()
     ) {
     }
 
@@ -19,30 +24,30 @@ final class SubscriberMergeService
      *   rows:array<int,array<string,mixed>>,
      *   stats:array<string,int>,
      *   sender_error:?string,
+     *   sender_warning:?string,
      *   sender_truncated:bool,
-     *   sender_reported_total:int
+     *   sender_reported_total:int,
+     *   sender_snapshot_source:string,
+     *   sender_last_synced_at:?string,
+     *   sender_cache_age_seconds:?int,
+     *   sender_refresh_after:?string
      * }
      */
-    public function merged(string $query = '', string $presence = 'all', string $status = 'all', string $validation = 'all'): array
-    {
+    public function merged(
+        string $query = '',
+        string $presence = 'all',
+        string $status = 'all',
+        string $validation = 'all',
+        bool $forceSenderRefresh = false
+    ): array {
         $localRows = $this->local->allForMerge(20000);
-        $senderRows = [];
-        $senderError = null;
-        $senderTruncated = false;
-        $senderReportedTotal = 0;
+        $snapshot = $this->senderSnapshot($forceSenderRefresh);
 
-        if ($this->sender->configured()) {
-            try {
-                $remote = $this->sender->allSubscribers(20000);
-                $senderRows = $remote['rows'];
-                $senderTruncated = (bool)$remote['truncated'];
-                $senderReportedTotal = (int)$remote['reported_total'];
-            } catch (\Throwable $e) {
-                $senderError = $e->getMessage();
-            }
-        } else {
-            $senderError = 'Sender API token is not configured.';
-        }
+        $senderRows = $snapshot['rows'];
+        $senderError = $snapshot['error'];
+        $senderWarning = $snapshot['warning'];
+        $senderTruncated = $snapshot['truncated'];
+        $senderReportedTotal = $snapshot['reported_total'];
 
         $merged = [];
 
@@ -203,14 +208,19 @@ final class SubscriberMergeService
             'rows' => $filtered,
             'stats' => $stats,
             'sender_error' => $senderError,
+            'sender_warning' => $senderWarning,
             'sender_truncated' => $senderTruncated,
             'sender_reported_total' => $senderReportedTotal,
+            'sender_snapshot_source' => $snapshot['source'],
+            'sender_last_synced_at' => $snapshot['last_synced_at'],
+            'sender_cache_age_seconds' => $snapshot['age_seconds'],
+            'sender_refresh_after' => $snapshot['refresh_after'],
         ];
     }
 
     /**
      * Build the deduplicated active audience before email validation.
-     * Sender must load completely so we never miss a remote unsubscribe/suppression.
+     * A recent cached Sender snapshot is acceptable, but stale/missing snapshots fail closed.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -220,13 +230,20 @@ final class SubscriberMergeService
 
         if (!empty($result['sender_error'])) {
             throw new \RuntimeException(
-                'Cannot build the merged campaign audience because Sender subscribers could not be loaded: ' .
-                (string)$result['sender_error']
+                'Cannot build the merged campaign audience: ' . (string)$result['sender_error']
             );
         }
         if (!empty($result['sender_truncated'])) {
             throw new \RuntimeException(
-                'Cannot build the merged campaign audience because the Sender subscriber list was truncated.'
+                'Cannot build the merged campaign audience because the Sender subscriber snapshot is incomplete.'
+            );
+        }
+
+        $age = $result['sender_cache_age_seconds'];
+        if ($age === null || $age > self::CAMPAIGN_MAX_CACHE_AGE_SECONDS) {
+            throw new \RuntimeException(
+                'Cannot queue a campaign until the Sender subscriber snapshot is refreshed. ' .
+                'The last good snapshot is older than 24 hours.'
             );
         }
 
@@ -248,6 +265,188 @@ final class SubscriberMergeService
         }
 
         return $out;
+    }
+
+    /**
+     * @return array{
+     *   rows:array<int,array<string,mixed>>,
+     *   error:?string,
+     *   warning:?string,
+     *   truncated:bool,
+     *   reported_total:int,
+     *   source:string,
+     *   last_synced_at:?string,
+     *   age_seconds:?int,
+     *   refresh_after:?string
+     * }
+     */
+    private function senderSnapshot(bool $forceRefresh): array
+    {
+        $meta = $this->cache->meta();
+        $hasSnapshot = $this->cache->hasSnapshot();
+        $age = $this->cache->snapshotAgeSeconds();
+        $refreshAllowed = $this->cache->refreshAllowed();
+
+        if (!$forceRefresh && $hasSnapshot && $age !== null && $age < self::CACHE_FRESH_SECONDS) {
+            return $this->cachedSnapshot(null);
+        }
+
+        if (!$this->sender->configured()) {
+            if ($hasSnapshot) {
+                return $this->cachedSnapshot('Sender API token is not configured; using the last cached subscriber snapshot.');
+            }
+            return $this->emptySnapshot('Sender API token is not configured.');
+        }
+
+        if (!$refreshAllowed) {
+            $after = trim((string)($meta['refresh_after'] ?? ''));
+            $lastError = trim((string)($meta['last_error'] ?? 'Sender refresh is temporarily paused.'));
+            if ($hasSnapshot) {
+                return $this->cachedSnapshot(
+                    $lastError . ($after !== '' ? ' Using cached subscribers until retry is allowed after ' . $after . ' UTC.' : '')
+                );
+            }
+            return $this->emptySnapshot(
+                $lastError . ($after !== '' ? ' Retry after ' . $after . ' UTC.' : '')
+            );
+        }
+
+        try {
+            $remote = $this->sender->allSubscribers(20000);
+            if (!empty($remote['truncated'])) {
+                $message = 'Sender returned an incomplete subscriber list; the previous cache was kept.';
+                $this->cache->recordFailure($message, 900);
+                if ($hasSnapshot) return $this->cachedSnapshot($message);
+
+                return [
+                    'rows' => [],
+                    'error' => $message,
+                    'warning' => null,
+                    'truncated' => true,
+                    'reported_total' => (int)($remote['reported_total'] ?? 0),
+                    'source' => 'none',
+                    'last_synced_at' => null,
+                    'age_seconds' => null,
+                    'refresh_after' => (string)($this->cache->meta()['refresh_after'] ?? ''),
+                ];
+            }
+
+            $this->cache->replace(
+                (array)$remote['rows'],
+                (int)$remote['reported_total'],
+                (int)$remote['pages']
+            );
+            return $this->cachedSnapshot(null, 'live');
+        } catch (SenderApiException $e) {
+            $cooldown = $this->cooldownSeconds($e);
+            $this->cache->recordFailure($e->getMessage(), $cooldown);
+
+            if ($hasSnapshot) {
+                return $this->cachedSnapshot(
+                    'Sender refresh failed: ' . $e->getMessage() . ' Using the last good subscriber snapshot.'
+                );
+            }
+
+            return $this->emptySnapshot('Sender refresh failed: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $this->cache->recordFailure($e->getMessage(), 300);
+
+            if ($hasSnapshot) {
+                return $this->cachedSnapshot(
+                    'Sender refresh failed: ' . $e->getMessage() . ' Using the last good subscriber snapshot.'
+                );
+            }
+
+            return $this->emptySnapshot('Sender refresh failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @return array{
+     *   rows:array<int,array<string,mixed>>,
+     *   error:?string,
+     *   warning:?string,
+     *   truncated:bool,
+     *   reported_total:int,
+     *   source:string,
+     *   last_synced_at:?string,
+     *   age_seconds:?int,
+     *   refresh_after:?string
+     * }
+     */
+    private function cachedSnapshot(?string $warning, string $source = 'cache'): array
+    {
+        $meta = $this->cache->meta();
+        $rows = [];
+
+        foreach ($this->cache->all() as $row) {
+            $rows[] = [
+                'id' => (string)($row['provider_subscriber_id'] ?? ''),
+                'email' => (string)($row['email'] ?? ''),
+                'firstname' => (string)($row['firstname'] ?? ''),
+                'lastname' => (string)($row['lastname'] ?? ''),
+                'status' => (string)($row['status'] ?? ''),
+                'groups' => is_array($row['groups'] ?? null) ? $row['groups'] : [],
+                'created_at' => (string)($row['provider_created_at'] ?? ''),
+            ];
+        }
+
+        return [
+            'rows' => $rows,
+            'error' => null,
+            'warning' => $warning,
+            'truncated' => false,
+            'reported_total' => (int)($meta['reported_total'] ?? count($rows)),
+            'source' => $source,
+            'last_synced_at' => !empty($meta['last_synced_at']) ? (string)$meta['last_synced_at'] : null,
+            'age_seconds' => $this->cache->snapshotAgeSeconds(),
+            'refresh_after' => !empty($meta['refresh_after']) ? (string)$meta['refresh_after'] : null,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   rows:array<int,array<string,mixed>>,
+     *   error:?string,
+     *   warning:?string,
+     *   truncated:bool,
+     *   reported_total:int,
+     *   source:string,
+     *   last_synced_at:?string,
+     *   age_seconds:?int,
+     *   refresh_after:?string
+     * }
+     */
+    private function emptySnapshot(string $error): array
+    {
+        $meta = $this->cache->meta();
+        return [
+            'rows' => [],
+            'error' => $error,
+            'warning' => null,
+            'truncated' => false,
+            'reported_total' => 0,
+            'source' => 'none',
+            'last_synced_at' => null,
+            'age_seconds' => null,
+            'refresh_after' => !empty($meta['refresh_after']) ? (string)$meta['refresh_after'] : null,
+        ];
+    }
+
+    private function cooldownSeconds(SenderApiException $e): int
+    {
+        if ($e->retryAfter !== null) {
+            return max(60, min(172800, $e->retryAfter));
+        }
+
+        if (preg_match('/Retry after\s+([0-9T:\-]+Z)/i', $e->getMessage(), $matches)) {
+            $ts = strtotime($matches[1]);
+            if ($ts !== false && $ts > time()) {
+                return max(60, min(172800, $ts - time()));
+            }
+        }
+
+        return $e->statusCode === 429 ? 900 : 300;
     }
 
     private function normalizeEmail(string $email): string

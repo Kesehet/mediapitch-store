@@ -21,18 +21,28 @@ $baseQuery=[
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px">
     <div>
       <h2 style="margin:0 0 6px">Merged subscriber audience</h2>
-      <p class="muted" style="margin:0;max-width:820px">One row per unique email, merged live from the MediaPitch newsletter database and Sender. The two systems remain separate; this view does not silently import, delete or re-subscribe anyone.</p>
+      <p class="muted" style="margin:0;max-width:820px">One row per unique email, merged from the MediaPitch newsletter database and the latest cached Sender subscriber snapshot. The two systems remain separate; this view does not silently import, delete or re-subscribe anyone.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="button secondary" href="<?= e(url('admin/newsletter').'?'.http_build_query($baseQuery)) ?>">Refresh from Sender</a>
+      <a class="button secondary" href="<?= e(url('admin/newsletter').'?'.http_build_query(array_merge($baseQuery,['refresh_sender'=>1]))) ?>">Sync from Sender now</a>
       <a class="button secondary" href="<?= e(url('admin/newsletter').'?'.http_build_query(array_merge($baseQuery,['export'=>'csv']))) ?>">Export merged CSV</a>
     </div>
   </div>
 
   <?php if($senderError): ?>
-    <div class="flash error" style="margin-bottom:18px">Sender subscribers could not be loaded, so these totals currently reflect MediaPitch records only. <?= e($senderError) ?></div>
+    <div class="flash error" style="margin-bottom:18px">Sender subscribers are unavailable and there is no usable cached snapshot yet. <?= e($senderError) ?></div>
   <?php elseif($senderTruncated): ?>
-    <div class="flash error" style="margin-bottom:18px">Sender reports <?= number_format((int)$senderReportedTotal) ?> subscribers, but the safety fetch limit was reached. The merged unique total below is therefore incomplete.</div>
+    <div class="flash error" style="margin-bottom:18px">Sender reports <?= number_format((int)$senderReportedTotal) ?> subscribers, but the safety fetch limit was reached. The previous complete snapshot was kept.</div>
+  <?php elseif(!empty($senderWarning)): ?>
+    <div class="flash" style="margin-bottom:18px"><?= e((string)$senderWarning) ?></div>
+  <?php endif; ?>
+
+  <?php if(!empty($senderLastSyncedAt)): ?>
+    <div class="muted" style="margin:-6px 0 18px">
+      Sender snapshot: <?= e((string)$senderLastSyncedAt) ?> UTC
+      <?php if(($senderSnapshotSource??'')==='live'): ?> · refreshed on this request<?php else: ?> · served from local cache<?php endif; ?>
+      <?php if(!empty($senderRefreshAfter)): ?> · next API refresh allowed after <?= e((string)$senderRefreshAfter) ?> UTC<?php endif; ?>
+    </div>
   <?php endif; ?>
 
   <div class="admin-grid stats-grid" style="margin-bottom:18px">

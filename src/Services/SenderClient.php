@@ -382,6 +382,12 @@ final class SenderClient
             if (isset($responseHeaders['retry-after']) && ctype_digit((string)$responseHeaders['retry-after'])) {
                 $retryAfter = max(1, (int)$responseHeaders['retry-after']);
             }
+            if ($retryAfter === null && !empty($responseHeaders['x-ratelimit-reset'])) {
+                $resetAt = strtotime((string)$responseHeaders['x-ratelimit-reset']);
+                if ($resetAt !== false && $resetAt > time()) {
+                    $retryAfter = max(1, $resetAt - time());
+                }
+            }
 
             throw new SenderApiException(substr($message, 0, 500), $status, $retryAfter);
         }

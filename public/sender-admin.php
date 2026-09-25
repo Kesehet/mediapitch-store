@@ -274,7 +274,8 @@ if (!in_array($tab, ['dashboard','campaigns','templates','queue','history','sett
 $templates = [];
 $providerError = null;
 $connection = null;
-if ($sender->configured()) {
+$needsTemplates = in_array($tab, ['dashboard','templates','queue','history','settings'], true);
+if ($sender->configured() && $needsTemplates) {
     try {
         $templates = $sender->transactionalTemplates(100);
         $connection = ['ok' => true, 'templates' => count($templates)];
@@ -287,7 +288,10 @@ $campaigns = [];
 $selectedCampaign = null;
 $mergedAudienceStats = [];
 $mergedAudienceError = null;
+$mergedAudienceWarning = null;
 $mergedAudienceTruncated = false;
+$mergedAudienceLastSyncedAt = null;
+$mergedAudienceRefreshAfter = null;
 if ($tab === 'campaigns' && $sender->configured()) {
     try {
         $campaigns = array_values(array_filter(
@@ -302,7 +306,10 @@ if ($tab === 'campaigns' && $sender->configured()) {
         $audience = $subscriberMerge->merged();
         $mergedAudienceStats = $audience['stats'];
         $mergedAudienceError = $audience['sender_error'];
+        $mergedAudienceWarning = $audience['sender_warning'];
         $mergedAudienceTruncated = (bool)$audience['sender_truncated'];
+        $mergedAudienceLastSyncedAt = $audience['sender_last_synced_at'];
+        $mergedAudienceRefreshAfter = $audience['sender_refresh_after'];
     } catch (Throwable $e) {
         $providerError = $e->getMessage();
     }
@@ -335,7 +342,10 @@ View::render('admin/sender', [
     'campaignStats' => $campaignQueue->stats(),
     'mergedAudienceStats' => $mergedAudienceStats,
     'mergedAudienceError' => $mergedAudienceError,
+    'mergedAudienceWarning' => $mergedAudienceWarning,
     'mergedAudienceTruncated' => $mergedAudienceTruncated,
+    'mergedAudienceLastSyncedAt' => $mergedAudienceLastSyncedAt,
+    'mergedAudienceRefreshAfter' => $mergedAudienceRefreshAfter,
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
     'providerError' => $providerError,
