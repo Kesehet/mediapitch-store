@@ -239,6 +239,26 @@ final class SenderSubscriberCacheRepository
         ]);
     }
 
+    public function clearSnapshot(): void
+    {
+        $this->ensureSchema();
+        $pdo=Database::connection();
+        $pdo->beginTransaction();
+        try{
+            $pdo->exec('DELETE FROM sender_subscriber_cache');
+            $pdo->exec(
+                "UPDATE sender_subscriber_cache_meta
+                 SET last_synced_at=NULL,refresh_after=NULL,reported_total=0,
+                     cached_rows=0,pages=0,last_error=NULL
+                 WHERE id=1"
+            );
+            $pdo->commit();
+        }catch(\Throwable $e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            throw $e;
+        }
+    }
+
     public function clearFailure(): void
     {
         $this->ensureSchema();
