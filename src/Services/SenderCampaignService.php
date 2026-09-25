@@ -510,26 +510,36 @@ final class SenderCampaignService
             return $summary;
         } catch (\Throwable $e) {
             $message = $e->getMessage();
-            $this->repo->markBatchFailed($batchId, $message);
 
             if ($e instanceof SenderApiException && $e->statusCode === 429) {
-                // Sender rejected the request because the account API budget is exhausted.
-                // No send is accepted on a 429, so returning recipients to retry is safe.
+                // A 429 explicitly rejects this request. The provider has not accepted
+                // a new send, so this batch can safely return to the retry queue.
+                $this->repo->markBatchFailed($batchId, $message);
                 $delay = $e->retryAfter ?? 900;
                 $this->repo->requeueMany($recipientIds, 'Sender rate limit: ' . $message, $delay);
                 $summary['retried'] += count($recipientIds);
             } elseif ($e instanceof SenderApiException && !$e->retryable()) {
-                // 4xx errors such as invalid credentials, invalid sender domain, or invalid
-                // campaign payload require an admin fix. Keep recipients queued and pause
-                // the run instead of retrying forever or losing the audience.
+                // A definite non-retryable 4xx requires admin attention, but no automatic
+                // replay. Keep the audience queued and pause the campaign.
+                $this->repo->markBatchFailed($batchId, $message);
                 $this->repo->returnToQueueMany($recipientIds, 'Sender requires attention: ' . $message);
                 $this->repo->setRunStatus($runId, 'paused', 'Sender requires attention: ' . $message);
             } elseif ($providerCampaignId !== null) {
-                // For transient/network failures after a provider campaign exists, the send
-                // outcome can be ambiguous. Pause rather than risk a duplicate campaign.
-                $this->repo->returnToQueueMany($recipientIds, 'Campaign batch needs review: ' . $message);
-                $this->repo->setRunStatus($runId, 'paused', 'Batch needs review before retrying: ' . $message);
+                // Once Sender has returned a campaign ID, a timeout/5xx around the final
+                // send call is ambiguous: Sender may have accepted the send before the
+                // response was lost. Keep the batch PREPARING and recipients PROCESSING.
+                // Reconciliation will inspect the live Sender campaign before any replay.
+                $this->repo->markBatchIssue($batchId, 'Ambiguous Sender response: ' . $message);
+                $this->repo->setRunStatus(
+                    $runId,
+                    'paused',
+                    'Interrupted Sender batch requires reconciliation before retry: ' . $message
+                );
+                $summary['uncertain_batches']++;
             } else {
+                // No Sender campaign ID exists yet, so the send endpoint was never reached.
+                // Retrying this preparation work cannot duplicate an email.
+                $this->repo->markBatchFailed($batchId, $message);
                 $delay = $e instanceof SenderApiException && $e->retryAfter
                     ? $e->retryAfter
                     : 900;
