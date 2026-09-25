@@ -37,6 +37,14 @@ final class SenderClient
         $this->apiState->clearCooldown();
     }
 
+    public function assertApiAvailable(): void
+    {
+        if (!$this->configured()) {
+            throw new SenderApiException('Sender API token is not configured.');
+        }
+        $this->apiState->assertRequestAllowed();
+    }
+
     /** @return array<string,mixed> */
     public function testConnection(): array
     {
