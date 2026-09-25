@@ -179,6 +179,47 @@ final class SenderCampaignRepository
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function recoverStaleProcessing(int $runId, int $olderThanSeconds = 600): int
+    {
+        $this->ensureSchema();
+        $cutoff = gmdate('Y-m-d H:i:s', time() - max(60, min(86400, $olderThanSeconds)));
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_recipients
+             SET status='queued',
+                 next_attempt_at=NULL,
+                 last_error=COALESCE(last_error,'Recovered after an interrupted worker run')
+             WHERE run_id=:run_id
+               AND status='processing'
+               AND updated_at<:cutoff"
+        );
+        $stmt->execute(['run_id' => $runId, 'cutoff' => $cutoff]);
+        return $stmt->rowCount();
+    }
+
+    /** @return array{queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
+    public function recipientState(int $runId): array
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "SELECT
+                SUM(status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=UTC_TIMESTAMP())) AS queued_ready,
+                SUM(status='queued' AND next_attempt_at>UTC_TIMESTAMP()) AS queued_waiting,
+                SUM(status='processing') AS processing,
+                MIN(CASE WHEN status='queued' AND next_attempt_at>UTC_TIMESTAMP() THEN next_attempt_at END) AS next_retry_at
+             FROM sender_campaign_recipients
+             WHERE run_id=:run_id"
+        );
+        $stmt->execute(['run_id' => $runId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'queued_ready' => (int)($row['queued_ready'] ?? 0),
+            'queued_waiting' => (int)($row['queued_waiting'] ?? 0),
+            'processing' => (int)($row['processing'] ?? 0),
+            'next_retry_at' => !empty($row['next_retry_at']) ? (string)$row['next_retry_at'] : null,
+        ];
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function readyRecipients(int $runId, int $limit): array
     {
