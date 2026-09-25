@@ -450,7 +450,7 @@ final class SenderClient
             throw new SenderApiException(
                 substr($message, 0, 500),
                 $status,
-                $this->retryAfterSeconds($responseHeaders)
+                $this->retryAfterSeconds($responseHeaders, $message)
             );
         }
 
@@ -510,7 +510,7 @@ final class SenderClient
     }
 
     /** @param array<string,string> $headers */
-    private function retryAfterSeconds(array $headers): ?int
+    private function retryAfterSeconds(array $headers, ?string $message = null): ?int
     {
         $retry = trim((string)($headers['retry-after'] ?? ''));
         if ($retry !== '') {
@@ -528,6 +528,17 @@ final class SenderClient
                 $ts = strtotime($reset);
             }
             if ($ts !== false && $ts > time()) return max(1, $ts - time());
+        }
+
+        $message = trim((string)$message);
+        if ($message !== '') {
+            if (preg_match('/retry\s+after\s+([0-9T:\-+.]+Z?)/i', $message, $matches)) {
+                $ts = strtotime($matches[1]);
+                if ($ts !== false && $ts > time()) return max(1, $ts - time());
+            }
+            if (preg_match('/retry\s+after\s+(\d+)\s*(?:second|seconds|sec|secs)/i', $message, $matches)) {
+                return max(1, (int)$matches[1]);
+            }
         }
 
         return null;
