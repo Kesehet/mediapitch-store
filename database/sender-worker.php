@@ -27,7 +27,14 @@ try {
         'remaining_today' => (int)$transactional['remaining_today'],
     ];
 
-    if ((int)$transactional['remaining_today'] > 0) {
+    $transactionalUncertain = (int)($transactional['uncertain_processing'] ?? 0);
+    $senderCooling = !empty($transactional['sender_cooldown_until']);
+
+    if (
+        (int)$transactional['remaining_today'] > 0 &&
+        $transactionalUncertain === 0 &&
+        !$senderCooling
+    ) {
         $campaign = $campaigns->processReadyRuns(
             min($requested, (int)$transactional['remaining_today'])
         );
