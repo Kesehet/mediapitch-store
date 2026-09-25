@@ -461,7 +461,19 @@ final class SenderCampaignService
                 $byEmail = [];
                 foreach ($ready as $row) $byEmail[strtolower((string)$row['recipient_email'])] = $row;
 
+                $knownSenderPresence = $this->subscriberCache->presenceMap($missing);
                 foreach ($missing as $email) {
+                    // If our last complete Sender snapshot knew this subscriber but the
+                    // live API now says they do not exist, do not silently recreate them.
+                    // A provider-side unsubscribe/removal may have occurred since the
+                    // snapshot; require a fresh audience sync first.
+                    if (!empty($knownSenderPresence[$email])) {
+                        throw new SenderApiException(
+                            'Subscriber ' . $email . ' was present in the cached Sender audience but is now missing. Refresh the Sender subscriber snapshot before sending to avoid an accidental re-subscribe.',
+                            422
+                        );
+                    }
+
                     $row = $byEmail[$email] ?? [];
                     try {
                         $this->sender->createSubscriber(
