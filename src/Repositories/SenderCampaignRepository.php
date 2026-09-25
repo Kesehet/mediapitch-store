@@ -221,7 +221,14 @@ final class SenderCampaignRepository
                  next_attempt_at=NULL,
                  last_error=COALESCE(last_error,'Recovered after an interrupted worker run')
              WHERE run_id=:run_id
-               AND status='processing'"
+               AND status='processing'
+               AND (
+                    batch_id IS NULL OR NOT EXISTS (
+                        SELECT 1 FROM sender_campaign_batches b
+                        WHERE b.id=sender_campaign_recipients.batch_id
+                          AND b.status='preparing'
+                    )
+               )"
         );
         $stmt->execute(['run_id' => $runId]);
         return $stmt->rowCount();
@@ -384,6 +391,108 @@ final class SenderCampaignRepository
             'recipient_count' => max(0, $recipientCount),
         ]);
         return (int)Database::connection()->lastInsertId();
+    }
+
+    /** @param array<int,int> $recipientIds */
+    public function attachRecipientsToBatch(int $batchId, array $recipientIds): void
+    {
+        $this->ensureSchema();
+        $ids=array_values(array_unique(array_filter(array_map('intval',$recipientIds))));
+        if($ids===[])return;
+        $placeholders=implode(',',array_fill(0,count($ids),'?'));
+        $stmt=Database::connection()->prepare(
+            "UPDATE sender_campaign_recipients
+             SET batch_id=?
+             WHERE id IN ({$placeholders})"
+        );
+        $stmt->execute(array_merge([$batchId],$ids));
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function uncertainBatches(int $runId): array
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            "SELECT * FROM sender_campaign_batches
+             WHERE run_id=:run_id AND status='preparing'
+             ORDER BY id ASC"
+        );
+        $stmt->execute(['run_id'=>$runId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array<int,int> */
+    public function batchRecipientIds(int $batchId): array
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            "SELECT id FROM sender_campaign_recipients
+             WHERE batch_id=:batch_id AND status='processing'
+             ORDER BY id ASC"
+        );
+        $stmt->execute(['batch_id'=>$batchId]);
+        return array_map('intval',$stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    public function markAttachedBatchSent(int $batchId): int
+    {
+        $this->ensureSchema();
+        $pdo=Database::connection();
+        $pdo->beginTransaction();
+        try{
+            $stmt=$pdo->prepare(
+                "UPDATE sender_campaign_recipients
+                 SET status='dispatched',dispatched_at=UTC_TIMESTAMP(),next_attempt_at=NULL,last_error=NULL
+                 WHERE batch_id=:batch_id AND status='processing'"
+            );
+            $stmt->execute(['batch_id'=>$batchId]);
+            $count=$stmt->rowCount();
+
+            $pdo->prepare(
+                "UPDATE sender_campaign_batches
+                 SET status='sent',sent_at=UTC_TIMESTAMP(),last_error=NULL
+                 WHERE id=:id"
+            )->execute(['id'=>$batchId]);
+
+            $pdo->commit();
+            return $count;
+        }catch(\Throwable $e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function requeueAttachedBatch(int $batchId,string $error,int $delaySeconds=60): int
+    {
+        $this->ensureSchema();
+        $pdo=Database::connection();
+        $pdo->beginTransaction();
+        try{
+            $next=gmdate('Y-m-d H:i:s',time()+max(60,min(86400,$delaySeconds)));
+            $stmt=$pdo->prepare(
+                "UPDATE sender_campaign_recipients
+                 SET status='queued',next_attempt_at=:next,last_error=:error
+                 WHERE batch_id=:batch_id AND status='processing'"
+            );
+            $stmt->execute([
+                'next'=>$next,
+                'error'=>substr($error,0,500),
+                'batch_id'=>$batchId,
+            ]);
+            $count=$stmt->rowCount();
+
+            $pdo->prepare(
+                "UPDATE sender_campaign_batches
+                 SET status='failed',last_error=:error
+                 WHERE id=:id"
+            )->execute(['error'=>substr($error,0,500),'id'=>$batchId]);
+
+            $pdo->commit();
+            return $count;
+        }catch(\Throwable $e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            throw $e;
+        }
     }
 
     public function setBatchGroup(int $batchId, string $groupId): void
