@@ -545,7 +545,11 @@ final class SenderClient
         if ($reset !== '') {
             if (ctype_digit($reset)) {
                 $number = (int)$reset;
-                $ts = $number > 1000000000 ? $number : time() + max(1, $number);
+                if ($number > 1000000000000) {
+                    $ts = (int)floor($number / 1000);
+                } else {
+                    $ts = $number > 1000000000 ? $number : time() + max(1, $number);
+                }
             } else {
                 $ts = strtotime($reset);
             }
