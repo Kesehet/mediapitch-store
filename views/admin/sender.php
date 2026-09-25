@@ -21,6 +21,16 @@ if (is_array($selectedCampaign)) {
 $remainingToday = (int)($stats['remaining_today'] ?? 0);
 $dailyLimit = (int)($stats['daily_limit'] ?? 50);
 $batchSize = (int)($senderSettings['batch_size'] ?? 50);
+$apiCooldownUntil = trim((string)($senderApiStatus['cooldown_until'] ?? ''));
+$apiCooldownTs = $apiCooldownUntil !== '' ? strtotime($apiCooldownUntil . ' UTC') : false;
+$senderApiCooling = $apiCooldownTs !== false && $apiCooldownTs > time();
+$apiRemaining = isset($senderApiStatus['rate_limit_remaining']) && $senderApiStatus['rate_limit_remaining'] !== null
+    ? (int)$senderApiStatus['rate_limit_remaining']
+    : null;
+$apiLimit = isset($senderApiStatus['rate_limit_limit']) && $senderApiStatus['rate_limit_limit'] !== null
+    ? (int)$senderApiStatus['rate_limit_limit']
+    : null;
+$apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
 ?>
 <section class="admin-card" style="margin-bottom:18px">
   <div style="display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap">
@@ -32,8 +42,11 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       </p>
     </div>
     <div style="text-align:right">
-      <div><strong>Sender:</strong> <?= $providerConfigured && !$providerError ? 'Connected' : ($providerConfigured ? 'Connection error' : 'Not configured') ?></div>
+      <div><strong>Sender:</strong> <?= !$providerConfigured ? 'Not configured' : ($senderApiCooling ? 'API cooling down' : ($providerError ? 'Connection error' : 'Connected')) ?></div>
       <div class="muted" style="font-size:13px">Daily cap: <?= number_format($dailyLimit) ?> · Remaining today: <?= number_format($remainingToday) ?></div>
+      <?php if($apiRemaining!==null): ?>
+        <div class="muted" style="font-size:12px">API requests: <?= number_format($apiRemaining) ?><?= $apiLimit!==null?' / '.number_format($apiLimit):'' ?> remaining<?= $apiResetAt!==''?' · reset '.$apiResetAt.' UTC':'' ?></div>
+      <?php endif; ?>
     </div>
   </div>
 </section>
@@ -45,7 +58,12 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
   <a class="email-tab-link <?= str_starts_with(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '', '/admin/newsletter')?'is-active':'' ?>" href="<?= e(url('admin/newsletter')) ?>">Subscribers</a>
 </nav>
 
-<?php if($providerError): ?>
+<?php if($senderApiCooling): ?>
+  <div class="flash error" style="margin-bottom:18px">
+    Sender API is temporarily rate-limited until <?= e($apiCooldownUntil) ?> UTC.
+    Existing queues and cached Sender data are preserved; workers will resume after the cooldown.
+  </div>
+<?php elseif($providerError): ?>
   <div class="flash error" style="margin-bottom:18px"><?= e($providerError) ?></div>
 <?php endif; ?>
 
@@ -77,7 +95,7 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       <form method="post" action="<?= e(url('admin/sender/action')) ?>">
         <?= Csrf::field() ?><input type="hidden" name="action" value="process"><input type="hidden" name="tab" value="dashboard">
         <input type="hidden" name="limit" value="<?= max(1,min(50,$remainingToday ?: 50)) ?>">
-        <button class="button" type="submit" <?= !$providerConfigured||$remainingToday<1?'disabled':'' ?>>Process queue now</button>
+        <button class="button" type="submit" <?= !$providerConfigured||$remainingToday<1||$senderApiCooling?'disabled':'' ?>>Process queue now</button>
       </form>
     </div>
   </div>
@@ -122,6 +140,12 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       <div class="muted" style="font-size:12px"><?= e((string)($selectedCampaign['id']??'')) ?></div>
       <h2 style="margin:4px 0"><?= e((string)($selectedCampaign['title']??$selectedCampaign['subject']??'Campaign')) ?></h2>
       <p style="margin:0"><strong>Subject:</strong> <?= e((string)($selectedCampaign['subject']??'')) ?></p>
+      <?php if(!empty($selectedCampaign['_sender_cache_stale'])): ?>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          Showing the last cached Sender copy because the live API is unavailable
+          <?php if(!empty($selectedCampaign['_sender_cache_synced_at'])): ?> · cached <?= e((string)$selectedCampaign['_sender_cache_synced_at']) ?> UTC<?php endif; ?>.
+        </div>
+      <?php endif; ?>
     </div>
     <form method="post" action="<?= e(url('admin/sender/action')) ?>" style="min-width:min(100%,360px)">
       <?= Csrf::field() ?>
@@ -206,7 +230,7 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
                 <form method="post" action="<?= e(url('admin/sender/action')) ?>">
                   <?= Csrf::field() ?><input type="hidden" name="action" value="process_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>">
                   <input type="hidden" name="limit" value="<?= max(1,min(50,(int)($campaignStats['remaining_today']??50))) ?>">
-                  <button class="button" <?= (int)($campaignStats['remaining_today']??0)<1?'disabled':'' ?>>Send today's batch</button>
+                  <button class="button" <?= (int)($campaignStats['remaining_today']??0)<1||$senderApiCooling?'disabled':'' ?>>Send today's batch</button>
                 </form>
                 <form method="post" action="<?= e(url('admin/sender/action')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="pause_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>"><button class="button secondary">Pause</button></form>
               <?php elseif($runStatus==='paused'&&$remaining>0): ?>
@@ -345,7 +369,7 @@ $requestedTemplate=(string)($_GET['template']??'');
     <form method="post" action="<?= e(url('admin/sender/action')) ?>" style="display:flex;gap:8px;align-items:end">
       <?= Csrf::field() ?><input type="hidden" name="action" value="process"><input type="hidden" name="tab" value="queue">
       <label>Process up to<input type="number" name="limit" min="1" max="100" value="<?= max(1,min(50,$remainingToday ?: 50)) ?>" style="width:90px"></label>
-      <button class="button" type="submit" <?= !$providerConfigured||$remainingToday<1?'disabled':'' ?>>Process now</button>
+      <button class="button" type="submit" <?= !$providerConfigured||$remainingToday<1||$senderApiCooling?'disabled':'' ?>>Process now</button>
     </form>
   </div>
 
