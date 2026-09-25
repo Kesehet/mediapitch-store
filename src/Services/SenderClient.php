@@ -181,11 +181,18 @@ final class SenderClient
             $payload['variables'] = $variables;
         }
 
-        return $this->request(
+        $response = $this->request(
             'POST',
             '/message/' . rawurlencode($templateId) . '/send',
             $payload
         );
+        if (array_key_exists('success', $response) && $response['success'] === false) {
+            throw new SenderApiException(
+                trim((string)($response['message'] ?? 'Sender rejected the message.')),
+                422
+            );
+        }
+        return $response;
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -241,7 +248,7 @@ final class SenderClient
         $id = trim((string)($response['data']['id'] ?? $response['id'] ?? ''));
 
         if ($id === '') {
-            throw new SenderApiException('Sender created the group but did not return its ID.');
+            throw new SenderApiException('Sender did not return a group ID.', 422);
         }
 
         return $id;
@@ -269,7 +276,7 @@ final class SenderClient
             ]
         );
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the group update.')));
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the group update.')), 422);
         }
         return $response;
     }
@@ -299,7 +306,7 @@ final class SenderClient
 
         $response = $this->request('POST', '/subscribers', $payload);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the subscriber.')));
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the subscriber.')), 422);
         }
         return $response;
     }
@@ -318,7 +325,7 @@ final class SenderClient
 
         $response = $this->request('POST', '/campaigns', $payload);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign.')));
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign.')), 422);
         }
         return $response;
     }
@@ -329,7 +336,7 @@ final class SenderClient
         $campaignId = $this->cleanId($campaignId);
         $response = $this->request('POST', '/campaigns/' . rawurlencode($campaignId) . '/send', []);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign send.')));
+            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign send.')), 422);
         }
         return $response;
     }
