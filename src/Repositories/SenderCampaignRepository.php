@@ -190,20 +190,21 @@ final class SenderCampaignRepository
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function recoverStaleProcessing(int $runId, int $olderThanSeconds = 600): int
+    public function recoverStaleProcessing(int $runId): int
     {
         $this->ensureSchema();
-        $cutoff = gmdate('Y-m-d H:i:s', time() - max(60, min(86400, $olderThanSeconds)));
+        // The caller holds the global Sender worker lock. Therefore any row still
+        // marked processing belongs to a previous interrupted worker and is safe
+        // to return to the ready queue.
         $stmt = Database::connection()->prepare(
             "UPDATE sender_campaign_recipients
              SET status='queued',
                  next_attempt_at=NULL,
                  last_error=COALESCE(last_error,'Recovered after an interrupted worker run')
              WHERE run_id=:run_id
-               AND status='processing'
-               AND updated_at<:cutoff"
+               AND status='processing'"
         );
-        $stmt->execute(['run_id' => $runId, 'cutoff' => $cutoff]);
+        $stmt->execute(['run_id' => $runId]);
         return $stmt->rowCount();
     }
 
