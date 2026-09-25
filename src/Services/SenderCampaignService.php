@@ -72,8 +72,17 @@ final class SenderCampaignService
             throw new SenderApiException('Sender API token is not configured.');
         }
 
-        $campaign = $this->sender->campaign($campaignId);
-        $snapshot = $this->snapshotCampaign($campaign);
+        $snapshotFallback = false;
+        try {
+            $campaign = $this->sender->campaign($campaignId);
+            $snapshot = $this->snapshotCampaign($campaign);
+        } catch (SenderApiException $e) {
+            if (!$e->retryable()) throw $e;
+            $snapshot = $this->repo->latestSourceSnapshot($campaignId);
+            if (!$snapshot) throw $e;
+            $snapshotFallback = true;
+        }
+
         $candidates = $this->subscribers->campaignCandidates();
 
         if ($candidates === []) {
@@ -139,6 +148,7 @@ final class SenderCampaignService
         $run['unknown_before_queue'] = $unknown;
         $run['risky_before_queue'] = $risky;
         $run['invalid_before_queue'] = $invalid;
+        $run['source_snapshot_fallback'] = $snapshotFallback;
 
         return $run;
     }
