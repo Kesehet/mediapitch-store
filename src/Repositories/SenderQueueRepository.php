@@ -132,6 +132,19 @@ final class SenderQueueRepository
     }
 
     /** @return array<int,array<string,mixed>> */
+    public function processingRows(int $limit=50):array
+    {
+        $this->ensureSchema();
+        $limit=max(1,min(100,$limit));
+        return Database::connection()->query(
+            "SELECT * FROM sender_email_queue
+             WHERE status='processing'
+             ORDER BY id ASC
+             LIMIT ".$limit
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** @return array<int,array<string,mixed>> */
     public function recent(string $status = 'all', int $limit = 100): array
     {
         $this->ensureSchema();
@@ -202,6 +215,20 @@ final class SenderQueueRepository
              WHERE id=:id AND status='queued'"
         );
         $stmt->execute(['id' => $id]);
+    }
+
+    public function returnProcessingToQueue(int $id,string $error):void
+    {
+        $this->ensureSchema();
+        $stmt=Database::connection()->prepare(
+            "UPDATE sender_email_queue
+             SET status='queued',next_attempt_at=NULL,last_error=:last_error
+             WHERE id=:id AND status='processing'"
+        );
+        $stmt->execute([
+            'last_error'=>substr($error,0,500),
+            'id'=>$id,
+        ]);
     }
 
     public function markValidation(int $id, string $status, string $reason): void
