@@ -153,7 +153,7 @@ final class SenderCampaignService
         return $run;
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int,reconciled_sent:int,uncertain_batches:int} */
     public function processRun(int $runId, int $requested = 50): array
     {
         if (!$this->repo->acquireWorkerLock()) {
@@ -167,7 +167,7 @@ final class SenderCampaignService
         }
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int,reconciled_sent:int,uncertain_batches:int} */
     public function processReadyRuns(int $requested = 50): array
     {
         if (!$this->sender->configured()) {
@@ -193,6 +193,8 @@ final class SenderCampaignService
             'sender_cooldown_until' => null,
             'api_remaining' => null,
             'api_deferred' => 0,
+            'reconciled_sent' => 0,
+            'uncertain_batches' => 0,
         ];
 
         try {
@@ -214,6 +216,8 @@ final class SenderCampaignService
                 $summary['sender_cooldown_until'] = $result['sender_cooldown_until'];
                 $summary['api_remaining'] = $result['api_remaining'];
                 $summary['api_deferred'] += (int)$result['api_deferred'];
+                $summary['reconciled_sent'] += (int)$result['reconciled_sent'];
+                $summary['uncertain_batches'] += (int)$result['uncertain_batches'];
                 $remainingRequest = max(0, $remainingRequest - (int)$result['dispatched']);
             }
 
@@ -251,7 +255,7 @@ final class SenderCampaignService
     /**
      * Called only while the shared Sender worker lock is held.
      *
-     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int}
+     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int,reconciled_sent:int,uncertain_batches:int}
      */
     private function processRunUnlocked(int $runId, int $requested): array
     {
@@ -284,6 +288,8 @@ final class SenderCampaignService
             'sender_cooldown_until' => null,
             'api_remaining' => null,
             'api_deferred' => 0,
+            'reconciled_sent' => 0,
+            'uncertain_batches' => 0,
         ];
 
         if ($target < 1) return $summary;
@@ -304,6 +310,24 @@ final class SenderCampaignService
                 return $summary;
             }
             throw $e;
+        }
+
+        $reconciled = $this->reconcileUncertainBatches($runId);
+        $summary['reconciled_sent'] = $reconciled['sent'];
+        $summary['uncertain_batches'] = $reconciled['unresolved'];
+
+        if ($reconciled['sent'] > 0 || $reconciled['requeued'] > 0 || $reconciled['unresolved'] > 0) {
+            $this->repo->refreshRunStats($runId);
+            $state = $this->repo->recipientState($runId);
+            $summary['queued_ready'] = $state['queued_ready'];
+            $summary['queued_waiting'] = $state['queued_waiting'];
+            $summary['processing'] = $state['processing'];
+            $summary['next_retry_at'] = $state['next_retry_at'];
+            $summary['remaining_today'] = $this->remainingToday();
+            $api = $this->sender->apiStatus();
+            $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+            $summary['api_remaining'] = isset($api['rate_limit_remaining']) ? (int)$api['rate_limit_remaining'] : null;
+            return $summary;
         }
 
         $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId);
@@ -411,6 +435,7 @@ final class SenderCampaignService
             $ready
         )));
         $batchId = $this->repo->createBatch($runId, $batchNo, $groupTitle, count($emails));
+        $this->repo->attachRecipientsToBatch($batchId, $recipientIds);
         $providerCampaignId = null;
 
         try {
@@ -520,6 +545,72 @@ final class SenderCampaignService
             $summary['next_retry_at'] = $state['next_retry_at'];
             return $summary;
         }
+    }
+
+    /**
+     * Resolve a batch left in "preparing" by an interrupted PHP/worker process.
+     * We never send a new batch while Sender's outcome for the old one is unknown.
+     *
+     * @return array{sent:int,requeued:int,unresolved:int}
+     */
+    private function reconcileUncertainBatches(int $runId): array
+    {
+        $result=['sent'=>0,'requeued'=>0,'unresolved'=>0];
+
+        foreach($this->repo->uncertainBatches($runId) as $batch){
+            $batchId=(int)$batch['id'];
+            $recipientIds=$this->repo->batchRecipientIds($batchId);
+            if($recipientIds===[]){
+                $this->repo->markBatchFailed($batchId,'Recovered empty interrupted batch.');
+                continue;
+            }
+
+            $providerCampaignId=trim((string)($batch['provider_campaign_id']??''));
+            if($providerCampaignId===''){
+                $result['requeued'] += $this->repo->requeueAttachedBatch(
+                    $batchId,
+                    'Recovered interrupted batch before Sender campaign creation.',
+                    60
+                );
+                continue;
+            }
+
+            try{
+                $provider=$this->sender->campaignLive($providerCampaignId);
+            }catch(SenderApiException $e){
+                // Without a live provider state we cannot know whether the send was
+                // accepted. Leave recipients attached/processing and retry later.
+                $result['unresolved']++;
+                continue;
+            }
+
+            $status=strtoupper(trim((string)($provider['status']??'')));
+            $sentTime=trim((string)($provider['sent_time']??''));
+            $sentCount=(int)($provider['sent_count']??0);
+
+            if(
+                $sentTime!=='' ||
+                $sentCount>0 ||
+                in_array($status,['SENDING','SENT','COMPLETED','DONE','PROCESSING','QUEUED','SCHEDULED'],true)
+            ){
+                $result['sent'] += $this->repo->markAttachedBatchSent($batchId);
+                continue;
+            }
+
+            if(in_array($status,['DRAFT','NEW','CREATED',''],true)){
+                $result['requeued'] += $this->repo->requeueAttachedBatch(
+                    $batchId,
+                    'Recovered interrupted batch that Sender still reports as draft.',
+                    60
+                );
+                continue;
+            }
+
+            // Unknown provider state: do nothing until it can be reviewed/reconciled.
+            $result['unresolved']++;
+        }
+
+        return $result;
     }
 
     /**
