@@ -312,6 +312,22 @@ final class SenderCampaignRepository
     }
 
     /** @param array<int,int> $ids */
+    public function returnToQueueMany(array $ids, string $error): void
+    {
+        $this->ensureSchema();
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) return;
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_recipients
+             SET status='queued',next_attempt_at=NULL,last_error=?
+             WHERE id IN ({$placeholders})"
+        );
+        $stmt->execute(array_merge([substr($error, 0, 500)], $ids));
+    }
+
+    /** @param array<int,int> $ids */
     public function requeueMany(array $ids, string $error, int $delaySeconds = 900): void
     {
         $this->ensureSchema();
