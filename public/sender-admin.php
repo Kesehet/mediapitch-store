@@ -9,7 +9,10 @@ use MediaPitch\Core\View;
 use MediaPitch\Repositories\NewsletterRepository;
 use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SenderSubscriberCacheRepository;
+use MediaPitch\Repositories\SenderWorkerStateRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Services\SenderApiException;
 use MediaPitch\Services\SenderCampaignService;
 use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
@@ -31,6 +34,7 @@ $sender = new SenderClient($settingsRepo);
 $queueRepo = new SenderQueueRepository();
 $campaignRepo = new SenderCampaignRepository();
 $newsletter = new NewsletterRepository();
+$workerState = new SenderWorkerStateRepository();
 $subscriberMerge = new SubscriberMergeService($newsletter, $sender);
 $queue = new SenderQueueService($queueRepo, $sender);
 $campaignQueue = new SenderCampaignService($campaignRepo, $sender);
@@ -55,8 +59,16 @@ if ($method === 'POST') {
 
     try {
         if ($action === 'save_settings') {
+            $beforeSender = $settingsRepo->sender();
+            $beforeTokenHash = hash('sha256', (string)($beforeSender['api_token'] ?? ''));
             $settingsRepo->saveSender($_POST);
             $saved = $settingsRepo->sender();
+            $afterTokenHash = hash('sha256', (string)($saved['api_token'] ?? ''));
+            if (!hash_equals($beforeTokenHash, $afterTokenHash)) {
+                $sender->resetApiState();
+                $sender->clearCachedResources();
+                (new SenderSubscriberCacheRepository())->clearSnapshot();
+            }
 
             Audit::record('settings.sender.update', 'settings', null, 'Updated Sender email settings', [
                 'api_token_configured' => !empty($saved['api_token_configured']),
@@ -99,7 +111,8 @@ if ($method === 'POST') {
                 (int)($run['rejected_before_queue'] ?? 0) . ' rejected before queueing ' .
                 '(' . (int)($run['risky_before_queue'] ?? 0) . ' risky, ' .
                 (int)($run['invalid_before_queue'] ?? 0) . ' invalid, ' .
-                (int)($run['unknown_before_queue'] ?? 0) . ' unknown).',
+                (int)($run['unknown_before_queue'] ?? 0) . ' unknown).' .
+                (!empty($run['source_snapshot_fallback']) ? ' Sender was unavailable, so the previously stored campaign design snapshot was used.' : ''),
                 'campaigns'
             );
         }
@@ -113,7 +126,13 @@ if ($method === 'POST') {
 
             $activity = (int)$result['dispatched'] + (int)$result['blocked'] + (int)$result['retried'] + (int)$result['failed'];
             if ($activity === 0) {
-                $detail = 'No campaign recipient was ready to process.';
+                $detail = 'No new campaign recipient was dispatched on this pass.';
+                if ((int)($result['reconciled_sent'] ?? 0) > 0) {
+                    $detail .= ' Recovered ' . (int)$result['reconciled_sent'] . ' recipient(s) already accepted by Sender after an interrupted worker; they were not resent.';
+                }
+                if ((int)($result['uncertain_batches'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['uncertain_batches'] . ' interrupted batch(es) are being held until Sender confirms their final state, preventing duplicate sends.';
+                }
                 if ((int)($result['recovered_stale'] ?? 0) > 0) {
                     $detail .= ' Recovered ' . (int)$result['recovered_stale'] . ' stale processing row(s).';
                 }
@@ -127,7 +146,12 @@ if ($method === 'POST') {
                 if ((int)($result['processing'] ?? 0) > 0) {
                     $detail .= ' ' . (int)$result['processing'] . ' recipient(s) are still marked processing.';
                 }
-                if ((int)($result['queued_ready'] ?? 0) > 0) {
+                if ((int)($result['api_deferred'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['api_deferred'] . ' recipient(s) were deferred to preserve Sender API request budget.';
+                }
+                if (!empty($result['sender_cooldown_until'])) {
+                    $detail .= ' Sender API cooldown is active until ' . (string)$result['sender_cooldown_until'] . ' UTC.';
+                } elseif ((int)($result['queued_ready'] ?? 0) > 0) {
                     $detail .= ' ' . (int)$result['queued_ready'] . ' recipient(s) are ready; retry processing.';
                 }
                 $redirect($detail, 'campaigns', true);
@@ -157,10 +181,16 @@ if ($method === 'POST') {
 
         if ($action === 'queue_manual') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
-            $template = $sender->transactionalTemplate($templateId);
+            $templateTitle = $templateId;
+            try {
+                $template = $sender->transactionalTemplate($templateId);
+                $templateTitle = (string)($template['title'] ?? $template['subject'] ?? $templateId);
+            } catch (SenderApiException $e) {
+                if (!$e->retryable()) throw $e;
+            }
             $result = $queue->queueFromText(
                 $templateId,
-                (string)($template['title'] ?? $template['subject'] ?? $templateId),
+                $templateTitle,
                 (string)($_POST['recipients'] ?? ''),
                 (string)($_POST['variables_json'] ?? ''),
                 (int)(Auth::user()['id'] ?? 0),
@@ -192,11 +222,17 @@ if ($method === 'POST') {
 
         if ($action === 'queue_subscribers') {
             $templateId = trim((string)($_POST['template_id'] ?? ''));
-            $template = $sender->transactionalTemplate($templateId);
+            $templateTitle = $templateId;
+            try {
+                $template = $sender->transactionalTemplate($templateId);
+                $templateTitle = (string)($template['title'] ?? $template['subject'] ?? $templateId);
+            } catch (SenderApiException $e) {
+                if (!$e->retryable()) throw $e;
+            }
             $eligible = $newsletter->all('', 'active', 'all');
             $result = $queue->queueSubscribers(
                 $templateId,
-                (string)($template['title'] ?? $template['subject'] ?? $templateId),
+                $templateTitle,
                 $eligible,
                 (int)(Auth::user()['id'] ?? 0),
                 !empty($_POST['consent_confirmed'])
@@ -228,6 +264,46 @@ if ($method === 'POST') {
             $result = $queue->process($requested);
 
             Audit::record('sender.queue.process', 'sender_queue', null, 'Processed Sender queue', $result);
+
+            if ((int)($result['recovered_sent'] ?? 0) > 0) {
+                $redirect(
+                    'Recovered ' . (int)$result['recovered_sent'] .
+                    ' transactional email(s) that Sender had already accepted before an interrupted worker. They were marked sent and were not resent.',
+                    'queue'
+                );
+            }
+
+            if ((int)($result['uncertain_processing'] ?? 0) > 0) {
+                $redirect(
+                    (int)$result['uncertain_processing'] .
+                    ' interrupted transactional send(s) are being held until Sender can confirm whether they were delivered. Nothing was resent, preventing duplicates.',
+                    'queue',
+                    true
+                );
+            }
+
+            if ((int)($result['requeued_processing'] ?? 0) > 0) {
+                $redirect(
+                    'Recovered ' . (int)$result['requeued_processing'] .
+                    ' interrupted transactional queue item(s) after Sender confirmed no matching send. They are safely back in the queue for the next worker pass.',
+                    'queue'
+                );
+            }
+
+            if (
+                (int)$result['sent'] === 0 &&
+                (int)$result['blocked'] === 0 &&
+                (int)$result['retried'] === 0 &&
+                (int)$result['failed'] === 0 &&
+                !empty($result['sender_cooldown_until'])
+            ) {
+                $redirect(
+                    'Sender API cooldown is active until ' . (string)$result['sender_cooldown_until'] .
+                    ' UTC. Queue items were left untouched and will resume automatically.',
+                    'queue',
+                    true
+                );
+            }
 
             $redirect(
                 'Sender queue processed: ' . $result['sent'] . ' sent, ' .
@@ -348,6 +424,8 @@ View::render('admin/sender', [
     'mergedAudienceRefreshAfter' => $mergedAudienceRefreshAfter,
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
+    'senderApiStatus' => $sender->apiStatus(),
+    'senderWorkerStatus' => $workerState->state(),
     'providerError' => $providerError,
     'connection' => $connection,
     'stats' => $queue->stats(),

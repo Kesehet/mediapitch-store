@@ -83,6 +83,65 @@ final class SenderSubscriberCacheRepository
         ];
     }
 
+    /**
+     * @param array<int,string> $emails
+     * @return array<string,bool>
+     */
+    public function presenceMap(array $emails): array
+    {
+        $this->ensureSchema();
+        $clean=[];
+        foreach($emails as $email){
+            $email=strtolower(trim((string)$email));
+            if(filter_var($email,FILTER_VALIDATE_EMAIL))$clean[$email]=$email;
+        }
+        if($clean===[])return [];
+
+        $found=[];
+        foreach(array_chunk(array_values($clean),500) as $chunk){
+            $placeholders=implode(',',array_fill(0,count($chunk),'?'));
+            $stmt=Database::connection()->prepare(
+                "SELECT email FROM sender_subscriber_cache WHERE email IN ({$placeholders})"
+            );
+            $stmt->execute($chunk);
+            foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $email){
+                $found[strtolower((string)$email)]=true;
+            }
+        }
+
+        $map=[];
+        foreach($clean as $email)$map[$email]=!empty($found[$email]);
+        return $map;
+    }
+
+    /**
+     * @param array<int,string> $emails
+     * @return array<string,string>
+     */
+    public function statusMap(array $emails): array
+    {
+        $this->ensureSchema();
+        $clean=[];
+        foreach($emails as $email){
+            $email=strtolower(trim((string)$email));
+            if(filter_var($email,FILTER_VALIDATE_EMAIL))$clean[$email]=$email;
+        }
+        if($clean===[])return [];
+
+        $map=[];
+        foreach(array_chunk(array_values($clean),500) as $chunk){
+            $placeholders=implode(',',array_fill(0,count($chunk),'?'));
+            $stmt=Database::connection()->prepare(
+                "SELECT email,status FROM sender_subscriber_cache WHERE email IN ({$placeholders})"
+            );
+            $stmt->execute($chunk);
+            foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $row){
+                $map[strtolower((string)$row['email'])]=strtolower(trim((string)($row['status']??'')));
+            }
+        }
+        return $map;
+    }
+
     public function hasSnapshot(): bool
     {
         $meta = $this->meta();
@@ -143,7 +202,7 @@ final class SenderSubscriberCacheRepository
                     'provider_subscriber_id' => substr(trim((string)($row['id'] ?? '')), 0, 100) ?: null,
                     'firstname' => substr(trim((string)($row['firstname'] ?? $row['first_name'] ?? '')), 0, 100) ?: null,
                     'lastname' => substr(trim((string)($row['lastname'] ?? $row['last_name'] ?? '')), 0, 100) ?: null,
-                    'status' => substr(strtolower(trim((string)($row['status'] ?? ''))), 0, 40) ?: null,
+                    'status' => $this->normalizeStatus($row),
                     'groups_json' => $groups !== [] ? json_encode($groups, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
                     'provider_created_at' => substr(trim((string)($row['created'] ?? $row['created_at'] ?? '')), 0, 64) ?: null,
                 ]);
@@ -173,6 +232,24 @@ final class SenderSubscriberCacheRepository
         }
     }
 
+    /** @param array<string,mixed> $row */
+    private function normalizeStatus(array $row): ?string
+    {
+        if (!empty($row['bounced_at'])) return 'bounced';
+        if (!empty($row['unsubscribed_at'])) return 'unsubscribed';
+
+        $raw = $row['status'] ?? '';
+        if (is_array($raw)) {
+            $raw = $raw['email'] ?? $raw['temail'] ?? reset($raw) ?: '';
+        }
+
+        $status = strtolower(trim((string)$raw));
+        if ($status === 'unsubscribe') $status = 'unsubscribed';
+        if ($status === 'bounce') $status = 'bounced';
+
+        return $status !== '' ? substr($status, 0, 40) : null;
+    }
+
     public function recordFailure(string $message, int $cooldownSeconds = 300): void
     {
         $this->ensureSchema();
@@ -188,6 +265,26 @@ final class SenderSubscriberCacheRepository
             'refresh_after' => $refreshAfter,
             'last_error' => substr(trim($message), 0, 500),
         ]);
+    }
+
+    public function clearSnapshot(): void
+    {
+        $this->ensureSchema();
+        $pdo=Database::connection();
+        $pdo->beginTransaction();
+        try{
+            $pdo->exec('DELETE FROM sender_subscriber_cache');
+            $pdo->exec(
+                "UPDATE sender_subscriber_cache_meta
+                 SET last_synced_at=NULL,refresh_after=NULL,reported_total=0,
+                     cached_rows=0,pages=0,last_error=NULL
+                 WHERE id=1"
+            );
+            $pdo->commit();
+        }catch(\Throwable $e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            throw $e;
+        }
     }
 
     public function clearFailure(): void

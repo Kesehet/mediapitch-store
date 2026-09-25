@@ -114,6 +114,35 @@ final class NewsletterRepository
         $stmt=Database::connection()->prepare($sql);$stmt->execute($params);return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * @param array<int,int> $ids
+     * @return array<int,bool>
+     */
+    public function activeIdMap(array $ids): array
+    {
+        $this->ensureSchema();
+        $ids=array_values(array_unique(array_filter(array_map('intval',$ids))));
+        if($ids===[])return [];
+
+        $active=[];
+        foreach(array_chunk($ids,500) as $chunk){
+            $placeholders=implode(',',array_fill(0,count($chunk),'?'));
+            $stmt=Database::connection()->prepare(
+                "SELECT id,status FROM newsletter_subscribers WHERE id IN ({$placeholders})"
+            );
+            $stmt->execute($chunk);
+            foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $row){
+                $active[(int)$row['id']]=((string)$row['status']==='active');
+            }
+        }
+
+        // A deleted/missing local subscriber is not active.
+        foreach($ids as $id){
+            if(!array_key_exists($id,$active))$active[$id]=false;
+        }
+        return $active;
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function allForMerge(int $limit = 20000): array
     {

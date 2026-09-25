@@ -164,7 +164,7 @@ final class SenderQueueService
     /**
      * Process queued messages. Only cleaner status "clean" can reach Sender.
      *
-     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int}
+     * @return array{examined:int,sent:int,blocked:int,retried:int,failed:int,remaining_today:int,daily_limit:int,sender_cooldown_until:?string,recovered_sent:int,requeued_processing:int,uncertain_processing:int}
      */
     public function process(int $requested = 50): array
     {
@@ -184,6 +184,10 @@ final class SenderQueueService
             'failed' => 0,
             'remaining_today' => 0,
             'daily_limit' => $this->dailyLimit(),
+            'sender_cooldown_until' => null,
+            'recovered_sent' => 0,
+            'requeued_processing' => 0,
+            'uncertain_processing' => 0,
         ];
 
         try {
@@ -194,6 +198,29 @@ final class SenderQueueService
             $summary['remaining_today'] = $remaining;
 
             if ($remaining === 0) {
+                return $summary;
+            }
+
+            try {
+                $this->sender->assertApiAvailable();
+            } catch (SenderApiException $e) {
+                if ($e->statusCode === 429) {
+                    $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                    return $summary;
+                }
+                throw $e;
+            }
+
+            $reconciled = $this->reconcileInterruptedProcessing();
+            $summary['recovered_sent'] = $reconciled['sent'];
+            $summary['requeued_processing'] = $reconciled['requeued'];
+            $summary['uncertain_processing'] = $reconciled['uncertain'];
+
+            if ($reconciled['sent'] > 0 || $reconciled['requeued'] > 0 || $reconciled['uncertain'] > 0) {
+                $sentToday = $this->repo->countSentBetween($window['start_utc'], $window['end_utc'])
+                    + $this->campaigns->countDispatchedBetween($window['start_utc'], $window['end_utc']);
+                $summary['remaining_today'] = max(0, $this->dailyLimit() - $sentToday);
+                $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
                 return $summary;
             }
 
@@ -220,12 +247,12 @@ final class SenderQueueService
                         $message .= ': ' . $validationReason;
                     }
 
-                    if ($validationStatus === 'unknown' && $attempt < 3) {
-                        $this->repo->markRetry($id, $message, 1800);
+                    if ($validationStatus === 'unknown') {
+                        // Unknown is not evidence that an address is bad. Keep it safely
+                        // queued with backoff until the cleaner can make a definite call.
+                        $delay = min(21600, 1800 * (2 ** min(4, max(0, $attempt - 1))));
+                        $this->repo->markRetry($id, $message, $delay);
                         $summary['retried']++;
-                    } elseif ($validationStatus === 'unknown') {
-                        $this->repo->markFailed($id, $message);
-                        $summary['failed']++;
                     } else {
                         $this->repo->markBlocked($id, $message);
                         $summary['blocked']++;
@@ -273,22 +300,43 @@ final class SenderQueueService
                         break;
                     }
                 } catch (SenderApiException $e) {
-                    if ($e->retryable() && $attempt < 3) {
-                        $delay = $e->retryAfter ?? min(3600, 300 * (2 ** max(0, $attempt - 1)));
-                        $this->repo->markRetry($id, $e->getMessage(), $delay);
+                    if ($e->statusCode === 429) {
+                        // A 429 proves Sender rejected this attempt, so retry is safe.
+                        $delay = $e->retryAfter ?? 900;
+                        $this->repo->markRetry($id, 'Sender rate limit: ' . $e->getMessage(), $delay);
                         $summary['retried']++;
-                    } else {
-                        $this->repo->markFailed($id, $e->getMessage());
-                        $summary['failed']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                        break;
                     }
+
+                    if (in_array($e->statusCode, [401, 403], true)) {
+                        // Auth/permission errors also prove the send was not accepted.
+                        $this->repo->markRetry($id, 'Sender credentials require attention: ' . $e->getMessage(), 3600);
+                        $summary['retried']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                        break;
+                    }
+
+                    if ($e->statusCode === 0 || $e->statusCode === 408 || $e->statusCode >= 500) {
+                        // Network timeouts and provider 5xx responses are ambiguous: the
+                        // request may have reached Sender before the response was lost.
+                        // Keep this row processing and reconcile against Sender's sent log
+                        // before any replay.
+                        $this->repo->markProcessingIssue($id, 'Ambiguous Sender response: ' . $e->getMessage());
+                        $summary['uncertain_processing']++;
+                        $summary['sender_cooldown_until'] = $this->senderCooldownUntil();
+                        break;
+                    }
+
+                    // Definite validation/business 4xx rejection: this recipient did not send.
+                    $this->repo->markFailed($id, $e->getMessage());
+                    $summary['failed']++;
                 } catch (\Throwable $e) {
-                    if ($attempt < 3) {
-                        $this->repo->markRetry($id, $e->getMessage(), 900);
-                        $summary['retried']++;
-                    } else {
-                        $this->repo->markFailed($id, $e->getMessage());
-                        $summary['failed']++;
-                    }
+                    // Unknown exceptions around the send call are treated as ambiguous for
+                    // the same reason: duplicate avoidance is more important than a blind retry.
+                    $this->repo->markProcessingIssue($id, 'Ambiguous send exception: ' . $e->getMessage());
+                    $summary['uncertain_processing']++;
+                    break;
                 }
             }
 
@@ -296,6 +344,84 @@ final class SenderQueueService
         } finally {
             $this->repo->releaseWorkerLock();
         }
+    }
+
+    /** @return array{sent:int,requeued:int,uncertain:int} */
+    private function reconcileInterruptedProcessing(): array
+    {
+        $result=['sent'=>0,'requeued'=>0,'uncertain'=>0];
+
+        foreach($this->repo->processingRows(50) as $row){
+            $id=(int)$row['id'];
+            $templateId=trim((string)$row['template_id']);
+            $email=strtolower(trim((string)$row['recipient_email']));
+            $processingAt=trim((string)($row['updated_at']??''));
+            $processingTs=$processingAt!==''?strtotime($processingAt.' UTC'):false;
+            $match=null;
+
+            try{
+                $response=$this->sender->sentMessages($templateId,5,1,$email);
+                $messages=is_array($response['data']??null)?$response['data']:[];
+                foreach($messages as $message){
+                    if(!is_array($message))continue;
+                    if(strtolower(trim((string)($message['email']??'')))!==$email)continue;
+
+                    $created=trim((string)($message['created']??''));
+                    $createdTs=$this->providerTimestamp($created);
+                    if($processingTs!==false && $createdTs!==false && $createdTs < ($processingTs-90))continue;
+
+                    $match=$message;
+                    break;
+                }
+            }catch(SenderApiException $e){
+                // Ambiguous delivery state: never requeue until Sender can be queried.
+                $result['uncertain']++;
+                if($e->statusCode===429)break;
+                continue;
+            }
+
+            if(is_array($match)){
+                $providerId=trim((string)($match['emailId']??''));
+                $this->repo->markSent($id,$providerId!==''?$providerId:null);
+                $result['sent']++;
+                continue;
+            }
+
+            // Sender's sent-message index can lag briefly after accepting a send.
+            // Hold a recent interrupted row rather than risk a duplicate resend.
+            if($processingTs===false || (time()-$processingTs)<300){
+                $result['uncertain']++;
+                continue;
+            }
+
+            $this->repo->returnProcessingToQueue(
+                $id,
+                'Recovered interrupted transactional send after reconciliation grace period; Sender shows no matching sent message.'
+            );
+            $result['requeued']++;
+        }
+
+        return $result;
+    }
+
+    private function providerTimestamp(string $value): int|false
+    {
+        $value=trim($value);
+        if($value==='')return false;
+
+        // Preserve an explicit Z/offset from Sender; otherwise interpret the
+        // provider's naive timestamp as UTC rather than the app's local timezone.
+        if(preg_match('/(?:Z|[+-]\d{2}:?\d{2})$/i',$value)){
+            return strtotime($value);
+        }
+        return strtotime($value.' UTC');
+    }
+
+    private function senderCooldownUntil(): ?string
+    {
+        $status = $this->sender->apiStatus();
+        $until = trim((string)($status['cooldown_until'] ?? ''));
+        return $until !== '' ? $until : null;
     }
 
     /**
