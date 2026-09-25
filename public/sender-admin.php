@@ -126,7 +126,13 @@ if ($method === 'POST') {
 
             $activity = (int)$result['dispatched'] + (int)$result['blocked'] + (int)$result['retried'] + (int)$result['failed'];
             if ($activity === 0) {
-                $detail = 'No campaign recipient was ready to process.';
+                $detail = 'No new campaign recipient was dispatched on this pass.';
+                if ((int)($result['reconciled_sent'] ?? 0) > 0) {
+                    $detail .= ' Recovered ' . (int)$result['reconciled_sent'] . ' recipient(s) already accepted by Sender after an interrupted worker; they were not resent.';
+                }
+                if ((int)($result['uncertain_batches'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['uncertain_batches'] . ' interrupted batch(es) are being held until Sender confirms their final state, preventing duplicate sends.';
+                }
                 if ((int)($result['recovered_stale'] ?? 0) > 0) {
                     $detail .= ' Recovered ' . (int)$result['recovered_stale'] . ' stale processing row(s).';
                 }
@@ -258,6 +264,31 @@ if ($method === 'POST') {
             $result = $queue->process($requested);
 
             Audit::record('sender.queue.process', 'sender_queue', null, 'Processed Sender queue', $result);
+
+            if ((int)($result['recovered_sent'] ?? 0) > 0) {
+                $redirect(
+                    'Recovered ' . (int)$result['recovered_sent'] .
+                    ' transactional email(s) that Sender had already accepted before an interrupted worker. They were marked sent and were not resent.',
+                    'queue'
+                );
+            }
+
+            if ((int)($result['uncertain_processing'] ?? 0) > 0) {
+                $redirect(
+                    (int)$result['uncertain_processing'] .
+                    ' interrupted transactional send(s) are being held until Sender can confirm whether they were delivered. Nothing was resent, preventing duplicates.',
+                    'queue',
+                    true
+                );
+            }
+
+            if ((int)($result['requeued_processing'] ?? 0) > 0) {
+                $redirect(
+                    'Recovered ' . (int)$result['requeued_processing'] .
+                    ' interrupted transactional queue item(s) after Sender confirmed no matching send. They are safely back in the queue for the next worker pass.',
+                    'queue'
+                );
+            }
 
             if (
                 (int)$result['sent'] === 0 &&
