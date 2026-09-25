@@ -10,6 +10,7 @@ use MediaPitch\Repositories\NewsletterRepository;
 use MediaPitch\Repositories\SenderCampaignRepository;
 use MediaPitch\Repositories\SenderQueueRepository;
 use MediaPitch\Repositories\SenderSubscriberCacheRepository;
+use MediaPitch\Repositories\SenderWorkerStateRepository;
 use MediaPitch\Repositories\SettingsRepository;
 use MediaPitch\Services\SenderApiException;
 use MediaPitch\Services\SenderCampaignService;
@@ -33,6 +34,7 @@ $sender = new SenderClient($settingsRepo);
 $queueRepo = new SenderQueueRepository();
 $campaignRepo = new SenderCampaignRepository();
 $newsletter = new NewsletterRepository();
+$workerState = new SenderWorkerStateRepository();
 $subscriberMerge = new SubscriberMergeService($newsletter, $sender);
 $queue = new SenderQueueService($queueRepo, $sender);
 $campaignQueue = new SenderCampaignService($campaignRepo, $sender);
@@ -392,6 +394,7 @@ View::render('admin/sender', [
     'providerConfigured' => $sender->configured(),
     'senderSettings' => $settingsRepo->sender(),
     'senderApiStatus' => $sender->apiStatus(),
+    'senderWorkerStatus' => $workerState->state(),
     'providerError' => $providerError,
     'connection' => $connection,
     'stats' => $queue->stats(),
