@@ -245,6 +245,18 @@ final class SenderClient
         return $payload;
     }
 
+    /** @return array<string,mixed> */
+    public function campaignLive(string $id): array
+    {
+        $id = $this->cleanId($id);
+        $response = $this->request('GET', '/campaigns/' . rawurlencode($id));
+        $row = $response['data'] ?? null;
+        if (!is_array($row)) {
+            throw new SenderApiException('Sender returned an unreadable live campaign response.');
+        }
+        return $row;
+    }
+
     public function createGroup(string $title): string
     {
         $title = trim($title);
