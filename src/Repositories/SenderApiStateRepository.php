@@ -144,6 +144,22 @@ final class SenderApiStateRepository
         );
     }
 
+    public function resetAll(): void
+    {
+        $this->ensureSchema();
+        Database::connection()->exec(
+            "UPDATE sender_api_state
+             SET cooldown_until=NULL,
+                 rate_limit_limit=NULL,
+                 rate_limit_remaining=NULL,
+                 rate_limit_reset_at=NULL,
+                 last_status=NULL,
+                 last_error=NULL,
+                 last_request_at=NULL
+             WHERE id=1"
+        );
+    }
+
     private function positiveInt(mixed $value): ?int
     {
         if ($value === null || $value === '') return null;
