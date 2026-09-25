@@ -83,6 +83,37 @@ final class SenderSubscriberCacheRepository
         ];
     }
 
+    /**
+     * @param array<int,string> $emails
+     * @return array<string,bool>
+     */
+    public function presenceMap(array $emails): array
+    {
+        $this->ensureSchema();
+        $clean=[];
+        foreach($emails as $email){
+            $email=strtolower(trim((string)$email));
+            if(filter_var($email,FILTER_VALIDATE_EMAIL))$clean[$email]=$email;
+        }
+        if($clean===[])return [];
+
+        $found=[];
+        foreach(array_chunk(array_values($clean),500) as $chunk){
+            $placeholders=implode(',',array_fill(0,count($chunk),'?'));
+            $stmt=Database::connection()->prepare(
+                "SELECT email FROM sender_subscriber_cache WHERE email IN ({$placeholders})"
+            );
+            $stmt->execute($chunk);
+            foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $email){
+                $found[strtolower((string)$email)]=true;
+            }
+        }
+
+        $map=[];
+        foreach($clean as $email)$map[$email]=!empty($found[$email]);
+        return $map;
+    }
+
     public function hasSnapshot(): bool
     {
         $meta = $this->meta();
