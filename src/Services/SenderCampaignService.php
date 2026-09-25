@@ -141,7 +141,7 @@ final class SenderCampaignService
         return $run;
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
     public function processRun(int $runId, int $requested = 50): array
     {
         if (!$this->repo->acquireWorkerLock()) {
@@ -155,7 +155,7 @@ final class SenderCampaignService
         }
     }
 
-    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int} */
+    /** @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string} */
     public function processReadyRuns(int $requested = 50): array
     {
         if (!$this->sender->configured()) {
@@ -173,6 +173,11 @@ final class SenderCampaignService
             'failed' => 0,
             'batches' => 0,
             'remaining_today' => $this->remainingToday(),
+            'recovered_stale' => 0,
+            'queued_ready' => 0,
+            'queued_waiting' => 0,
+            'processing' => 0,
+            'next_retry_at' => null,
         ];
 
         try {
@@ -183,10 +188,14 @@ final class SenderCampaignService
                 if ($remainingRequest < 1 || $summary['remaining_today'] < 1) break;
                 $result = $this->processRunUnlocked((int)$run['id'], $remainingRequest);
 
-                foreach (['examined','dispatched','blocked','retried','failed','batches'] as $key) {
+                foreach (['examined','dispatched','blocked','retried','failed','batches','recovered_stale'] as $key) {
                     $summary[$key] += (int)$result[$key];
                 }
                 $summary['remaining_today'] = (int)$result['remaining_today'];
+                $summary['queued_ready'] = (int)$result['queued_ready'];
+                $summary['queued_waiting'] = (int)$result['queued_waiting'];
+                $summary['processing'] = (int)$result['processing'];
+                $summary['next_retry_at'] = $result['next_retry_at'];
                 $remainingRequest = max(0, $remainingRequest - (int)$result['dispatched']);
             }
 
@@ -224,7 +233,7 @@ final class SenderCampaignService
     /**
      * Called only while the shared Sender worker lock is held.
      *
-     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int}
+     * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string}
      */
     private function processRunUnlocked(int $runId, int $requested): array
     {
@@ -249,11 +258,27 @@ final class SenderCampaignService
             'failed' => 0,
             'batches' => 0,
             'remaining_today' => $remainingToday,
+            'recovered_stale' => 0,
+            'queued_ready' => 0,
+            'queued_waiting' => 0,
+            'processing' => 0,
+            'next_retry_at' => null,
         ];
 
         if ($target < 1) return $summary;
 
+        $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId, 600);
+        $state = $this->repo->recipientState($runId);
+        $summary['queued_ready'] = $state['queued_ready'];
+        $summary['queued_waiting'] = $state['queued_waiting'];
+        $summary['processing'] = $state['processing'];
+        $summary['next_retry_at'] = $state['next_retry_at'];
+
         $candidates = $this->repo->readyRecipients($runId, min(500, max($target * 4, $target)));
+        if ($candidates === []) {
+            return $summary;
+        }
+
         $ready = [];
 
         foreach ($candidates as $recipient) {
@@ -294,6 +319,11 @@ final class SenderCampaignService
 
         if ($ready === []) {
             $this->repo->refreshRunStats($runId);
+            $state = $this->repo->recipientState($runId);
+            $summary['queued_ready'] = $state['queued_ready'];
+            $summary['queued_waiting'] = $state['queued_waiting'];
+            $summary['processing'] = $state['processing'];
+            $summary['next_retry_at'] = $state['next_retry_at'];
             return $summary;
         }
 
@@ -370,6 +400,11 @@ final class SenderCampaignService
             $summary['dispatched'] = count($emails);
             $summary['batches'] = 1;
             $summary['remaining_today'] = max(0, $remainingToday - count($emails));
+            $state = $this->repo->recipientState($runId);
+            $summary['queued_ready'] = $state['queued_ready'];
+            $summary['queued_waiting'] = $state['queued_waiting'];
+            $summary['processing'] = $state['processing'];
+            $summary['next_retry_at'] = $state['next_retry_at'];
 
             return $summary;
         } catch (\Throwable $e) {
@@ -391,6 +426,11 @@ final class SenderCampaignService
             }
 
             $this->repo->refreshRunStats($runId);
+            $state = $this->repo->recipientState($runId);
+            $summary['queued_ready'] = $state['queued_ready'];
+            $summary['queued_waiting'] = $state['queued_waiting'];
+            $summary['processing'] = $state['processing'];
+            $summary['next_retry_at'] = $state['next_retry_at'];
             return $summary;
         }
     }
