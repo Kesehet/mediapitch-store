@@ -16,6 +16,6 @@ final class SenderApiException extends \RuntimeException
 
     public function retryable(): bool
     {
-        return $this->statusCode === 0 || $this->statusCode === 429 || $this->statusCode >= 500;
+        return $this->statusCode === 0 || $this->statusCode === 408 || $this->statusCode === 429 || $this->statusCode >= 500;
     }
 }
