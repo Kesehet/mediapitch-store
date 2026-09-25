@@ -490,6 +490,83 @@ final class SenderCampaignService
             $groupResult = $this->sender->addSubscribersToGroup($groupId, $emails, false);
             $missing = $this->extractMissingSubscribers($groupResult);
 
+            // Now that Sender has answered the live group-membership call, we know
+            // both the real missing-subscriber set and the provider's latest request
+            // budget. Trim only the expensive missing recipients if necessary while
+            // allowing already-existing Sender subscribers to continue.
+            $apiAfterGroup = $this->sender->apiStatus();
+            $remainingAfterGroup = isset($apiAfterGroup['rate_limit_remaining']) && $apiAfterGroup['rate_limit_remaining'] !== null
+                ? max(0, (int)$apiAfterGroup['rate_limit_remaining'])
+                : null;
+            $summary['api_remaining'] = $remainingAfterGroup ?? $summary['api_remaining'];
+
+            if ($missing !== [] && $remainingAfterGroup !== null) {
+                // For at least one missing subscriber we still need:
+                // create subscriber(s) + add-to-group retry + create campaign + send.
+                $missingAllowance = max(0, $remainingAfterGroup - 3);
+                if (count($missing) > $missingAllowance) {
+                    $deferredMissing = array_slice($missing, $missingAllowance);
+                    $deferredSet = array_fill_keys($deferredMissing, true);
+                    $deferredIds = [];
+
+                    foreach ($ready as $row) {
+                        $rowEmail = strtolower(trim((string)($row['recipient_email'] ?? '')));
+                        if (isset($deferredSet[$rowEmail])) $deferredIds[] = (int)$row['id'];
+                    }
+
+                    if ($deferredIds !== []) {
+                        $this->repo->requeueMany(
+                            $deferredIds,
+                            'Deferred after live Sender group check to preserve API request budget.',
+                            $this->senderApiRetryDelay()
+                        );
+                        $summary['api_deferred'] += count($deferredIds);
+                    }
+
+                    $ready = array_values(array_filter(
+                        $ready,
+                        static fn(array $row): bool => !isset($deferredSet[strtolower(trim((string)($row['recipient_email'] ?? '')))])
+                    ));
+                    $missing = array_slice($missing, 0, $missingAllowance);
+                    $recipientIds = array_map(static fn(array $row): int => (int)$row['id'], $ready);
+                    $emails = array_values(array_unique(array_map(
+                        static fn(array $row): string => strtolower(trim((string)$row['recipient_email'])),
+                        $ready
+                    )));
+                    $this->repo->setBatchRecipientCount($batchId, count($emails));
+                }
+            }
+
+            // With no missing recipients left, campaign creation + start still require
+            // two Sender API requests. If the live budget cannot cover them, defer the
+            // entire remaining batch instead of intentionally triggering another 429.
+            $apiBeforeCreates = $this->sender->apiStatus();
+            $remainingBeforeCreates = isset($apiBeforeCreates['rate_limit_remaining']) && $apiBeforeCreates['rate_limit_remaining'] !== null
+                ? max(0, (int)$apiBeforeCreates['rate_limit_remaining'])
+                : null;
+            $minimumRemainingCalls = $missing !== [] ? (count($missing) + 3) : 2;
+
+            if ($ready === [] || ($remainingBeforeCreates !== null && $remainingBeforeCreates < $minimumRemainingCalls)) {
+                if ($ready !== []) {
+                    $idsToDefer = array_map(static fn(array $row): int => (int)$row['id'], $ready);
+                    $this->repo->requeueMany(
+                        $idsToDefer,
+                        'Deferred because Sender API request budget is too low to finish this batch safely.',
+                        $this->senderApiRetryDelay()
+                    );
+                    $summary['api_deferred'] += count($idsToDefer);
+                }
+                $this->repo->markBatchFailed($batchId, 'Deferred before campaign creation because Sender API request budget was insufficient.');
+                $this->repo->refreshRunStats($runId);
+                $state = $this->repo->recipientState($runId);
+                $summary['queued_ready'] = $state['queued_ready'];
+                $summary['queued_waiting'] = $state['queued_waiting'];
+                $summary['processing'] = $state['processing'];
+                $summary['next_retry_at'] = $state['next_retry_at'];
+                $summary['api_remaining'] = $remainingBeforeCreates;
+                return $summary;
+            }
+
             if ($missing !== []) {
                 $byEmail = [];
                 foreach ($ready as $row) $byEmail[strtolower((string)$row['recipient_email'])] = $row;
