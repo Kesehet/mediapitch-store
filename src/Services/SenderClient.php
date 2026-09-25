@@ -37,6 +37,11 @@ final class SenderClient
         $this->apiState->clearCooldown();
     }
 
+    public function clearCachedResources(): void
+    {
+        $this->resourceCache->clearAll();
+    }
+
     public function assertApiAvailable(): void
     {
         if (!$this->configured()) {
