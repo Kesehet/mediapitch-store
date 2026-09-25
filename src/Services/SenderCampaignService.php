@@ -353,6 +353,12 @@ final class SenderCampaignService
             return $summary;
         }
 
+        $localIds=array_values(array_unique(array_filter(array_map(
+            static fn(array $row): int => (int)($row['newsletter_subscriber_id']??0),
+            $candidates
+        ))));
+        $localActive=$this->newsletter->activeIdMap($localIds);
+
         $ready = [];
 
         foreach ($candidates as $recipient) {
@@ -360,10 +366,21 @@ final class SenderCampaignService
 
             $id = (int)$recipient['id'];
             $email = strtolower(trim((string)$recipient['recipient_email']));
+            $localSubscriberId=(int)($recipient['newsletter_subscriber_id']??0);
             $attempt = (int)($recipient['attempts'] ?? 0) + 1;
 
-            $this->repo->markProcessing($id);
             $summary['examined']++;
+
+            if($localSubscriberId>0 && empty($localActive[$localSubscriberId])){
+                $this->repo->markBlocked(
+                    $id,
+                    'Local newsletter subscriber is no longer active; suppressed before campaign send.'
+                );
+                $summary['blocked']++;
+                continue;
+            }
+
+            $this->repo->markProcessing($id);
 
             $validation = $this->validator->validate($email);
             $status = strtolower(trim((string)($validation['status'] ?? 'unknown')));
