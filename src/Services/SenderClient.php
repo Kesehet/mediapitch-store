@@ -37,6 +37,11 @@ final class SenderClient
         $this->apiState->clearCooldown();
     }
 
+    public function resetApiState(): void
+    {
+        $this->apiState->resetAll();
+    }
+
     public function clearCachedResources(): void
     {
         $this->resourceCache->clearAll();
