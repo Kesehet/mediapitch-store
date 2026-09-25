@@ -139,11 +139,16 @@ $batchSize = (int)($senderSettings['batch_size'] ?? 50);
       <?php if($mergedAudienceError): ?>
         <div class="flash error" style="margin-bottom:10px">Merged audience unavailable: <?= e((string)$mergedAudienceError) ?></div>
       <?php elseif($mergedAudienceTruncated): ?>
-        <div class="flash error" style="margin-bottom:10px">Sender subscriber data is incomplete, so campaign queueing is disabled until the full merged audience can be loaded.</div>
+        <div class="flash error" style="margin-bottom:10px">Sender subscriber data is incomplete, so campaign queueing is disabled until a complete snapshot is available.</div>
       <?php else: ?>
+        <?php if(!empty($mergedAudienceWarning)): ?>
+          <div class="flash" style="margin-bottom:10px"><?= e((string)$mergedAudienceWarning) ?></div>
+        <?php endif; ?>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
           Current merged audience: <strong><?= number_format((int)($mergedAudienceStats['unique_total']??0)) ?></strong> unique ·
           <strong><?= number_format((int)($mergedAudienceStats['effective_active']??0)) ?></strong> active candidates before live cleaning.
+          <?php if(!empty($mergedAudienceLastSyncedAt)): ?><br>Sender snapshot: <?= e((string)$mergedAudienceLastSyncedAt) ?> UTC<?php endif; ?>
+          <?php if(!empty($mergedAudienceRefreshAfter)): ?> · API refresh paused until <?= e((string)$mergedAudienceRefreshAfter) ?> UTC<?php endif; ?>
         </div>
       <?php endif; ?>
       <button class="button" type="submit" <?= $mergedAudienceError||$mergedAudienceTruncated?'disabled':'' ?>>Clean &amp; queue campaign</button>
