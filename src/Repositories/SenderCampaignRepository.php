@@ -161,7 +161,18 @@ final class SenderCampaignRepository
         $limit = max(1, min(200, $limit));
         $sql = "SELECT r.*,
                     (r.total_recipients-r.dispatched_recipients-r.blocked_recipients-r.failed_recipients) AS remaining_recipients,
-                    (SELECT COUNT(*) FROM sender_campaign_batches b WHERE b.run_id=r.id) AS batch_count
+                    (SELECT COUNT(*) FROM sender_campaign_batches b WHERE b.run_id=r.id) AS batch_count,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cr
+                     WHERE cr.run_id=r.id AND cr.status='queued'
+                       AND (cr.next_attempt_at IS NULL OR cr.next_attempt_at<=UTC_TIMESTAMP())) AS ready_recipients,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cw
+                     WHERE cw.run_id=r.id AND cw.status='queued'
+                       AND cw.next_attempt_at>UTC_TIMESTAMP()) AS waiting_recipients,
+                    (SELECT COUNT(*) FROM sender_campaign_recipients cp
+                     WHERE cp.run_id=r.id AND cp.status='processing') AS processing_recipients,
+                    (SELECT MIN(cn.next_attempt_at) FROM sender_campaign_recipients cn
+                     WHERE cn.run_id=r.id AND cn.status='queued'
+                       AND cn.next_attempt_at>UTC_TIMESTAMP()) AS next_retry_at
                 FROM sender_campaign_runs r
                 ORDER BY r.id DESC
                 LIMIT {$limit}";
