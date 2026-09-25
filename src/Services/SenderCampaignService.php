@@ -267,7 +267,7 @@ final class SenderCampaignService
 
         if ($target < 1) return $summary;
 
-        $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId, 600);
+        $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId);
         $state = $this->repo->recipientState($runId);
         $summary['queued_ready'] = $state['queued_ready'];
         $summary['queued_waiting'] = $state['queued_waiting'];
