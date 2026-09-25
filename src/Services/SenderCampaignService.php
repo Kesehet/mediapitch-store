@@ -565,6 +565,11 @@ final class SenderCampaignService
             $summary['queued_waiting'] = $state['queued_waiting'];
             $summary['processing'] = $state['processing'];
             $summary['next_retry_at'] = $state['next_retry_at'];
+            $api = $this->sender->apiStatus();
+            $summary['sender_cooldown_until'] = $this->nonEmpty((string)($api['cooldown_until'] ?? ''));
+            $summary['api_remaining'] = isset($api['rate_limit_remaining']) && $api['rate_limit_remaining'] !== null
+                ? (int)$api['rate_limit_remaining']
+                : $summary['api_remaining'];
             return $summary;
         }
     }
