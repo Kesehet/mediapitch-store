@@ -579,7 +579,14 @@ final class SenderCampaignService
                 $provider=$this->sender->campaignLive($providerCampaignId);
             }catch(SenderApiException $e){
                 // Without a live provider state we cannot know whether the send was
-                // accepted. Leave recipients attached/processing and retry later.
+                // accepted. Transient errors wait; permanent 4xx errors pause the run.
+                if(!$e->retryable()){
+                    $this->repo->setRunStatus(
+                        $runId,
+                        'paused',
+                        'Cannot reconcile interrupted Sender batch: '.$e->getMessage()
+                    );
+                }
                 $result['unresolved']++;
                 continue;
             }
@@ -606,7 +613,12 @@ final class SenderCampaignService
                 continue;
             }
 
-            // Unknown provider state: do nothing until it can be reviewed/reconciled.
+            // Unknown provider state: pause instead of risking a duplicate send.
+            $this->repo->setRunStatus(
+                $runId,
+                'paused',
+                'Interrupted Sender batch has unknown provider status: '.($status!==''?$status:'(empty)')
+            );
             $result['unresolved']++;
         }
 
