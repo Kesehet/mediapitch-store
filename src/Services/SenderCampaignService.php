@@ -411,9 +411,15 @@ final class SenderCampaignService
             $message = $e->getMessage();
             $this->repo->markBatchFailed($batchId, $message);
 
-            if ($providerCampaignId !== null) {
-                // The provider campaign exists and the send request may have reached Sender.
-                // Do not auto-retry the same recipients: pausing avoids duplicate marketing mail.
+            if ($e instanceof SenderApiException && $e->statusCode === 429) {
+                // HTTP 429 means Sender rejected the request before accepting the send.
+                // It is safe to return these recipients to the queue after Sender's cooldown.
+                $delay = $e->retryAfter ?? 900;
+                $this->repo->requeueMany($recipientIds, 'Sender rate limit: ' . $message, $delay);
+                $summary['retried'] += count($recipientIds);
+            } elseif ($providerCampaignId !== null) {
+                // For non-429 failures after a provider campaign exists, the send outcome
+                // can be ambiguous. Pause rather than risk duplicate marketing email.
                 $this->repo->markFailedMany($recipientIds, 'Campaign batch needs review: ' . $message);
                 $this->repo->setRunStatus($runId, 'paused', 'Batch needs review before retrying: ' . $message);
                 $summary['failed'] += count($recipientIds);
