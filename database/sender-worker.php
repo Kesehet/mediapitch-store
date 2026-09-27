@@ -2,55 +2,20 @@
 
 declare(strict_types=1);
 
-use MediaPitch\Repositories\SenderWorkerStateRepository;
-use MediaPitch\Services\SenderCampaignService;
-use MediaPitch\Services\SenderQueueService;
+use MediaPitch\Services\SenderWorkerService;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
-$workerState = new SenderWorkerStateRepository();
-$workerState->started();
-
 try {
-    $queue = new SenderQueueService();
-    $campaigns = new SenderCampaignService();
-    $requested = isset($argv[1]) ? max(1, min(100, (int)$argv[1])) : $queue->batchSize();
+    $requested = isset($argv[1]) ? max(1, min(100, (int)$argv[1])) : null;
+    $result = (new SenderWorkerService())->run($requested);
 
-    $transactional = $queue->process($requested);
-    $campaign = [
-        'examined' => 0,
-        'dispatched' => 0,
-        'blocked' => 0,
-        'retried' => 0,
-        'failed' => 0,
-        'batches' => 0,
-        'remaining_today' => (int)$transactional['remaining_today'],
-    ];
-
-    $transactionalUncertain = (int)($transactional['uncertain_processing'] ?? 0);
-    $senderCooling = !empty($transactional['sender_cooldown_until']);
-
-    if (
-        (int)$transactional['remaining_today'] > 0 &&
-        $transactionalUncertain === 0 &&
-        !$senderCooling
-    ) {
-        $campaign = $campaigns->processReadyRuns(
-            min($requested, (int)$transactional['remaining_today'])
-        );
-    }
-
-    $remainingToday = (int)$campaign['remaining_today'];
-    $workerState->succeeded($transactional, $campaign, $remainingToday);
-
-    fwrite(STDOUT, json_encode([
-        'transactional' => $transactional,
-        'campaigns' => $campaign,
-        'remaining_today' => $remainingToday,
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fwrite(
+        STDOUT,
+        json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL
+    );
     exit(0);
 } catch (Throwable $e) {
-    try { $workerState->failed($e->getMessage()); } catch (Throwable) {}
     fwrite(STDERR, 'Sender worker failed: ' . $e->getMessage() . PHP_EOL);
     exit(1);
 }

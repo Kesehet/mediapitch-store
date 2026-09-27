@@ -37,6 +37,7 @@ use MediaPitch\Repositories\SettingsRepository;
 use MediaPitch\Services\AffiliateClickFilter;
 use MediaPitch\Services\PasswordReset;
 use MediaPitch\Services\ProductCsv;
+use MediaPitch\Services\SenderWorkerService;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -57,6 +58,52 @@ $path = '/' . trim($path, '/');
 if ($path === '//') $path = '/';
 
 try {
+    if (in_array($method, ['GET','POST'], true) && $path === '/cron/sender-worker') {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Robots-Tag: noindex, nofollow, noarchive');
+
+        $expectedCronKey = trim((string)env('SENDER_CRON_KEY', ''));
+        if (strlen($expectedCronKey) < 24) {
+            http_response_code(503);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Sender web cron is not configured. Set SENDER_CRON_KEY to a random value of at least 24 characters.',
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $providedCronKey = trim((string)($_SERVER['HTTP_X_CRON_KEY'] ?? ''));
+        $authorization = trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+        if ($providedCronKey === '' && preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches)) {
+            $providedCronKey = trim((string)$matches[1]);
+        }
+        if ($providedCronKey === '') {
+            $providedCronKey = trim((string)($_GET['key'] ?? ''));
+        }
+
+        if ($providedCronKey === '' || !hash_equals($expectedCronKey, $providedCronKey)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Unauthorized.'], JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : null;
+
+        try {
+            $result = (new SenderWorkerService())->run($limit);
+            echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (Throwable $workerError) {
+            http_response_code(503);
+            echo json_encode([
+                'ok' => false,
+                'error' => substr($workerError->getMessage(), 0, 500),
+                'ran_at_utc' => gmdate('c'),
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     if (in_array($path,['/admin/forgot-password','/admin/reset-password'],true)) {
         $passwordResetAdmin = new PasswordResetAdminController(new PasswordReset());
         if ($passwordResetAdmin->handle($method, $path)) exit;
