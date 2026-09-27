@@ -527,7 +527,7 @@ $requestedTemplate=(string)($_GET['template']??'');
       <tr><th>List cleaner</th><td><code><?= e((string)env('EMAIL_VALIDATOR_API_URL','https://mediapitch.in/mail-list-cleaner/api.php')) ?></code></td></tr>
       <tr><th>Timezone used for daily cap</th><td><code><?= e((string)env('CONTENT_TIMEZONE','Asia/Kolkata')) ?></code></td></tr>
       <tr><th>CLI cron command</th><td><code>php database/sender-worker.php</code></td></tr>
-      <tr><th>Web cron route</th><td><code><?= e(url('cron/sender-worker')) ?></code><br><small>Requires <code>SENDER_CRON_KEY</code> via <code>X-Cron-Key</code>, Bearer token, or <code>?key=...</code>.</small></td></tr>
+      <tr><th>Web cron route</th><td><code><?= e(url('cron/sender-worker')) ?></code><br><small>Works directly when <code>SENDER_CRON_KEY</code> is blank. If a key is configured, send it via <code>X-Cron-Key</code>, Bearer token, or <code>?key=...</code>.</small></td></tr>
     </tbody>
   </table>
 

@@ -64,28 +64,25 @@ try {
         header('X-Robots-Tag: noindex, nofollow, noarchive');
 
         $expectedCronKey = trim((string)env('SENDER_CRON_KEY', ''));
-        if (strlen($expectedCronKey) < 24) {
-            http_response_code(503);
-            echo json_encode([
-                'ok' => false,
-                'error' => 'Sender web cron is not configured. Set SENDER_CRON_KEY to a random value of at least 24 characters.',
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            exit;
-        }
 
-        $providedCronKey = trim((string)($_SERVER['HTTP_X_CRON_KEY'] ?? ''));
-        $authorization = trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-        if ($providedCronKey === '' && preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches)) {
-            $providedCronKey = trim((string)$matches[1]);
-        }
-        if ($providedCronKey === '') {
-            $providedCronKey = trim((string)($_GET['key'] ?? ''));
-        }
+        // Authentication is optional for this operational route. Leaving
+        // SENDER_CRON_KEY blank makes the endpoint directly callable by
+        // services such as cron-job.org. If a key is configured, enforce it.
+        if ($expectedCronKey !== '') {
+            $providedCronKey = trim((string)($_SERVER['HTTP_X_CRON_KEY'] ?? ''));
+            $authorization = trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            if ($providedCronKey === '' && preg_match('/^Bearer\\s+(.+)$/i', $authorization, $matches)) {
+                $providedCronKey = trim((string)$matches[1]);
+            }
+            if ($providedCronKey === '') {
+                $providedCronKey = trim((string)($_GET['key'] ?? ''));
+            }
 
-        if ($providedCronKey === '' || !hash_equals($expectedCronKey, $providedCronKey)) {
-            http_response_code(401);
-            echo json_encode(['ok' => false, 'error' => 'Unauthorized.'], JSON_UNESCAPED_SLASHES);
-            exit;
+            if ($providedCronKey === '' || !hash_equals($expectedCronKey, $providedCronKey)) {
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Unauthorized.'], JSON_UNESCAPED_SLASHES);
+                exit;
+            }
         }
 
         $limit = isset($_GET['limit']) ? max(1, min(100, (int)$_GET['limit'])) : null;
