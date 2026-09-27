@@ -126,7 +126,19 @@ if ($method === 'POST') {
 
             $activity = (int)$result['dispatched'] + (int)$result['blocked'] + (int)$result['retried'] + (int)$result['failed'];
             if ($activity === 0) {
-                $detail = 'No new campaign recipient was dispatched on this pass.';
+                $failureReason = trim((string)($result['failure_reason'] ?? ''));
+                $runAfter = $campaignRepo->run($runId);
+                $runStatus = strtolower(trim((string)($runAfter['status'] ?? '')));
+                $runIssue = trim((string)($runAfter['last_error'] ?? ''));
+
+                if ($failureReason !== '') {
+                    $detail = 'Sender did not dispatch this batch: ' . $failureReason . '.';
+                } elseif ($runIssue !== '') {
+                    $detail = 'Sender did not dispatch this batch: ' . $runIssue . '.';
+                } else {
+                    $detail = 'No new campaign recipient was dispatched on this pass.';
+                }
+
                 if ((int)($result['reconciled_sent'] ?? 0) > 0) {
                     $detail .= ' Recovered ' . (int)$result['reconciled_sent'] . ' recipient(s) already accepted by Sender after an interrupted worker; they were not resent.';
                 }
@@ -137,7 +149,7 @@ if ($method === 'POST') {
                     $detail .= ' Recovered ' . (int)$result['recovered_stale'] . ' stale processing row(s).';
                 }
                 if ((int)($result['queued_waiting'] ?? 0) > 0) {
-                    $detail .= ' ' . (int)$result['queued_waiting'] . ' recipient(s) are waiting for cleaner retry';
+                    $detail .= ' ' . (int)$result['queued_waiting'] . ' recipient(s) are waiting for retry';
                     if (!empty($result['next_retry_at'])) {
                         $detail .= ' at ' . (string)$result['next_retry_at'] . ' UTC';
                     }
@@ -147,12 +159,14 @@ if ($method === 'POST') {
                     $detail .= ' ' . (int)$result['processing'] . ' recipient(s) are still marked processing.';
                 }
                 if ((int)($result['api_deferred'] ?? 0) > 0) {
-                    $detail .= ' ' . (int)$result['api_deferred'] . ' recipient(s) were deferred to preserve Sender API request budget.';
+                    $detail .= ' ' . (int)$result['api_deferred'] . ' recipient(s) were deferred until Sender refreshes its per-minute API request budget.';
                 }
                 if (!empty($result['sender_cooldown_until'])) {
                     $detail .= ' Sender API cooldown is active until ' . (string)$result['sender_cooldown_until'] . ' UTC.';
-                } elseif ((int)($result['queued_ready'] ?? 0) > 0) {
-                    $detail .= ' ' . (int)$result['queued_ready'] . ' recipient(s) are ready; retry processing.';
+                } elseif ($runStatus === 'paused') {
+                    $detail .= ' The campaign queue is paused so it will not burn requests by blindly retrying. Fix the issue shown above, then resume it.';
+                } elseif ($failureReason === '' && $runIssue === '' && (int)($result['queued_ready'] ?? 0) > 0) {
+                    $detail .= ' ' . (int)$result['queued_ready'] . ' recipient(s) are ready for the next worker pass.';
                 }
                 $redirect($detail, 'campaigns', true);
             }
