@@ -33,6 +33,7 @@ $apiLimit = isset($senderApiStatus['rate_limit_limit']) && $senderApiStatus['rat
 $apiResetAt = trim((string)($senderApiStatus['rate_limit_reset_at'] ?? ''));
 $apiLastStatus = (int)($senderApiStatus['last_status'] ?? 0);
 $apiLastError = trim((string)($senderApiStatus['last_error'] ?? ''));
+$campaignApiBudgetTooLow = $apiRemaining !== null && $apiRemaining < 4;
 $workerLastSuccess = trim((string)($senderWorkerStatus['last_success_at'] ?? ''));
 $workerLastError = trim((string)($senderWorkerStatus['last_error'] ?? ''));
 $workerLastSuccessTs = $workerLastSuccess !== '' ? strtotime($workerLastSuccess . ' UTC') : false;
@@ -53,7 +54,7 @@ $workerLooksStale = $hasPendingSenderWork && ($workerAgeSeconds===null || $worke
       <div><strong>Sender:</strong> <?= !$providerConfigured ? 'Not configured' : ($senderApiCooling ? 'API cooling down' : ($providerError ? 'Connection error' : 'Connected')) ?></div>
       <div class="muted" style="font-size:13px">Daily cap: <?= number_format($dailyLimit) ?> · Remaining today: <?= number_format($remainingToday) ?></div>
       <?php if($apiRemaining!==null): ?>
-        <div class="muted" style="font-size:12px">API requests: <?= number_format($apiRemaining) ?><?= $apiLimit!==null?' / '.number_format($apiLimit):'' ?> remaining<?= $apiResetAt!==''?' · reset '.$apiResetAt.' UTC':'' ?></div>
+        <div class="muted" style="font-size:12px">Sender API minute budget: <?= number_format($apiRemaining) ?><?= $apiLimit!==null?' / '.number_format($apiLimit):'' ?> remaining<?= $apiResetAt!==''?' · resets '.$apiResetAt.' UTC':'' ?></div>
       <?php endif; ?>
       <div class="muted" style="font-size:12px">
         Worker:
@@ -78,8 +79,14 @@ $workerLooksStale = $hasPendingSenderWork && ($workerAgeSeconds===null || $worke
   <div class="flash error" style="margin-bottom:18px">Last Sender worker error: <?= e($workerLastError) ?></div>
 <?php elseif($workerLooksStale): ?>
   <div class="flash" style="margin-bottom:18px">
-    Sender has pending work, but no successful worker heartbeat has been recorded in the last 2 hours.
-    Check the Hostinger cron for <code>php database/sender-worker.php</code>; you can still use the manual process buttons below.
+    Automatic Sender processing is not running: pending work exists, but no successful worker heartbeat has been recorded in the last 2 hours.
+    The Hostinger cron must run <code>php database/sender-worker.php</code>. Manual process buttons still work, but automatic daily continuation will not happen until that cron is active.
+  </div>
+<?php endif; ?>
+
+<?php if($campaignApiBudgetTooLow && !$senderApiCooling): ?>
+  <div class="flash" style="margin-bottom:18px">
+    Sender has only <?= number_format((int)$apiRemaining) ?> API request(s) left in the current minute. A marketing batch needs at least 4 provider calls, so MediaPitch will wait for the reset<?= $apiResetAt!==''?' at '.e($apiResetAt).' UTC':'' ?> instead of wasting the remaining requests. This is separate from the <?= number_format($dailyLimit) ?>-email daily send cap.
   </div>
 <?php endif; ?>
 
@@ -262,7 +269,7 @@ $workerLooksStale = $hasPendingSenderWork && ($workerAgeSeconds===null || $worke
                 <form method="post" action="<?= e(url('admin/sender/action')) ?>">
                   <?= Csrf::field() ?><input type="hidden" name="action" value="process_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>">
                   <input type="hidden" name="limit" value="<?= max(1,min(50,(int)($campaignStats['remaining_today']??50))) ?>">
-                  <button class="button" <?= (int)($campaignStats['remaining_today']??0)<1||$senderApiCooling?'disabled':'' ?>>Send today's batch</button>
+                  <button class="button" <?= (int)($campaignStats['remaining_today']??0)<1||$senderApiCooling||$campaignApiBudgetTooLow?'disabled':'' ?>>Send today's batch</button>
                 </form>
                 <form method="post" action="<?= e(url('admin/sender/action')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="pause_campaign"><input type="hidden" name="tab" value="campaigns"><input type="hidden" name="run_id" value="<?= (int)$run['id'] ?>"><button class="button secondary">Pause</button></form>
               <?php elseif($runStatus==='paused'&&$remaining>0): ?>
