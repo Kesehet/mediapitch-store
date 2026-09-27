@@ -195,6 +195,7 @@ final class SenderCampaignService
             'api_deferred' => 0,
             'reconciled_sent' => 0,
             'uncertain_batches' => 0,
+            'failure_reason' => null,
         ];
 
         try {
@@ -218,6 +219,9 @@ final class SenderCampaignService
                 $summary['api_deferred'] += (int)$result['api_deferred'];
                 $summary['reconciled_sent'] += (int)$result['reconciled_sent'];
                 $summary['uncertain_batches'] += (int)$result['uncertain_batches'];
+                if (!empty($result['failure_reason'])) {
+                    $summary['failure_reason'] = (string)$result['failure_reason'];
+                }
                 $remainingRequest = max(0, $remainingRequest - (int)$result['dispatched']);
 
                 // Do not move to another campaign while the previous provider outcome is
@@ -301,6 +305,7 @@ final class SenderCampaignService
             'api_deferred' => 0,
             'reconciled_sent' => 0,
             'uncertain_batches' => 0,
+            'failure_reason' => null,
         ];
 
         if ($target < 1) return $summary;
@@ -572,19 +577,27 @@ final class SenderCampaignService
                 foreach ($ready as $row) $byEmail[strtolower((string)$row['recipient_email'])] = $row;
 
                 $knownSenderPresence = $this->subscriberCache->presenceMap($missing);
+                $providerRejected = [];
+
                 foreach ($missing as $email) {
-                    // If our last complete Sender snapshot knew this subscriber but the
-                    // live API now says they do not exist, do not silently recreate them.
-                    // A provider-side unsubscribe/removal may have occurred since the
-                    // snapshot; require a fresh audience sync first.
+                    $row = $byEmail[$email] ?? [];
+                    $rowId = (int)($row['id'] ?? 0);
+
+                    // A subscriber that existed in our last complete Sender snapshot but
+                    // is now absent may have been removed or unsubscribed provider-side.
+                    // Suppress only that recipient; do not pause the other clean recipients.
                     if (!empty($knownSenderPresence[$email])) {
-                        throw new SenderApiException(
-                            'Subscriber ' . $email . ' was present in the cached Sender audience but is now missing. Refresh the Sender subscriber snapshot before sending to avoid an accidental re-subscribe.',
-                            422
-                        );
+                        if ($rowId > 0) {
+                            $this->repo->markBlocked(
+                                $rowId,
+                                'Sender no longer contains this previously synced subscriber; suppressed to avoid an accidental re-subscribe.'
+                            );
+                            $summary['blocked']++;
+                        }
+                        $providerRejected[$email] = true;
+                        continue;
                     }
 
-                    $row = $byEmail[$email] ?? [];
                     try {
                         $this->sender->createSubscriber(
                             $email,
@@ -593,18 +606,64 @@ final class SenderCampaignService
                             false
                         );
                     } catch (SenderApiException $e) {
-                        // 409 means the subscriber already exists, which is harmless.
-                        // A 422 is a real validation/business error and must pause the run.
-                        if ($e->statusCode !== 409) throw $e;
+                        // 409 means Sender already has the subscriber, so the group retry
+                        // below can safely attach it. A recipient-specific 422 should not
+                        // kill the whole campaign batch: suppress that address and continue.
+                        if ($e->statusCode === 409) {
+                            continue;
+                        }
+                        if ($e->statusCode === 422) {
+                            if ($rowId > 0) {
+                                $this->repo->markBlocked(
+                                    $rowId,
+                                    'Sender rejected this subscriber: ' . $e->getMessage()
+                                );
+                                $summary['blocked']++;
+                            }
+                            $providerRejected[$email] = true;
+                            continue;
+                        }
+                        throw $e;
                     }
                 }
 
-                $retryGroup = $this->sender->addSubscribersToGroup($groupId, $missing, false);
-                $stillMissing = $this->extractMissingSubscribers($retryGroup);
-                if ($stillMissing !== []) {
-                    throw new SenderApiException(
-                        'Sender could not create or attach ' . count($stillMissing) . ' campaign recipient(s).'
-                    );
+                if ($providerRejected !== []) {
+                    $ready = array_values(array_filter(
+                        $ready,
+                        static fn(array $row): bool => !isset($providerRejected[strtolower(trim((string)($row['recipient_email'] ?? '')))])
+                    ));
+                    $missing = array_values(array_filter(
+                        $missing,
+                        static fn(string $email): bool => !isset($providerRejected[strtolower(trim($email))])
+                    ));
+                    $recipientIds = array_map(static fn(array $row): int => (int)$row['id'], $ready);
+                    $emails = array_values(array_unique(array_map(
+                        static fn(array $row): string => strtolower(trim((string)$row['recipient_email'])),
+                        $ready
+                    )));
+                    $this->repo->setBatchRecipientCount($batchId, count($emails));
+                }
+
+                if ($ready === []) {
+                    $this->repo->markBatchFailed($batchId, 'No recipients remained after Sender subscriber checks.');
+                    $this->repo->refreshRunStats($runId);
+                    $state = $this->repo->recipientState($runId);
+                    $summary['queued_ready'] = $state['queued_ready'];
+                    $summary['queued_waiting'] = $state['queued_waiting'];
+                    $summary['processing'] = $state['processing'];
+                    $summary['next_retry_at'] = $state['next_retry_at'];
+                    $summary['remaining_today'] = $this->remainingToday();
+                    return $summary;
+                }
+
+                if ($missing !== []) {
+                    $retryGroup = $this->sender->addSubscribersToGroup($groupId, $missing, false);
+                    $stillMissing = $this->extractMissingSubscribers($retryGroup);
+                    if ($stillMissing !== []) {
+                        throw new SenderApiException(
+                            'Sender could not create or attach ' . count($stillMissing) . ' campaign recipient(s).'
+                        );
+                    }
                 }
             }
 
@@ -644,6 +703,7 @@ final class SenderCampaignService
             return $summary;
         } catch (\Throwable $e) {
             $message = $e->getMessage();
+            $summary['failure_reason'] = $message;
 
             if ($e instanceof SenderApiException && $e->statusCode === 429) {
                 // A 429 explicitly rejects this request. The provider has not accepted
@@ -800,48 +860,18 @@ final class SenderCampaignService
             ? max(0, (int)$api['rate_limit_remaining'])
             : null;
 
-        if ($remaining === null) {
-            return ['selected' => $ready, 'deferred' => [], 'api_remaining' => null];
+        // Do not guess how many recipients are missing from Sender by using the
+        // cached subscriber snapshot. The cache can be hours old and previously
+        // caused perfectly sendable batches to be deferred. A marketing batch
+        // always needs at least four provider calls: create group, attach existing
+        // subscribers, create campaign, start campaign. After the live group call
+        // Sender tells us the exact missing-subscriber set; that exact set is then
+        // trimmed to the remaining request budget below.
+        if ($remaining === null || $remaining >= 4) {
+            return ['selected' => $ready, 'deferred' => [], 'api_remaining' => $remaining];
         }
 
-        // Reserve one request so normal admin/status work is not forced straight
-        // into a provider 429. A campaign batch itself needs four API requests:
-        // create group, add group members, create campaign, start campaign.
-        $usable = max(0, $remaining - 1);
-        if ($usable < 4) {
-            return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
-        }
-
-        $emails = array_values(array_unique(array_map(
-            static fn(array $row): string => strtolower(trim((string)($row['recipient_email'] ?? ''))),
-            $ready
-        )));
-        $presence = $this->subscriberCache->presenceMap($emails);
-
-        $existing = [];
-        $missing = [];
-        foreach ($ready as $row) {
-            $email = strtolower(trim((string)($row['recipient_email'] ?? '')));
-            if (!empty($presence[$email])) $existing[] = $row;
-            else $missing[] = $row;
-        }
-
-        $selected = $existing;
-        $deferred = [];
-        $missingAllowance = max(0, $usable - 5); // extra add-to-group retry + one create per missing subscriber
-
-        foreach ($missing as $index => $row) {
-            if ($index < $missingAllowance) $selected[] = $row;
-            else $deferred[] = $row;
-        }
-
-        // If no cached-existing recipients and there is not enough budget for at
-        // least one missing subscriber, defer the whole batch.
-        if ($selected === [] && $missing !== []) {
-            return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
-        }
-
-        return ['selected' => $selected, 'deferred' => $deferred, 'api_remaining' => $remaining];
+        return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
     }
 
     private function senderApiRetryDelay(): int
