@@ -34,9 +34,14 @@ use MediaPitch\Repositories\RelatedContentRepository;
 use MediaPitch\Repositories\ReviewRepository;
 use MediaPitch\Repositories\SearchRepository;
 use MediaPitch\Repositories\SettingsRepository;
+use MediaPitch\Repositories\SenderCampaignRepository;
+use MediaPitch\Repositories\SenderQueueRepository;
+use MediaPitch\Repositories\SenderWorkerStateRepository;
 use MediaPitch\Services\AffiliateClickFilter;
 use MediaPitch\Services\PasswordReset;
 use MediaPitch\Services\ProductCsv;
+use MediaPitch\Services\SenderCampaignService;
+use MediaPitch\Services\SenderQueueService;
 use MediaPitch\Services\SenderWorkerService;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -58,6 +63,95 @@ $path = '/' . trim($path, '/');
 if ($path === '//') $path = '/';
 
 try {
+    if ($method === 'GET' && $path === '/cron/sender-status') {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Robots-Tag: noindex, nofollow, noarchive');
+
+        try {
+            $queueService = new SenderQueueService();
+            $campaignService = new SenderCampaignService();
+            $queueRepo = new SenderQueueRepository();
+            $workerState = (new SenderWorkerStateRepository())->state();
+
+            $queueStats = $queueService->stats();
+            $campaignStats = $campaignService->stats();
+            $recentTransactional = $queueRepo->recent('sent', 1);
+            $lastTransactionalSentAt = !empty($recentTransactional[0]['sent_at'])
+                ? (string)$recentTransactional[0]['sent_at']
+                : null;
+
+            $latestCampaignSentAt = Database::connection()->query(
+                "SELECT MAX(sent_at) FROM sender_campaign_batches WHERE status='sent'"
+            )->fetchColumn();
+            $lastCampaignSentAt = $latestCampaignSentAt !== false && $latestCampaignSentAt !== null
+                ? (string)$latestCampaignSentAt
+                : null;
+
+            $lastSuccessAt = trim((string)($workerState['last_success_at'] ?? ''));
+            $lastSuccessTs = $lastSuccessAt !== '' ? strtotime($lastSuccessAt . ' UTC') : false;
+            $heartbeatAge = $lastSuccessTs !== false ? max(0, time() - $lastSuccessTs) : null;
+            $heartbeatStatus = $lastSuccessTs === false
+                ? 'never_run'
+                : ($heartbeatAge <= 7200 ? 'healthy' : 'stale');
+
+            $pendingWork =
+                (int)($queueStats['queued'] ?? 0) +
+                (int)($queueStats['processing'] ?? 0) +
+                (int)($campaignStats['active_runs'] ?? 0);
+
+            echo json_encode([
+                'ok' => true,
+                'checked_at_utc' => gmdate('c'),
+                'heartbeat' => [
+                    'status' => $heartbeatStatus,
+                    'age_seconds' => $heartbeatAge,
+                    'last_started_at' => $workerState['last_started_at'] ?? null,
+                    'last_completed_at' => $workerState['last_completed_at'] ?? null,
+                    'last_success_at' => $workerState['last_success_at'] ?? null,
+                    'last_error' => $workerState['last_error'] ?? null,
+                    'last_transactional_sent' => (int)($workerState['last_transactional_sent'] ?? 0),
+                    'last_campaign_dispatched' => (int)($workerState['last_campaign_dispatched'] ?? 0),
+                ],
+                'today' => [
+                    'local_date' => (string)($queueStats['local_date'] ?? ''),
+                    'sent_total' => (int)($queueStats['sent_today'] ?? 0),
+                    'transactional_sent' => (int)($queueStats['transactional_sent_today'] ?? 0),
+                    'campaign_sent' => (int)($queueStats['campaign_sent_today'] ?? 0),
+                    'remaining' => (int)($queueStats['remaining_today'] ?? 0),
+                    'daily_limit' => (int)($queueStats['daily_limit'] ?? 0),
+                ],
+                'queue' => [
+                    'queued' => (int)($queueStats['queued'] ?? 0),
+                    'processing' => (int)($queueStats['processing'] ?? 0),
+                    'blocked' => (int)($queueStats['blocked'] ?? 0),
+                    'failed' => (int)($queueStats['failed'] ?? 0),
+                    'sent_total' => (int)($queueStats['sent_total'] ?? 0),
+                ],
+                'campaigns' => [
+                    'active_runs' => (int)($campaignStats['active_runs'] ?? 0),
+                    'paused_runs' => (int)($campaignStats['paused_runs'] ?? 0),
+                    'completed_runs' => (int)($campaignStats['completed_runs'] ?? 0),
+                    'dispatched_total' => (int)($campaignStats['dispatched'] ?? 0),
+                    'failed_total' => (int)($campaignStats['failed'] ?? 0),
+                ],
+                'last_send_at_utc' => [
+                    'transactional' => $lastTransactionalSentAt,
+                    'campaign' => $lastCampaignSentAt,
+                ],
+                'pending_work' => $pendingWork,
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (Throwable $statusError) {
+            http_response_code(503);
+            echo json_encode([
+                'ok' => false,
+                'error' => substr($statusError->getMessage(), 0, 500),
+                'checked_at_utc' => gmdate('c'),
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     if (in_array($method, ['GET','POST'], true) && $path === '/cron/sender-worker') {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
