@@ -257,6 +257,18 @@ final class SenderClient
         return $row;
     }
 
+    /** @return array<string,mixed> */
+    public function groupDetails(string $groupId): array
+    {
+        $groupId = $this->cleanId($groupId);
+        $response = $this->request('GET', '/groups/' . rawurlencode($groupId));
+        $row = $response['data'] ?? null;
+        if (!is_array($row)) {
+            throw new SenderApiException('Sender returned an unreadable group response.');
+        }
+        return $row;
+    }
+
     public function createGroup(string $title): string
     {
         $title = trim($title);
