@@ -1,0 +1,28 @@
+name: Sender production status probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sender-production-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read Sender production status
+        shell: bash
+        run: |
+          set -u
+          url="https://store.mediapitch.in/cron/sender-status"
+          for attempt in $(seq 1 12); do
+            echo "Attempt $attempt"
+            if body=$(curl --fail --silent --show-error --location --connect-timeout 10 --max-time 20 "$url"); then
+              echo "$body"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production status endpoint was not reachable after retries." >&2
+          exit 1
