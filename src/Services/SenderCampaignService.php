@@ -353,6 +353,7 @@ final class SenderCampaignService
         }
 
         $summary['recovered_stale'] = $this->repo->recoverStaleProcessing($runId);
+        $this->repo->releaseAudiencePropagationRetries($runId);
         $state = $this->repo->recipientState($runId);
         $summary['queued_ready'] = $state['queued_ready'];
         $summary['queued_waiting'] = $state['queued_waiting'];
@@ -478,29 +479,74 @@ final class SenderCampaignService
 
         $ready = $selectedReady;
 
-        $batchNo = $this->repo->nextBatchNo($runId);
-        $groupTitle = sprintf(
-            'MediaPitch batch %d-%d %s',
-            $runId,
-            $batchNo,
-            $this->dailyWindow()['date']
-        );
+        $reuseBatch = null;
+        $priorBatchId = (int)($ready[0]['batch_id'] ?? 0);
+        if ($priorBatchId > 0) {
+            $candidateBatch = $this->repo->batch($priorBatchId);
+            if (
+                is_array($candidateBatch) &&
+                (int)($candidateBatch['run_id'] ?? 0) === $runId &&
+                (string)($candidateBatch['status'] ?? '') === 'failed' &&
+                trim((string)($candidateBatch['provider_group_id'] ?? '')) !== ''
+            ) {
+                $reuseBatch = $candidateBatch;
+            }
+        }
+
+        if ($reuseBatch !== null) {
+            $reuseBatchId = (int)$reuseBatch['id'];
+            $sameBatch = [];
+            $otherReady = [];
+            foreach ($ready as $row) {
+                if ((int)($row['batch_id'] ?? 0) === $reuseBatchId) $sameBatch[] = $row;
+                else $otherReady[] = $row;
+            }
+            if ($otherReady !== []) {
+                $this->repo->returnToQueueMany(
+                    array_map(static fn(array $row): int => (int)$row['id'], $otherReady),
+                    'Deferred while a propagated Sender group is resumed.'
+                );
+            }
+            $ready = $sameBatch;
+        }
+
         $recipientIds = array_map(static fn(array $row): int => (int)$row['id'], $ready);
         $emails = array_values(array_unique(array_map(
             static fn(array $row): string => strtolower(trim((string)$row['recipient_email'])),
             $ready
         )));
-        $batchId = $this->repo->createBatch($runId, $batchNo, $groupTitle, count($emails));
-        $this->repo->attachRecipientsToBatch($batchId, $recipientIds);
+
+        if ($reuseBatch !== null) {
+            $batchId = (int)$reuseBatch['id'];
+            $batchNo = (int)$reuseBatch['batch_no'];
+            $groupTitle = (string)$reuseBatch['group_title'];
+            $groupId = trim((string)$reuseBatch['provider_group_id']);
+            $this->repo->reopenBatch($batchId, count($emails));
+        } else {
+            $batchNo = $this->repo->nextBatchNo($runId);
+            $groupTitle = sprintf(
+                'MediaPitch batch %d-%d %s',
+                $runId,
+                $batchNo,
+                $this->dailyWindow()['date']
+            );
+            $batchId = $this->repo->createBatch($runId, $batchNo, $groupTitle, count($emails));
+            $this->repo->attachRecipientsToBatch($batchId, $recipientIds);
+            $groupId = '';
+        }
+
         $providerCampaignId = null;
         $sendAttempted = false;
 
         try {
-            $groupId = $this->sender->createGroup($groupTitle);
-            $this->repo->setBatchGroup($batchId, $groupId);
+            $missing = [];
+            if ($reuseBatch === null) {
+                $groupId = $this->sender->createGroup($groupTitle);
+                $this->repo->setBatchGroup($batchId, $groupId);
 
-            $groupResult = $this->sender->addSubscribersToGroup($groupId, $emails, false);
-            $missing = $this->extractMissingSubscribers($groupResult);
+                $groupResult = $this->sender->addSubscribersToGroup($groupId, $emails, false);
+                $missing = $this->extractMissingSubscribers($groupResult);
+            }
 
             // Now that Sender has answered the live group-membership call, we know
             // both the real missing-subscriber set and the provider's latest request
@@ -757,7 +803,8 @@ final class SenderCampaignService
                 $this->repo->markBatchFailed($batchId, $message);
                 $delay = $e instanceof SenderApiException && $e->retryAfter
                     ? $e->retryAfter
-                    : 900;
+                    : (str_contains($message, 'audience is still recalculating') ||
+                       str_contains($message, 'audience is still being prepared') ? 30 : 900);
                 $this->repo->requeueMany($recipientIds, $message, $delay);
                 $summary['retried'] += count($recipientIds);
             }
