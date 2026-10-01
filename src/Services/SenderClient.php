@@ -198,7 +198,7 @@ final class SenderClient
         );
         if (array_key_exists('success', $response) && $response['success'] === false) {
             throw new SenderApiException(
-                trim((string)($response['message'] ?? 'Sender rejected the message.')),
+                $this->senderMessage($response, 'Sender rejected the message.'),
                 422
             );
         }
@@ -298,7 +298,7 @@ final class SenderClient
             ]
         );
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the group update.')), 422);
+            throw new SenderApiException($this->senderMessage($response, 'Sender rejected the group update.'), 422);
         }
         return $response;
     }
@@ -328,7 +328,7 @@ final class SenderClient
 
         $response = $this->request('POST', '/subscribers', $payload);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the subscriber.')), 422);
+            throw new SenderApiException($this->senderMessage($response, 'Sender rejected the subscriber.'), 422);
         }
         return $response;
     }
@@ -347,7 +347,7 @@ final class SenderClient
 
         $response = $this->request('POST', '/campaigns', $payload);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign.')), 422);
+            throw new SenderApiException($this->senderMessage($response, 'Sender rejected the campaign.'), 422);
         }
         return $response;
     }
@@ -358,7 +358,7 @@ final class SenderClient
         $campaignId = $this->cleanId($campaignId);
         $response = $this->request('POST', '/campaigns/' . rawurlencode($campaignId) . '/send', []);
         if (array_key_exists('success', $response) && $response['success'] === false) {
-            throw new SenderApiException(trim((string)($response['message'] ?? 'Sender rejected the campaign send.')), 422);
+            throw new SenderApiException($this->senderMessage($response, 'Sender rejected the campaign send.'), 422);
         }
         return $response;
     }
@@ -463,10 +463,10 @@ final class SenderClient
         }
 
         if ($status < 200 || $status >= 300) {
-            $message = trim((string)($decoded['message'] ?? $decoded['error'] ?? ''));
-            if ($message === '') {
-                $message = 'Sender API returned HTTP ' . $status . '.';
-            }
+            $message = $this->senderMessage(
+                $decoded,
+                'Sender API returned HTTP ' . $status . '.'
+            );
 
             $this->apiState->recordResponse($status, $responseHeaders, $message);
             throw new SenderApiException(
@@ -529,6 +529,43 @@ final class SenderClient
         $payload['_sender_cache_age_seconds'] = (int)$meta['age_seconds'];
         $payload['_sender_cache_synced_at'] = (string)$meta['synced_at'];
         return $payload;
+    }
+
+    /** @param array<string,mixed> $response */
+    private function senderMessage(array $response, string $fallback): string
+    {
+        foreach (['message','error','errors','detail','description'] as $key) {
+            if (!array_key_exists($key, $response)) continue;
+            $message = $this->flattenMessage($response[$key]);
+            if ($message !== '') return substr($message, 0, 500);
+        }
+
+        $message = $this->flattenMessage($response);
+        return $message !== '' ? substr($message, 0, 500) : $fallback;
+    }
+
+    private function flattenMessage(mixed $value): string
+    {
+        if ($value === null) return '';
+        if (is_string($value)) return trim($value);
+        if (is_int($value) || is_float($value) || is_bool($value)) {
+            return trim((string)$value);
+        }
+        if (!is_array($value)) return '';
+
+        $parts = [];
+        foreach ($value as $key => $item) {
+            $text = $this->flattenMessage($item);
+            if ($text === '') continue;
+
+            if (is_string($key) && $key !== '' && !ctype_digit($key)) {
+                $parts[] = $key . ': ' . $text;
+            } else {
+                $parts[] = $text;
+            }
+        }
+
+        return implode('; ', array_values(array_unique($parts)));
     }
 
     /** @param array<string,string> $headers */
