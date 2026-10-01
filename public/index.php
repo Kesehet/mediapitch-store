@@ -64,7 +64,7 @@ $path = '/' . trim($path, '/');
 if ($path === '//') $path = '/';
 
 try {
-    if ($method === 'GET' && $path === '/cron/sender-status') {
+    if ($method === 'GET' && in_array($path, ['/cron/sender-status','/cron/sender-details'], true)) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
         header('X-Robots-Tag: noindex, nofollow, noarchive');
@@ -111,7 +111,7 @@ try {
                 : null;
 
             $providerDiagnostics = null;
-            if ((string)($_GET['provider'] ?? '') === '1') {
+            if ($path === '/cron/sender-details') {
                 $batch = Database::connection()->query(
                     "SELECT id,provider_group_id,provider_campaign_id,status,last_error,created_at,updated_at
                      FROM sender_campaign_batches ORDER BY id DESC LIMIT 1"

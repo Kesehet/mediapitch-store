@@ -15,7 +15,7 @@ jobs:
         shell: bash
         run: |
           set -u
-          url="https://store.mediapitch.in/cron/sender-status?provider=1"
+          url="https://store.mediapitch.in/cron/sender-details"
           for attempt in $(seq 1 12); do
             echo "Attempt $attempt"
             if body=$(curl --fail --silent --show-error --location --connect-timeout 10 --max-time 20 "$url"); then
