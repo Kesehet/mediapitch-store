@@ -24,3 +24,4 @@ jobs:
           echo
 # controlled retry with endpoint-aware errors
 # retry after preserving local batch insert id
+# retry after payload-specific 403 cooldown fix
