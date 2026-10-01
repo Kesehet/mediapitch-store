@@ -27,3 +27,4 @@ jobs:
           echo "Production status endpoint was not reachable after retries." >&2
           exit 1
 # diagnostics revision 2
+# inspect provider-backed batch trail
