@@ -198,6 +198,25 @@ final class SenderCampaignRepository
         return Database::connection()->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function recoverLegacyArrayErrorPausedRuns(): int
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_runs
+             SET status='active',last_error=NULL
+             WHERE status='paused'
+               AND auto_continue=1
+               AND last_error='Sender requires attention: Array'
+               AND EXISTS (
+                   SELECT 1 FROM sender_campaign_recipients r
+                   WHERE r.run_id=sender_campaign_runs.id
+                     AND r.status='queued'
+               )"
+        );
+        $stmt->execute();
+        return $stmt->rowCount();
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function activeRuns(): array
     {
