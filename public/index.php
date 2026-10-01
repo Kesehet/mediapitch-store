@@ -41,6 +41,7 @@ use MediaPitch\Services\AffiliateClickFilter;
 use MediaPitch\Services\PasswordReset;
 use MediaPitch\Services\ProductCsv;
 use MediaPitch\Services\SenderCampaignService;
+use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
 use MediaPitch\Services\SenderWorkerService;
 
@@ -109,6 +110,64 @@ try {
                 ? (string)$latestCampaignSentAt
                 : null;
 
+            $providerDiagnostics = null;
+            if ((string)($_GET['provider'] ?? '') === '1') {
+                $batch = Database::connection()->query(
+                    "SELECT id,provider_group_id,provider_campaign_id,status,last_error,created_at,updated_at
+                     FROM sender_campaign_batches ORDER BY id DESC LIMIT 1"
+                )->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                $providerDiagnostics = [
+                    'batch' => [
+                        'id' => (int)($batch['id'] ?? 0),
+                        'status' => (string)($batch['status'] ?? ''),
+                        'provider_group_id' => $batch['provider_group_id'] ?? null,
+                        'provider_campaign_id' => $batch['provider_campaign_id'] ?? null,
+                        'last_error' => $batch['last_error'] ?? null,
+                    ],
+                    'group' => null,
+                    'campaign' => null,
+                    'error' => null,
+                ];
+
+                try {
+                    $senderDiagnostic = new SenderClient();
+                    $groupId = trim((string)($batch['provider_group_id'] ?? ''));
+                    $campaignId = trim((string)($batch['provider_campaign_id'] ?? ''));
+
+                    if ($groupId !== '') {
+                        $group = $senderDiagnostic->groupDetails($groupId);
+                        $providerDiagnostics['group'] = [
+                            'id' => $group['id'] ?? null,
+                            'title' => $group['title'] ?? null,
+                            'recipient_count' => (int)($group['recipient_count'] ?? 0),
+                            'active_subscribers' => (int)($group['active_subscribers'] ?? 0),
+                            'unsubscribed_count' => (int)($group['unsubscribed_count'] ?? 0),
+                            'bounced_count' => (int)($group['bounced_count'] ?? 0),
+                            'is_recalculating_subscribers' => !empty($group['is_recalculating_subscribers']),
+                        ];
+                    }
+
+                    if ($campaignId !== '') {
+                        $campaign = $senderDiagnostic->campaignLive($campaignId);
+                        $providerDiagnostics['campaign'] = [
+                            'id' => $campaign['id'] ?? null,
+                            'status' => $campaign['status'] ?? null,
+                            'recipient_count' => $campaign['recipient_count'] ?? null,
+                            'sent_count' => (int)($campaign['sent_count'] ?? 0),
+                            'campaign_groups' => is_array($campaign['campaign_groups'] ?? null)
+                                ? array_values($campaign['campaign_groups'])
+                                : [],
+                            'segments' => is_array($campaign['segments'] ?? null)
+                                ? array_values($campaign['segments'])
+                                : [],
+                        ];
+                    }
+                } catch (Throwable $providerError) {
+                    $providerDiagnostics['error'] = substr($providerError->getMessage(), 0, 500);
+                }
+            }
+
             $lastSuccessAt = trim((string)($workerState['last_success_at'] ?? ''));
             $lastSuccessTs = $lastSuccessAt !== '' ? strtotime($lastSuccessAt . ' UTC') : false;
             $heartbeatAge = $lastSuccessTs !== false ? max(0, time() - $lastSuccessTs) : null;
@@ -161,6 +220,7 @@ try {
                     'transactional' => $lastTransactionalSentAt,
                     'campaign' => $lastCampaignSentAt,
                 ],
+                'provider_diagnostics' => $providerDiagnostics,
                 'pending_work' => $pendingWork,
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (Throwable $statusError) {
