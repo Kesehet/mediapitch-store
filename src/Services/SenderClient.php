@@ -475,16 +475,18 @@ final class SenderClient
         }
 
         if ($status < 200 || $status >= 300) {
-            $message = $this->senderMessage(
+            $providerMessage = $this->senderMessage(
                 $decoded,
                 'Sender API returned HTTP ' . $status . '.'
             );
+            $message = 'Sender ' . strtoupper($method) . ' ' . $path .
+                ' returned HTTP ' . $status . ': ' . $providerMessage;
 
             $this->apiState->recordResponse($status, $responseHeaders, $message);
             throw new SenderApiException(
                 substr($message, 0, 500),
                 $status,
-                $this->retryAfterSeconds($responseHeaders, $message)
+                $this->retryAfterSeconds($responseHeaders, $providerMessage)
             );
         }
 
