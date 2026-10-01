@@ -202,6 +202,12 @@ final class SenderCampaignService
             $requested = max(1, min(100, $requested));
             $remainingRequest = min($requested, $summary['remaining_today']);
 
+            // One-time-compatible self-heal for campaigns paused by the legacy
+            // structured-error parser, which reduced Sender's error body to "Array".
+            // Any genuine provider rejection will be parsed correctly on this pass and
+            // can pause the run again with an actionable message.
+            $this->repo->recoverLegacyArrayErrorPausedRuns();
+
             foreach ($this->repo->activeRuns() as $run) {
                 if ($remainingRequest < 1 || $summary['remaining_today'] < 1) break;
                 $result = $this->processRunUnlocked((int)$run['id'], $remainingRequest);
