@@ -23,3 +23,4 @@ jobs:
             "https://store.mediapitch.in/cron/sender-status"
           echo
 # controlled retry with endpoint-aware errors
+# retry after preserving local batch insert id
