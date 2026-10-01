@@ -1,4 +1,4 @@
-name: Sender one-time production recovery
+name: Sender controlled diagnostic retry
 
 on:
   push:
@@ -10,15 +10,16 @@ jobs:
   recover:
     runs-on: ubuntu-latest
     steps:
-      - name: Run one Sender worker pass
+      - name: Run one-recipient Sender diagnostic pass
         shell: bash
         run: |
           set -euo pipefail
           echo "Worker response:"
           curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
-            "https://store.mediapitch.in/cron/sender-worker?limit=30"
+            "https://store.mediapitch.in/cron/sender-worker?limit=1"
           echo
           echo "Status after worker:"
           curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 \
             "https://store.mediapitch.in/cron/sender-status"
           echo
+# controlled retry with endpoint-aware errors
