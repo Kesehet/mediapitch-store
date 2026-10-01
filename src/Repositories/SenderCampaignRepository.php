@@ -209,7 +209,8 @@ final class SenderCampaignRepository
                AND last_error IN (
                    'Sender requires attention: Array',
                    'Sender requires attention: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/mZYnk9/subscribers',
-                   'Sender requires attention: Sender POST /campaigns/W6Qlvv/send returned HTTP 403: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/W6Qlvv/subscribers'
+                   'Sender requires attention: Sender POST /campaigns/W6Qlvv/send returned HTTP 403: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/W6Qlvv/subscribers',
+                   'Sender requires attention: Sender POST /campaigns/9rDyBZ/send returned HTTP 403: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/9rDyBZ/subscribers'
                )
                AND EXISTS (
                    SELECT 1 FROM sender_campaign_recipients r
