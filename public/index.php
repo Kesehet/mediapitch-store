@@ -112,19 +112,52 @@ try {
 
             $providerDiagnostics = null;
             if ($path === '/cron/sender-details') {
-                $batch = Database::connection()->query(
-                    "SELECT id,provider_group_id,provider_campaign_id,status,last_error,created_at,updated_at
-                     FROM sender_campaign_batches ORDER BY id DESC LIMIT 1"
-                )->fetch(PDO::FETCH_ASSOC) ?: [];
+                $recentBatches = Database::connection()->query(
+                    "SELECT id,run_id,batch_no,provider_group_id,provider_campaign_id,recipient_count,status,last_error,sent_at,created_at,updated_at
+                     FROM sender_campaign_batches
+                     ORDER BY id DESC
+                     LIMIT 10"
+                )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $providerBatch = null;
+                foreach ($recentBatches as $candidateBatch) {
+                    if (
+                        trim((string)($candidateBatch['provider_group_id'] ?? '')) !== '' ||
+                        trim((string)($candidateBatch['provider_campaign_id'] ?? '')) !== ''
+                    ) {
+                        $providerBatch = $candidateBatch;
+                        break;
+                    }
+                }
+                $batch = is_array($providerBatch) ? $providerBatch : [];
 
                 $providerDiagnostics = [
                     'batch' => [
                         'id' => (int)($batch['id'] ?? 0),
+                        'run_id' => (int)($batch['run_id'] ?? 0),
+                        'batch_no' => (int)($batch['batch_no'] ?? 0),
+                        'recipient_count' => (int)($batch['recipient_count'] ?? 0),
                         'status' => (string)($batch['status'] ?? ''),
                         'provider_group_id' => $batch['provider_group_id'] ?? null,
                         'provider_campaign_id' => $batch['provider_campaign_id'] ?? null,
                         'last_error' => $batch['last_error'] ?? null,
                     ],
+                    'recent_batches' => array_map(
+                        static fn(array $row): array => [
+                            'id' => (int)($row['id'] ?? 0),
+                            'run_id' => (int)($row['run_id'] ?? 0),
+                            'batch_no' => (int)($row['batch_no'] ?? 0),
+                            'recipient_count' => (int)($row['recipient_count'] ?? 0),
+                            'status' => (string)($row['status'] ?? ''),
+                            'provider_group_id' => $row['provider_group_id'] ?? null,
+                            'provider_campaign_id' => $row['provider_campaign_id'] ?? null,
+                            'last_error' => $row['last_error'] ?? null,
+                            'sent_at' => $row['sent_at'] ?? null,
+                            'created_at' => $row['created_at'] ?? null,
+                            'updated_at' => $row['updated_at'] ?? null,
+                        ],
+                        $recentBatches
+                    ),
                     'group' => null,
                     'campaign' => null,
                     'error' => null,
