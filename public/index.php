@@ -41,7 +41,6 @@ use MediaPitch\Services\AffiliateClickFilter;
 use MediaPitch\Services\PasswordReset;
 use MediaPitch\Services\ProductCsv;
 use MediaPitch\Services\SenderCampaignService;
-use MediaPitch\Services\SenderClient;
 use MediaPitch\Services\SenderQueueService;
 use MediaPitch\Services\SenderWorkerService;
 
@@ -64,7 +63,7 @@ $path = '/' . trim($path, '/');
 if ($path === '//') $path = '/';
 
 try {
-    if ($method === 'GET' && in_array($path, ['/cron/sender-status','/cron/sender-details'], true)) {
+    if ($method === 'GET' && $path === '/cron/sender-status') {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
         header('X-Robots-Tag: noindex, nofollow, noarchive');
@@ -109,97 +108,6 @@ try {
             $lastCampaignSentAt = $latestCampaignSentAt !== false && $latestCampaignSentAt !== null
                 ? (string)$latestCampaignSentAt
                 : null;
-
-            $providerDiagnostics = null;
-            if ($path === '/cron/sender-details') {
-                $recentBatches = Database::connection()->query(
-                    "SELECT id,run_id,batch_no,provider_group_id,provider_campaign_id,recipient_count,status,last_error,sent_at,created_at,updated_at
-                     FROM sender_campaign_batches
-                     ORDER BY id DESC
-                     LIMIT 10"
-                )->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-                $providerBatch = null;
-                foreach ($recentBatches as $candidateBatch) {
-                    if (
-                        trim((string)($candidateBatch['provider_group_id'] ?? '')) !== '' ||
-                        trim((string)($candidateBatch['provider_campaign_id'] ?? '')) !== ''
-                    ) {
-                        $providerBatch = $candidateBatch;
-                        break;
-                    }
-                }
-                $batch = is_array($providerBatch) ? $providerBatch : [];
-
-                $providerDiagnostics = [
-                    'batch' => [
-                        'id' => (int)($batch['id'] ?? 0),
-                        'run_id' => (int)($batch['run_id'] ?? 0),
-                        'batch_no' => (int)($batch['batch_no'] ?? 0),
-                        'recipient_count' => (int)($batch['recipient_count'] ?? 0),
-                        'status' => (string)($batch['status'] ?? ''),
-                        'provider_group_id' => $batch['provider_group_id'] ?? null,
-                        'provider_campaign_id' => $batch['provider_campaign_id'] ?? null,
-                        'last_error' => $batch['last_error'] ?? null,
-                    ],
-                    'recent_batches' => array_map(
-                        static fn(array $row): array => [
-                            'id' => (int)($row['id'] ?? 0),
-                            'run_id' => (int)($row['run_id'] ?? 0),
-                            'batch_no' => (int)($row['batch_no'] ?? 0),
-                            'recipient_count' => (int)($row['recipient_count'] ?? 0),
-                            'status' => (string)($row['status'] ?? ''),
-                            'provider_group_id' => $row['provider_group_id'] ?? null,
-                            'provider_campaign_id' => $row['provider_campaign_id'] ?? null,
-                            'last_error' => $row['last_error'] ?? null,
-                            'sent_at' => $row['sent_at'] ?? null,
-                            'created_at' => $row['created_at'] ?? null,
-                            'updated_at' => $row['updated_at'] ?? null,
-                        ],
-                        $recentBatches
-                    ),
-                    'group' => null,
-                    'campaign' => null,
-                    'error' => null,
-                ];
-
-                try {
-                    $senderDiagnostic = new SenderClient();
-                    $groupId = trim((string)($batch['provider_group_id'] ?? ''));
-                    $campaignId = trim((string)($batch['provider_campaign_id'] ?? ''));
-
-                    if ($groupId !== '') {
-                        $group = $senderDiagnostic->groupDetails($groupId);
-                        $providerDiagnostics['group'] = [
-                            'id' => $group['id'] ?? null,
-                            'title' => $group['title'] ?? null,
-                            'recipient_count' => (int)($group['recipient_count'] ?? 0),
-                            'active_subscribers' => (int)($group['active_subscribers'] ?? 0),
-                            'unsubscribed_count' => (int)($group['unsubscribed_count'] ?? 0),
-                            'bounced_count' => (int)($group['bounced_count'] ?? 0),
-                            'is_recalculating_subscribers' => !empty($group['is_recalculating_subscribers']),
-                        ];
-                    }
-
-                    if ($campaignId !== '') {
-                        $campaign = $senderDiagnostic->campaignLive($campaignId);
-                        $providerDiagnostics['campaign'] = [
-                            'id' => $campaign['id'] ?? null,
-                            'status' => $campaign['status'] ?? null,
-                            'recipient_count' => $campaign['recipient_count'] ?? null,
-                            'sent_count' => (int)($campaign['sent_count'] ?? 0),
-                            'campaign_groups' => is_array($campaign['campaign_groups'] ?? null)
-                                ? array_values($campaign['campaign_groups'])
-                                : [],
-                            'segments' => is_array($campaign['segments'] ?? null)
-                                ? array_values($campaign['segments'])
-                                : [],
-                        ];
-                    }
-                } catch (Throwable $providerError) {
-                    $providerDiagnostics['error'] = substr($providerError->getMessage(), 0, 500);
-                }
-            }
 
             $lastSuccessAt = trim((string)($workerState['last_success_at'] ?? ''));
             $lastSuccessTs = $lastSuccessAt !== '' ? strtotime($lastSuccessAt . ' UTC') : false;
@@ -253,7 +161,6 @@ try {
                     'transactional' => $lastTransactionalSentAt,
                     'campaign' => $lastCampaignSentAt,
                 ],
-                'provider_diagnostics' => $providerDiagnostics,
                 'pending_work' => $pendingWork,
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (Throwable $statusError) {
