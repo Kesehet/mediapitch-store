@@ -206,7 +206,10 @@ final class SenderCampaignRepository
              SET status='active',last_error=NULL
              WHERE status='paused'
                AND auto_continue=1
-               AND last_error='Sender requires attention: Array'
+               AND last_error IN (
+                   'Sender requires attention: Array',
+                   'Sender requires attention: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/mZYnk9/subscribers'
+               )
                AND EXISTS (
                    SELECT 1 FROM sender_campaign_recipients r
                    WHERE r.run_id=sender_campaign_runs.id
