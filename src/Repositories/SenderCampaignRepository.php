@@ -208,7 +208,8 @@ final class SenderCampaignRepository
                AND auto_continue=1
                AND last_error IN (
                    'Sender requires attention: Array',
-                   'Sender requires attention: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/mZYnk9/subscribers'
+                   'Sender requires attention: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/mZYnk9/subscribers',
+                   'Sender requires attention: Sender POST /campaigns/W6Qlvv/send returned HTTP 403: title: No subscribers selected; details: Please select at least one subscriber group; route: campaigns/W6Qlvv/subscribers'
                )
                AND EXISTS (
                    SELECT 1 FROM sender_campaign_recipients r
@@ -402,7 +403,8 @@ final class SenderCampaignRepository
     public function createBatch(int $runId, int $batchNo, string $groupTitle, int $recipientCount): int
     {
         $this->ensureSchema();
-        $stmt = Database::connection()->prepare(
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare(
             "INSERT INTO sender_campaign_batches (run_id,batch_no,group_title,recipient_count,status)
              VALUES (:run_id,:batch_no,:group_title,:recipient_count,'preparing')"
         );
@@ -412,7 +414,7 @@ final class SenderCampaignRepository
             'group_title' => substr($groupTitle, 0, 255),
             'recipient_count' => max(0, $recipientCount),
         ]);
-        return (int)Database::connection()->lastInsertId();
+        return (int)$pdo->lastInsertId();
     }
 
     /** @param array<int,int> $recipientIds */
