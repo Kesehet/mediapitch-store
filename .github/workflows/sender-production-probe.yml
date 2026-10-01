@@ -1,10 +1,6 @@
 name: Sender production status probe
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/sender-production-probe.yml'
   workflow_dispatch:
 
 jobs:
@@ -14,19 +10,7 @@ jobs:
       - name: Read Sender production status
         shell: bash
         run: |
-          set -u
-          url="https://store.mediapitch.in/cron/sender-details"
-          for attempt in $(seq 1 12); do
-            echo "Attempt $attempt"
-            if body=$(curl --fail --silent --show-error --location --connect-timeout 10 --max-time 20 "$url"); then
-              echo "$body"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Production status endpoint was not reachable after retries." >&2
-          exit 1
-# diagnostics revision 2
-# inspect provider-backed batch trail
-# inspect state after endpoint-aware send failure
-# inspect saved provider ids after local batch-id fix
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 20 \
+            "https://store.mediapitch.in/cron/sender-status"
+          echo
