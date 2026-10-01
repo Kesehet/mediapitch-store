@@ -1,0 +1,24 @@
+name: Sender one-time production recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sender-one-time-recovery.yml'
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run one Sender worker pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Worker response:"
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
+            "https://store.mediapitch.in/cron/sender-worker?limit=30"
+          echo
+          echo "Status after worker:"
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 \
+            "https://store.mediapitch.in/cron/sender-status"
+          echo
