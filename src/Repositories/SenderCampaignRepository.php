@@ -393,6 +393,52 @@ final class SenderCampaignRepository
         $stmt->execute(array_merge([$next, substr($error, 0, 500)], $ids));
     }
 
+    /** @return array<string,mixed>|null */
+    public function batch(int $id): ?array
+    {
+        $this->ensureSchema();
+        if ($id < 1) return null;
+        $stmt = Database::connection()->prepare(
+            'SELECT * FROM sender_campaign_batches WHERE id=:id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function reopenBatch(int $id, int $recipientCount): void
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_batches
+             SET status='preparing',
+                 recipient_count=:recipient_count,
+                 provider_campaign_id=NULL,
+                 last_error=NULL,
+                 sent_at=NULL
+             WHERE id=:id AND status='failed'"
+        );
+        $stmt->execute([
+            'recipient_count' => max(0, $recipientCount),
+            'id' => $id,
+        ]);
+    }
+
+    public function releaseAudiencePropagationRetries(int $runId): int
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_recipients
+             SET next_attempt_at=NULL
+             WHERE run_id=:run_id
+               AND status='queued'
+               AND last_error LIKE 'Sender group audience is still recalculating;%'
+               AND next_attempt_at IS NOT NULL"
+        );
+        $stmt->execute(['run_id' => $runId]);
+        return $stmt->rowCount();
+    }
+
     public function nextBatchNo(int $runId): int
     {
         $this->ensureSchema();
