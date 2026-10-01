@@ -80,6 +80,17 @@ final class SenderApiStateRepository
     public function assertRequestAllowed(): void
     {
         $row = $this->status();
+
+        // Sender sometimes uses HTTP 403 for payload/business validation errors,
+        // not only account-wide authorization failures. Do not let those errors
+        // freeze every unrelated Sender request for five minutes.
+        $lastStatus = (int)($row['last_status'] ?? 0);
+        $lastError = trim((string)($row['last_error'] ?? ''));
+        if ($lastStatus === 403 && !$this->isAccountWideAuthorizationError($lastError)) {
+            $this->clearCooldown();
+            return;
+        }
+
         $until = trim((string)($row['cooldown_until'] ?? ''));
         if ($until === '') return;
 
@@ -119,11 +130,15 @@ final class SenderApiStateRepository
         $cooldownTs = null;
         if ($status === 429) {
             $cooldownTs = $retryTs ?? $resetTs ?? $messageRetryTs ?? (time() + 60);
-        } elseif (in_array($status, [401,403], true)) {
-            // Credentials/permissions are account-wide. A brief circuit break prevents
-            // every worker/tab from repeating the same rejected request; changing the
-            // configured token clears this state immediately.
+        } elseif ($status === 401 || ($status === 403 && $this->isAccountWideAuthorizationError($message))) {
+            // Genuine credentials/permissions failures are account-wide. A brief
+            // circuit break prevents every worker/tab from repeating the same request.
             $cooldownTs = time() + 300;
+        } elseif ($status === 403) {
+            // Sender also returns 403 for campaign validation/business rules such as
+            // "No subscribers selected". These are payload-specific and must not
+            // disable unrelated Sender operations.
+            $cooldownTs = null;
         } elseif ($status === 0 || $status === 408 || $status >= 500) {
             // Short provider/network circuit breaker. Payload-specific 4xx errors are
             // deliberately excluded because they should not disable unrelated jobs.
@@ -198,6 +213,28 @@ final class SenderApiStateRepository
                  last_request_at=NULL
              WHERE id=1"
         );
+    }
+
+    private function isAccountWideAuthorizationError(?string $message): bool
+    {
+        $message = strtolower(trim((string)$message));
+        if ($message === '') return true;
+
+        foreach ([
+            'unauthorized',
+            'authentication',
+            'invalid token',
+            'api token',
+            'access token',
+            'permission',
+            'access denied',
+            'not authorized',
+            'not authorised',
+        ] as $needle) {
+            if (str_contains($message, $needle)) return true;
+        }
+
+        return false;
     }
 
     private function positiveInt(mixed $value): ?int
