@@ -206,7 +206,8 @@ final class SenderCampaignRepository
              SET status='active',last_error=NULL
              WHERE status='paused'
                AND auto_continue=1
-               AND last_error='Sender requires attention: Array'               AND EXISTS (
+               AND last_error='Sender requires attention: Array'
+               AND EXISTS (
                    SELECT 1 FROM sender_campaign_recipients r
                    WHERE r.run_id=sender_campaign_runs.id
                      AND r.status='queued'
