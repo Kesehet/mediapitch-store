@@ -76,6 +76,27 @@ try {
 
             $queueStats = $queueService->stats();
             $campaignStats = $campaignService->stats();
+            $campaignRuns = (new SenderCampaignRepository())->runs(10);
+            $runDiagnostics = array_map(
+                static fn(array $run): array => [
+                    'id' => (int)($run['id'] ?? 0),
+                    'status' => (string)($run['status'] ?? ''),
+                    'auto_continue' => !empty($run['auto_continue']),
+                    'source_title' => (string)($run['source_title'] ?? ''),
+                    'total_recipients' => (int)($run['total_recipients'] ?? 0),
+                    'dispatched_recipients' => (int)($run['dispatched_recipients'] ?? 0),
+                    'blocked_recipients' => (int)($run['blocked_recipients'] ?? 0),
+                    'failed_recipients' => (int)($run['failed_recipients'] ?? 0),
+                    'remaining_recipients' => (int)($run['remaining_recipients'] ?? 0),
+                    'ready_recipients' => (int)($run['ready_recipients'] ?? 0),
+                    'waiting_recipients' => (int)($run['waiting_recipients'] ?? 0),
+                    'processing_recipients' => (int)($run['processing_recipients'] ?? 0),
+                    'next_retry_at' => $run['next_retry_at'] ?? null,
+                    'last_error' => $run['last_error'] ?? null,
+                    'updated_at' => $run['updated_at'] ?? null,
+                ],
+                $campaignRuns
+            );
             $recentTransactional = $queueRepo->recent('sent', 1);
             $lastTransactionalSentAt = !empty($recentTransactional[0]['sent_at'])
                 ? (string)$recentTransactional[0]['sent_at']
@@ -134,6 +155,7 @@ try {
                     'completed_runs' => (int)($campaignStats['completed_runs'] ?? 0),
                     'dispatched_total' => (int)($campaignStats['dispatched'] ?? 0),
                     'failed_total' => (int)($campaignStats['failed'] ?? 0),
+                    'recent_runs' => $runDiagnostics,
                 ],
                 'last_send_at_utc' => [
                     'transactional' => $lastTransactionalSentAt,
