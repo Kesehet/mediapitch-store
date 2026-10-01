@@ -1,4 +1,4 @@
-name: Sender controlled diagnostic retry
+name: Sender controlled campaign completion
 
 on:
   push:
@@ -10,20 +10,25 @@ jobs:
   recover:
     runs-on: ubuntu-latest
     steps:
-      - name: Run one-recipient Sender diagnostic pass
+      - name: Finish remaining Sender campaign recipients
         shell: bash
         run: |
           set -euo pipefail
-          echo "Worker response:"
+          echo "Pass 1:"
           curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
-            "https://store.mediapitch.in/cron/sender-worker?limit=1"
+            "https://store.mediapitch.in/cron/sender-worker?limit=29"
           echo
-          echo "Status after worker:"
+
+          # Newly-created Sender groups are recalculated asynchronously. If pass 1
+          # deferred the batch, give Sender time to settle, then reuse that same group.
+          sleep 35
+
+          echo "Pass 2:"
+          curl --fail --silent --show-error --location --connect-timeout 10 --max-time 120 \
+            "https://store.mediapitch.in/cron/sender-worker?limit=29"
+          echo
+
+          echo "Final status:"
           curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 \
             "https://store.mediapitch.in/cron/sender-status"
           echo
-# controlled retry with endpoint-aware errors
-# retry after preserving local batch insert id
-# retry after payload-specific 403 cooldown fix
-# retry with Sender group/campaign audience readiness gates
-# retry by reusing the already-propagated Sender group
