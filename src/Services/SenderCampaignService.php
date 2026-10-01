@@ -493,6 +493,7 @@ final class SenderCampaignService
         $batchId = $this->repo->createBatch($runId, $batchNo, $groupTitle, count($emails));
         $this->repo->attachRecipientsToBatch($batchId, $recipientIds);
         $providerCampaignId = null;
+        $sendAttempted = false;
 
         try {
             $groupId = $this->sender->createGroup($groupTitle);
@@ -673,6 +674,13 @@ final class SenderCampaignService
                 }
             }
 
+            $groupReady = $this->waitForGroupAudience($groupId, count($emails));
+            if (!$groupReady) {
+                throw new \RuntimeException(
+                    'Sender group audience is still recalculating; retry after propagation finishes.'
+                );
+            }
+
             $providerCampaign = $this->sender->createCampaign([
                 'title' => sprintf('[MediaPitch batch] %s · %s · #%d', (string)($run['source_title'] ?: $run['subject']), $this->dailyWindow()['date'], $batchNo),
                 'subject' => (string)$run['subject'],
@@ -690,6 +698,13 @@ final class SenderCampaignService
             $providerCampaignId = $this->extractId($providerCampaign, 'campaign');
             $this->repo->setBatchCampaign($batchId, $providerCampaignId);
 
+            if (!$this->waitForCampaignAudience($providerCampaignId, count($emails))) {
+                throw new \RuntimeException(
+                    'Sender campaign audience is still being prepared; retry after propagation finishes.'
+                );
+            }
+
+            $sendAttempted = true;
             $this->sender->sendCampaign($providerCampaignId);
             $this->repo->markBatchSent($batchId, $recipientIds);
             $this->repo->refreshRunStats($runId);
@@ -724,9 +739,9 @@ final class SenderCampaignService
                 $this->repo->markBatchFailed($batchId, $message);
                 $this->repo->returnToQueueMany($recipientIds, 'Sender requires attention: ' . $message);
                 $this->repo->setRunStatus($runId, 'paused', 'Sender requires attention: ' . $message);
-            } elseif ($providerCampaignId !== null) {
-                // Once Sender has returned a campaign ID, a timeout/5xx around the final
-                // send call is ambiguous: Sender may have accepted the send before the
+            } elseif ($sendAttempted && $providerCampaignId !== null) {
+                // Once the send endpoint has actually been attempted, a timeout/5xx around
+                // that final call is ambiguous: Sender may have accepted the send before the
                 // response was lost. Keep the batch PREPARING and recipients PROCESSING.
                 // Reconciliation will inspect the live Sender campaign before any replay.
                 $this->repo->markBatchIssue($batchId, 'Ambiguous Sender response: ' . $message);
@@ -878,6 +893,45 @@ final class SenderCampaignService
         }
 
         return ['selected' => [], 'deferred' => $ready, 'api_remaining' => $remaining];
+    }
+
+    private function waitForGroupAudience(string $groupId, int $expectedRecipients): bool
+    {
+        $expectedRecipients = max(1, $expectedRecipients);
+        $delays = [0, 1, 2, 3, 4];
+
+        foreach ($delays as $delay) {
+            if ($delay > 0) sleep($delay);
+
+            $group = $this->sender->groupDetails($groupId);
+            $active = (int)($group['active_subscribers'] ?? $group['recipient_count'] ?? 0);
+            $recalculating = !empty($group['is_recalculating_subscribers']);
+
+            if (!$recalculating && $active >= $expectedRecipients) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function waitForCampaignAudience(string $campaignId, int $expectedRecipients): bool
+    {
+        $expectedRecipients = max(1, $expectedRecipients);
+        $delays = [0, 1, 2, 3];
+
+        foreach ($delays as $delay) {
+            if ($delay > 0) sleep($delay);
+
+            $campaign = $this->sender->campaignLive($campaignId);
+            $recipientCount = (int)($campaign['recipient_count'] ?? 0);
+
+            if ($recipientCount >= $expectedRecipients) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function senderApiRetryDelay(): int
