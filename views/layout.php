@@ -28,6 +28,27 @@ $ogImage = $ogImage
     ?? ($review['main_image_url'] ?? null)
     ?? ($comparison['featured_image_url'] ?? null)
     ?? ($brand['logo_url'] ?? null);
+
+// Social crawlers such as Facebook need an absolute image URL. If an
+// editorial post has no explicit featured image, fall back to the first image
+// in its body so shared links still get a useful preview.
+if ((!is_string($ogImage) || trim($ogImage) === '') && !empty($post['body'])) {
+    if (preg_match('/<img\\b[^>]*\\bsrc\\s*=\\s*(["\\\'])(.*?)\\1/i', (string)$post['body'], $matches)) {
+        $candidate = html_entity_decode(trim((string)($matches[2] ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($candidate !== '') $ogImage = $candidate;
+    }
+}
+if (is_string($ogImage)) {
+    $ogImage = trim($ogImage);
+    if ($ogImage !== '') {
+        if (str_starts_with($ogImage, '//')) $ogImage = 'https:' . $ogImage;
+        elseif (!preg_match('#^https?://#i', $ogImage)) $ogImage = url(ltrim($ogImage, '/'));
+    }
+}
+$ogType = !empty($post) ? 'article' : 'website';
+$ogImageAlt = !empty($post['title'])
+    ? (string)$post['title']
+    : (!empty($guide['title']) ? (string)$guide['title'] : $pageTitle);
 $assetVersion=static function(string $relative): string {
     $path=dirname(__DIR__).'/public/'.ltrim($relative,'/');
     return is_file($path)?(string)filemtime($path):'1';
@@ -45,9 +66,13 @@ $assetVersion=static function(string $relative): string {
     <meta property="og:site_name" content="<?= e($siteName) ?>">
     <meta property="og:title" content="<?= e($pageTitle) ?>">
     <meta property="og:description" content="<?= e($metaDescription) ?>">
-    <meta property="og:type" content="website">
+    <meta property="og:type" content="<?= e($ogType) ?>">
     <?php if ($canonicalUrl): ?><meta property="og:url" content="<?= e($canonicalUrl) ?>"><?php endif; ?>
-    <?php if ($ogImage): ?><meta property="og:image" content="<?= e($ogImage) ?>"><?php endif; ?>
+    <?php if ($ogImage): ?>
+    <meta property="og:image" content="<?= e($ogImage) ?>">
+    <meta property="og:image:secure_url" content="<?= e($ogImage) ?>">
+    <meta property="og:image:alt" content="<?= e($ogImageAlt) ?>">
+    <?php endif; ?>
     <meta name="twitter:card" content="<?= $ogImage ? 'summary_large_image' : 'summary' ?>">
     <meta name="twitter:title" content="<?= e($pageTitle) ?>">
     <meta name="twitter:description" content="<?= e($metaDescription) ?>">
