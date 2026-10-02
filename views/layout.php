@@ -4,6 +4,11 @@ $metaDescription = $metaDescription ?? 'Independent product recommendations and 
 $currentPublicPath=parse_url($_SERVER['REQUEST_URI'] ?? '/',PHP_URL_PATH) ?: '/';
 $robotsIndex = $robotsIndex ?? ($currentPublicPath!=='/search');
 $canonicalUrl = $canonicalUrl ?? ($currentPublicPath!=='/search' ? url(ltrim($currentPublicPath,'/')) : null);
+// Keep the Open Graph object URL tied to the actual page being shared rather
+// than an editor-entered canonical URL. This prevents two posts that
+// accidentally share a canonical URL from inheriting the same Facebook
+// preview object/image.
+$ogUrl = $currentPublicPath!=='/search' ? url(ltrim($currentPublicPath,'/')) : null;
 $siteSettings=$siteSettings??[];
 $siteName=(string)($siteSettings['name']??'MediaPitch Store');
 $siteTagline=(string)($siteSettings['tagline']??'Independent buying guides, comparisons and product discovery.');
@@ -67,9 +72,10 @@ $assetVersion=static function(string $relative): string {
     <meta property="og:title" content="<?= e($pageTitle) ?>">
     <meta property="og:description" content="<?= e($metaDescription) ?>">
     <meta property="og:type" content="<?= e($ogType) ?>">
-    <?php if ($canonicalUrl): ?><meta property="og:url" content="<?= e($canonicalUrl) ?>"><?php endif; ?>
+    <?php if ($ogUrl): ?><meta property="og:url" content="<?= e($ogUrl) ?>"><?php endif; ?>
     <?php if ($ogImage): ?>
     <meta property="og:image" content="<?= e($ogImage) ?>">
+    <meta property="og:image:url" content="<?= e($ogImage) ?>">
     <meta property="og:image:secure_url" content="<?= e($ogImage) ?>">
     <meta property="og:image:alt" content="<?= e($ogImageAlt) ?>">
     <?php endif; ?>
