@@ -128,6 +128,11 @@ final class SenderCampaignService
         }
 
         try {
+            $this->promoteStagedAudience($runId, min(50, max(1, $requested)));
+            $current = $this->repo->run($runId);
+            if (!in_array((string)($current['status'] ?? ''), ['queued','active'], true)) {
+                throw new \InvalidArgumentException('This campaign queue has no remaining active recipients.');
+            }
             return $this->processRunUnlocked($runId, $requested);
         } finally {
             $this->repo->releaseWorkerLock();
@@ -194,6 +199,8 @@ final class SenderCampaignService
                     $summary['audience_retried'] = ($summary['audience_retried'] ?? 0) + $promoted['retried'];
                 }
                 if ($remainingRequest < 1 || $summary['remaining_today'] < 1) break;
+                $current = $this->repo->run((int)$run['id']);
+                if (!in_array((string)($current['status'] ?? ''), ['queued','active'], true)) continue;
                 $result = $this->processRunUnlocked((int)$run['id'], $remainingRequest);
 
                 foreach (['examined','dispatched','blocked','retried','failed','batches','recovered_stale'] as $key) {
