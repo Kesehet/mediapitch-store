@@ -82,11 +82,37 @@ final class SenderCampaignRepository
             KEY idx_sender_campaign_batch_status (status, run_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+        // Keep unverified audience outside the dispatch queue; only clean addresses
+        // are promoted after validation by the cron worker.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sender_campaign_audience (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            run_id BIGINT UNSIGNED NOT NULL,
+            recipient_email VARCHAR(190) NOT NULL,
+            recipient_name VARCHAR(190) NULL,
+            newsletter_subscriber_id BIGINT UNSIGNED NULL,
+            status ENUM('pending','retry','blocked') NOT NULL DEFAULT 'pending',
+            attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            next_attempt_at DATETIME NULL,
+            validation_status VARCHAR(20) NULL,
+            validation_reason VARCHAR(255) NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_campaign_audience (run_id, recipient_email),
+            KEY idx_campaign_audience_ready (run_id, status, next_attempt_at, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // One-time continuation map: cron never reopens or duplicates a completed run.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sender_campaign_recoveries (
+            origin_run_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+            continuation_run_id BIGINT UNSIGNED NOT NULL UNIQUE,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         self::$schemaReady = true;
     }
 
     /** @param array<string,mixed> $snapshot @param array<int,array<string,mixed>> $recipients */
-    public function createRun(array $snapshot, array $recipients, int $createdBy, bool $autoContinue): array
+    public function createRun(array $snapshot, array $recipients, int $createdBy, bool $autoContinue, array $staged = []): array
     {
         $this->ensureSchema();
         $pdo = Database::connection();
@@ -131,8 +157,28 @@ final class SenderCampaignRepository
                 ]);
             }
 
-            $countStmt = $pdo->prepare('SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:run_id');
-            $countStmt->execute(['run_id' => $runId]);
+            if ($staged !== []) {
+                $insertStaged = $pdo->prepare(
+                    "INSERT IGNORE INTO sender_campaign_audience
+                     (run_id,newsletter_subscriber_id,recipient_email,recipient_name,status)
+                     VALUES (:run_id,:subscriber_id,:email,:name,'pending')"
+                );
+                foreach ($staged as $candidate) {
+                    $email = strtolower(trim((string)($candidate['email'] ?? '')));
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
+                    $insertStaged->execute([
+                        'run_id' => $runId,
+                        'subscriber_id' => !empty($candidate['id']) ? (int)$candidate['id'] : null,
+                        'email' => $email,
+                        'name' => substr(trim((string)($candidate['name'] ?? '')), 0, 190) ?: null,
+                    ]);
+                }
+            }
+            $countStmt = $pdo->prepare(
+                "SELECT (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:recipients_id)
+                        + (SELECT COUNT(*) FROM sender_campaign_audience WHERE run_id=:audience_id)"
+            );
+            $countStmt->execute(['recipients_id' => $runId, 'audience_id' => $runId]);
             $actual = (int)$countStmt->fetchColumn();
             $pdo->prepare('UPDATE sender_campaign_runs SET total_recipients=:total WHERE id=:id')->execute(['total' => $actual, 'id' => $runId]);
             $pdo->commit();
@@ -181,12 +227,18 @@ final class SenderCampaignRepository
         $sql = "SELECT r.*,
                     (r.total_recipients-r.dispatched_recipients-r.blocked_recipients-r.failed_recipients) AS remaining_recipients,
                     (SELECT COUNT(*) FROM sender_campaign_batches b WHERE b.run_id=r.id) AS batch_count,
-                    (SELECT COUNT(*) FROM sender_campaign_recipients cr
+                    ((SELECT COUNT(*) FROM sender_campaign_recipients cr
                      WHERE cr.run_id=r.id AND cr.status='queued'
-                       AND (cr.next_attempt_at IS NULL OR cr.next_attempt_at<=UTC_TIMESTAMP())) AS ready_recipients,
-                    (SELECT COUNT(*) FROM sender_campaign_recipients cw
+                       AND (cr.next_attempt_at IS NULL OR cr.next_attempt_at<=UTC_TIMESTAMP()))
+                     + (SELECT COUNT(*) FROM sender_campaign_audience sa
+                     WHERE sa.run_id=r.id AND (sa.status='pending' OR
+                       (sa.status='retry' AND sa.next_attempt_at<=UTC_TIMESTAMP())))) AS ready_recipients,
+                    ((SELECT COUNT(*) FROM sender_campaign_recipients cw
                      WHERE cw.run_id=r.id AND cw.status='queued'
-                       AND cw.next_attempt_at>UTC_TIMESTAMP()) AS waiting_recipients,
+                       AND cw.next_attempt_at>UTC_TIMESTAMP())
+                    + (SELECT COUNT(*) FROM sender_campaign_audience sa
+                     WHERE sa.run_id=r.id AND sa.status='retry'
+                       AND sa.next_attempt_at>UTC_TIMESTAMP())) AS waiting_recipients,
                     (SELECT COUNT(*) FROM sender_campaign_recipients cp
                      WHERE cp.run_id=r.id AND cp.status='processing') AS processing_recipients,
                     (SELECT MIN(cn.next_attempt_at) FROM sender_campaign_recipients cn
@@ -215,6 +267,111 @@ final class SenderCampaignRepository
         );
         $stmt->execute();
         return $stmt->rowCount();
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function readyStaged(int $runId, int $limit = 50): array
+    {
+        $this->ensureSchema();
+        $limit = max(1, min(100, $limit));
+        $stmt = Database::connection()->prepare(
+            "SELECT * FROM sender_campaign_audience
+             WHERE run_id=:run_id AND (status='pending' OR (status='retry' AND next_attempt_at<=UTC_TIMESTAMP()))
+             ORDER BY id ASC LIMIT {$limit}"
+        );
+        $stmt->execute(['run_id' => $runId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** A clean result is the only path from staging to the dispatch queue. */
+    public function promoteStaged(array $row): void
+    {
+        $this->ensureSchema();
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $insert = $pdo->prepare(
+                "INSERT IGNORE INTO sender_campaign_recipients
+                 (run_id,newsletter_subscriber_id,recipient_email,recipient_name,status,validation_status,validation_checked_at)
+                 VALUES (:run_id,:subscriber_id,:email,:name,'queued','clean',UTC_TIMESTAMP())"
+            );
+            $insert->execute([
+                'run_id' => (int)$row['run_id'],
+                'subscriber_id' => !empty($row['newsletter_subscriber_id']) ? (int)$row['newsletter_subscriber_id'] : null,
+                'email' => (string)$row['recipient_email'],
+                'name' => $row['recipient_name'] ?? null,
+            ]);
+            $pdo->prepare("DELETE FROM sender_campaign_audience WHERE id=:id")->execute(['id' => (int)$row['id']]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function markStagedResult(int $id, string $status, string $reason, int $delay = 0): void
+    {
+        $this->ensureSchema();
+        $retry = $status === 'unknown';
+        $stmt = Database::connection()->prepare(
+            "UPDATE sender_campaign_audience
+             SET status=:status,attempts=attempts+1,validation_status=:validation,
+                 validation_reason=:reason,
+                 next_attempt_at=IF(:delay_seconds>0,DATE_ADD(UTC_TIMESTAMP(),INTERVAL :delay_seconds2 SECOND),NULL)
+             WHERE id=:id"
+        );
+        $stmt->execute([
+            'status' => $retry ? 'retry' : 'blocked',
+            'validation' => $status,
+            'reason' => substr($reason, 0, 255),
+            'delay_seconds' => $retry ? $delay : 0,
+            'delay_seconds2' => $retry ? $delay : 0,
+            'id' => $id,
+        ]);
+    }
+
+    /** @return array<string,mixed>|null */
+    public function latestRecoverableRun(): ?array
+    {
+        $this->ensureSchema();
+        $row = Database::connection()->query(
+            "SELECT r.* FROM sender_campaign_runs r
+             WHERE r.status='completed' AND r.auto_continue=1
+               AND r.dispatched_recipients>0 AND r.total_recipients<100
+               AND r.created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
+               AND NOT EXISTS (SELECT 1 FROM sender_campaign_recoveries x WHERE x.origin_run_id=r.id)
+               AND NOT EXISTS (SELECT 1 FROM sender_campaign_recoveries x WHERE x.continuation_run_id=r.id)
+             ORDER BY r.id DESC LIMIT 1"
+        )->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** @return array<string,bool> */
+    public function dispatchedEmailMap(string $sourceCampaignId): array
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "SELECT DISTINCT cr.recipient_email
+             FROM sender_campaign_recipients cr
+             JOIN sender_campaign_runs r ON r.id=cr.run_id
+             WHERE r.source_campaign_id=:source_id AND cr.status='dispatched'"
+        );
+        $stmt->execute(['source_id' => $sourceCampaignId]);
+        $map = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $email) {
+            $map[strtolower(trim((string)$email))] = true;
+        }
+        return $map;
+    }
+
+    public function recordContinuation(int $originRunId, int $continuationRunId): void
+    {
+        $this->ensureSchema();
+        $stmt = Database::connection()->prepare(
+            "INSERT INTO sender_campaign_recoveries (origin_run_id,continuation_run_id)
+             VALUES (:origin,:continuation)"
+        );
+        $stmt->execute(['origin' => $originRunId, 'continuation' => $continuationRunId]);
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -643,14 +800,16 @@ final class SenderCampaignRepository
         $this->ensureSchema();
         $stmt = Database::connection()->prepare(
             "SELECT
-                COUNT(*) total,
-                SUM(status='dispatched') dispatched,
-                SUM(status='blocked') blocked,
-                SUM(status='failed') failed,
-                SUM(status IN ('queued','processing')) pending
-             FROM sender_campaign_recipients WHERE run_id=:run_id"
+                (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:r1)
+                + (SELECT COUNT(*) FROM sender_campaign_audience WHERE run_id=:r2) total,
+                (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:r3 AND status='dispatched') dispatched,
+                (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:r4 AND status='blocked')
+                + (SELECT COUNT(*) FROM sender_campaign_audience WHERE run_id=:r5 AND status='blocked') blocked,
+                (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:r6 AND status='failed') failed,
+                (SELECT COUNT(*) FROM sender_campaign_recipients WHERE run_id=:r7 AND status IN ('queued','processing'))
+                + (SELECT COUNT(*) FROM sender_campaign_audience WHERE run_id=:r8 AND status IN ('pending','retry')) pending"
         );
-        $stmt->execute(['run_id' => $runId]);
+        $stmt->execute(array_fill_keys(['r1','r2','r3','r4','r5','r6','r7','r8'], $runId));
         $stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $pending = (int)($stats['pending'] ?? 0);
         $statusSql = $pending === 0
