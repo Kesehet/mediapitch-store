@@ -341,6 +341,8 @@ final class SenderCampaignRepository
                AND r.created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
                AND NOT EXISTS (SELECT 1 FROM sender_campaign_recoveries x WHERE x.origin_run_id=r.id)
                AND NOT EXISTS (SELECT 1 FROM sender_campaign_recoveries x WHERE x.continuation_run_id=r.id)
+               AND NOT EXISTS (SELECT 1 FROM sender_campaign_runs newer
+                               WHERE newer.source_campaign_id=r.source_campaign_id AND newer.id>r.id)
              ORDER BY r.id DESC LIMIT 1"
         )->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
