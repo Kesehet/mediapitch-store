@@ -89,65 +89,32 @@ final class SenderCampaignService
             throw new \InvalidArgumentException('There are no active merged subscribers to clean and queue.');
         }
 
-        $emails = array_values(array_unique(array_map(
-            static fn(array $row): string => strtolower(trim((string)($row['email'] ?? ''))),
-            $candidates
-        )));
-        $validations = $this->validator->validateMany($emails, 10);
-
-        $recipients = [];
-        $rejected = 0;
-        $unknown = 0;
-        $risky = 0;
-        $invalid = 0;
-
+        // Stage the full eligible audience instead of dropping every subscriber
+        // not immediately classified 'clean' by an overloaded remote cleaner.
+        // The cron worker validates staged addresses in manageable batches and
+        // promotes ONLY clean addresses to the real send queue.
+        $alreadyDispatched = $this->repo->dispatchedEmailMap($campaignId);
+        $staged = [];
         foreach ($candidates as $candidate) {
             $email = strtolower(trim((string)($candidate['email'] ?? '')));
-            $validation = $validations[$email] ?? [
-                'status' => 'unknown',
-                'reason' => 'No validation result was returned',
-            ];
-            $status = strtolower(trim((string)($validation['status'] ?? 'unknown')));
-            $reason = trim((string)($validation['reason'] ?? ''));
-
-            $localId = (int)($candidate['id'] ?? 0);
-            if ($localId > 0) {
-                $this->newsletter->recordValidation($localId, $status, $reason);
-            }
-
-            if ($status !== 'clean') {
-                $rejected++;
-                if ($status === 'unknown') $unknown++;
-                elseif ($status === 'risky') $risky++;
-                elseif ($status === 'invalid') $invalid++;
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL) || isset($alreadyDispatched[$email])) {
                 continue;
             }
-
-            $recipients[] = [
-                'email' => $email,
-                'name' => trim((string)($candidate['name'] ?? '')),
-                'id' => $localId,
-            ];
+            $staged[$email] = $candidate;
+        }
+        if ($staged === []) {
+            throw new \InvalidArgumentException('All eligible addresses have already been dispatched this Sender design.');
         }
 
-        if ($recipients === []) {
-            throw new \InvalidArgumentException(
-                'The merged audience had ' . count($candidates) .
-                ' active subscriber(s), but none passed the live email cleaner as clean.'
-            );
-        }
-
-        $run = $this->repo->createRun($snapshot, $recipients, $createdBy, $autoContinue);
+        $run = $this->repo->createRun($snapshot, [], $createdBy, $autoContinue, array_values($staged));
         if (empty($run['id']) || (int)($run['total_recipients'] ?? 0) < 1) {
-            throw new \RuntimeException('Campaign queue could not be created.');
+            throw new \RuntimeException('Campaign audience could not be staged.');
         }
 
         $run['audience_candidates'] = count($candidates);
-        $run['clean_queued'] = count($recipients);
-        $run['rejected_before_queue'] = $rejected;
-        $run['unknown_before_queue'] = $unknown;
-        $run['risky_before_queue'] = $risky;
-        $run['invalid_before_queue'] = $invalid;
+        $run['pending_validation'] = (int)$run['total_recipients'];
+        $run['excluded_previous_dispatches'] = count($candidates) - count($staged);
+        $run['clean_queued'] = 0;
         $run['source_snapshot_fallback'] = $snapshotFallback;
 
         return $run;
@@ -208,7 +175,24 @@ final class SenderCampaignService
             // can pause the run again with an actionable message.
             $this->repo->recoverLegacyArrayErrorPausedRuns();
 
+            // Repair a recent undersized completed auto-continue campaign ONCE.
+            // Do not resurrect cancelled/paused queues or replay dispatched emails.
+            if ($this->repo->activeRuns() === []) {
+                try {
+                    $summary['recovered_campaign_run_id'] = $this->recoverUndersizedCampaign();
+                } catch (\Throwable $recoveryError) {
+                    $summary['recovery_error'] = substr($recoveryError->getMessage(), 0, 250);
+                }
+            }
+
             foreach ($this->repo->activeRuns() as $run) {
+                if ($remainingRequest > 0 && $summary['remaining_today'] > 0) {
+                    $promoted = $this->promoteStagedAudience((int)$run['id'], min(50, $remainingRequest));
+                    $summary['audience_validated'] = ($summary['audience_validated'] ?? 0) + $promoted['checked'];
+                    $summary['audience_promoted'] = ($summary['audience_promoted'] ?? 0) + $promoted['clean'];
+                    $summary['audience_blocked'] = ($summary['audience_blocked'] ?? 0) + $promoted['blocked'];
+                    $summary['audience_retried'] = ($summary['audience_retried'] ?? 0) + $promoted['retried'];
+                }
                 if ($remainingRequest < 1 || $summary['remaining_today'] < 1) break;
                 $result = $this->processRunUnlocked((int)$run['id'], $remainingRequest);
 
@@ -278,6 +262,115 @@ final class SenderCampaignService
      *
      * @return array{examined:int,dispatched:int,blocked:int,retried:int,failed:int,batches:int,remaining_today:int,recovered_stale:int,queued_ready:int,queued_waiting:int,processing:int,next_retry_at:?string,sender_cooldown_until:?string,api_remaining:?int,api_deferred:int,reconciled_sent:int,uncertain_batches:int}
      */
+    /**
+     * Only recover an anomalously small completed campaign with auto-continue.
+     * The original source design is reused and all previously dispatched addresses
+     * from that design are excluded. This is a one-time operation under the worker
+     * advisory lock; future completed continuations are not recursively recovered.
+     */
+    private function recoverUndersizedCampaign(): ?int
+    {
+        $original = $this->repo->latestRecoverableRun();
+        if ($original === null) return null;
+
+        $candidates = $this->subscribers->campaignCandidates();
+        $sourceId = (string)$original['source_campaign_id'];
+        $alreadyDispatched = $this->repo->dispatchedEmailMap($sourceId);
+        $remaining = [];
+        foreach ($candidates as $candidate) {
+            $email = strtolower(trim((string)($candidate['email'] ?? '')));
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL) || isset($alreadyDispatched[$email])) continue;
+            $remaining[$email] = $candidate;
+        }
+
+        // Never auto-start a routine small audience campaign: this recovery is
+        // reserved for cases such as 30 queued out of thousands of subscribers.
+        if (count($remaining) < 100 ||
+            count($remaining) < 2 * max(1, (int)$original['total_recipients'])) {
+            return null;
+        }
+
+        $snapshot = $this->repo->latestSourceSnapshot($sourceId);
+        if ($snapshot === null) return null;
+        $run = $this->repo->createRun(
+            $snapshot,
+            [],
+            (int)($original['created_by'] ?? 0),
+            true,
+            array_values($remaining)
+        );
+        $id = (int)($run['id'] ?? 0);
+        if ($id < 1) throw new \RuntimeException('Campaign continuation could not be created.');
+        $this->repo->recordContinuation((int)$original['id'], $id);
+        return $id;
+    }
+
+    /**
+     * Validation happens before insertion into sender_campaign_recipients, and
+     * again immediately before sending. Unknown results are retried later;
+     * risky/invalid addresses are suppressed, never silently discarded.
+     *
+     * @return array{checked:int,clean:int,blocked:int,retried:int}
+     */
+    private function promoteStagedAudience(int $runId, int $limit = 50): array
+    {
+        $rows = $this->repo->readyStaged($runId, $limit);
+        $out = ['checked' => 0, 'clean' => 0, 'blocked' => 0, 'retried' => 0];
+        if ($rows === []) return $out;
+
+        $ids = array_values(array_unique(array_filter(array_map(
+            static fn(array $row): int => (int)($row['newsletter_subscriber_id'] ?? 0),
+            $rows
+        ))));
+        $localActive = $this->newsletter->activeIdMap($ids);
+        $emails = array_values(array_unique(array_map(
+            static fn(array $row): string => strtolower(trim((string)$row['recipient_email'])),
+            $rows
+        )));
+        $senderStatuses = $this->subscriberCache->statusMap($emails);
+        $suppressed = ['unsubscribed','unsubscribe','bounced','bounce','spam','complaint','suppressed','inactive','blocked'];
+        $toValidate = [];
+        foreach ($rows as $row) {
+            $id = (int)$row['id'];
+            $email = strtolower(trim((string)$row['recipient_email']));
+            $localId = (int)($row['newsletter_subscriber_id'] ?? 0);
+            $senderStatus = strtolower(trim((string)($senderStatuses[$email] ?? '')));
+            if (($localId > 0 && empty($localActive[$localId])) ||
+                in_array($senderStatus, $suppressed, true)) {
+                $this->repo->markStagedResult($id, 'blocked', 'Subscriber no longer active or Sender suppressed');
+                $out['checked']++;
+                $out['blocked']++;
+            } else {
+                $toValidate[$email] = $row;
+            }
+        }
+
+        // A maximum of 50 addresses is cleaned per cron run to avoid timing out
+        // when the cleaner or shared hosting is slow.
+        if ($toValidate !== []) {
+            $validations = $this->validator->validateMany(array_keys($toValidate), 10);
+            foreach ($toValidate as $email => $row) {
+                $out['checked']++;
+                $result = $validations[$email] ?? ['status'=>'unknown','reason'=>'No cleaner result'];
+                $status = strtolower(trim((string)($result['status'] ?? 'unknown')));
+                $reason = trim((string)($result['reason'] ?? ''));
+                if ($status === 'clean') {
+                    $this->repo->promoteStaged($row);
+                    $out['clean']++;
+                    continue;
+                }
+                $attempt = (int)($row['attempts'] ?? 0) + 1;
+                $retry = $status === 'unknown';
+                $delay = $retry ? min(21600, 1800 * (2 ** min(4, max(0, $attempt - 1)))) : 0;
+                $this->repo->markStagedResult((int)$row['id'], $status, $reason, $delay);
+                $out[$retry ? 'retried' : 'blocked']++;
+            }
+        }
+
+        $this->repo->refreshRunStats($runId);
+        return $out;
+    }
+
     private function processRunUnlocked(int $runId, int $requested): array
     {
         if (!$this->sender->configured()) {
