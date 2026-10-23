@@ -35,6 +35,7 @@ $guideContent=(new \MediaPitch\Services\GuideContent())->render((string)($guide[
     <div class="container narrow ranking-list">
         <?php foreach ($guide['products'] as $item):
             $name = $item['display_title'] ?: $item['title'];
+            $purchaseUrl=\MediaPitch\Services\ProductLinks::destination($item);
             $score = $item['guide_score'] ?? $item['custom_score'];
             $bestFor = $item['guide_best_for'] ?: $item['best_for_label'];
             $pros = !empty($item['pros_json']) ? json_decode((string) $item['pros_json'], true) : [];
@@ -54,7 +55,7 @@ $guideContent=(new \MediaPitch\Services\GuideContent())->render((string)($guide[
                             <?php if ($pros): ?><div><strong>Pros</strong><ul><?php foreach (array_slice($pros, 0, 3) as $pro): ?><li><?= e((string) $pro) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
                             <?php if ($cons): ?><div><strong>Cons</strong><ul><?php foreach (array_slice($cons, 0, 3) as $con): ?><li><?= e((string) $con) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
                         </div>
-                        <?php if (!empty($item['affiliate_url'])): ?><a class="button" href="/go/<?= (int) $item['id'] ?>?content=<?= (int) $guide['id'] ?>&rank=<?= (int) $item['rank_position'] ?>&from=guide"><?= e($item['cta_text'] ?: 'Check Price on Amazon') ?></a><?php endif; ?>
+                        <?php if ($purchaseUrl!==null): ?><a class="button" href="/go/<?= (int) $item['id'] ?>?content=<?= (int) $guide['id'] ?>&rank=<?= (int) $item['rank_position'] ?>&from=guide"><?= e($item['cta_text'] ?: 'Check Price on Amazon') ?></a><?php endif; ?>
                         <?php if (!empty($item['active'])): ?><a class="text-link" href="/product/<?= e($item['slug']) ?>">Read product details</a><?php else: ?><span class="muted">Product details are being completed.</span><?php endif; ?>
                     </div>
                 </div>
