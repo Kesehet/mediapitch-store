@@ -150,7 +150,7 @@ final class CatalogRepository
     public function featuredProducts(int $limit = 8): array
     {
         $stmt = Database::connection()->prepare(
-            'SELECT p.id, p.title, p.display_title, p.slug, p.main_image_url, p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, b.name AS brand_name, c.name AS category_name
+            'SELECT p.id, p.title, p.display_title, p.slug, p.main_image_url, p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, p.amazon_url, b.name AS brand_name, c.name AS category_name
              FROM products p
              LEFT JOIN brands b ON b.id = p.brand_id
              LEFT JOIN categories c ON c.id = p.category_id
@@ -227,7 +227,7 @@ final class CatalogRepository
         $products = Database::connection()->prepare(
             'SELECT cp.rank_position, cp.score AS guide_score, cp.best_for_label AS guide_best_for, cp.recommendation, cp.cta_text,
                     p.id, p.title, p.display_title, p.slug, p.main_image_url, p.short_description, p.features_json, p.pros_json, p.cons_json,
-                    p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, p.active, b.name AS brand_name
+                    p.price, p.currency, p.custom_score, p.best_for_label, p.affiliate_url, p.amazon_url, p.active, b.name AS brand_name
              FROM content_products cp
              JOIN products p ON p.id = cp.product_id
              LEFT JOIN brands b ON b.id = p.brand_id
