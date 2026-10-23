@@ -12,11 +12,16 @@ document.addEventListener('DOMContentLoaded',()=>{
   panel.querySelector('.amazon-sync-status').textContent=status;
   panel.querySelector('.amazon-sync-source').textContent=state.source||'manual';
   panel.querySelector('.amazon-sync-help').textContent=state.source==='manual'?'Manual product; controls become useful if you later connect an ASIN.':'Choose which editorial values Amazon refresh must never replace.';
+  const marker=document.createElement('input');marker.type='hidden';marker.name='amazon_override_present';marker.value='1';panel.appendChild(marker);
   const grid=panel.querySelector('.amazon-override-grid');
   Object.entries(labels).forEach(([field,label])=>{
     const el=document.createElement('label');el.className='check';
     const input=document.createElement('input');input.type='checkbox';input.name=`amazon_override[${field}]`;input.value='1';input.checked=!!(state.overrides&&state.overrides[field]);
     el.appendChild(input);el.appendChild(document.createTextNode(' Protect '+label));grid.appendChild(el);
+    // A manual edit should remain intact after the next Amazon synchronization.
+    const names={title:'title',main_image_url:'main_image_url',features_json:'features',price:'price',amazon_url:'amazon_url',affiliate_url:'affiliate_url'};
+    const fieldInput=form.querySelector(`[name="${names[field]}"]`);
+    if(fieldInput)fieldInput.addEventListener('input',()=>{input.checked=true;});
   });
   const actions=form.querySelector('.form-actions');
   if(actions)form.insertBefore(panel,actions);else form.appendChild(panel);
