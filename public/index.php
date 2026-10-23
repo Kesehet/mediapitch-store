@@ -342,13 +342,14 @@ try {
     }
 
     if ($method === 'GET' && preg_match('#^/go/(\d+)$#',$path,$matches)) {
-        $product=$catalog->productById((int)$matches[1]);if(!$product || empty($product['affiliate_url'])){http_response_code(404);View::render('404',['pageTitle'=>'Link unavailable','metaDescription'=>'']);exit;}
+        $product=$catalog->productById((int)$matches[1]);$destination=$product?\MediaPitch\Services\ProductLinks::destination($product):null;
+        if(!$product || $destination===null){http_response_code(404);View::render('404',['pageTitle'=>'Link unavailable','metaDescription'=>'']);exit;}
         $contentId=isset($_GET['content'])?(int)$_GET['content']:null;$rank=isset($_GET['rank'])?(int)$_GET['rank']:null;
         $userAgent=isset($_SERVER['HTTP_USER_AGENT'])?substr((string)$_SERVER['HTTP_USER_AGENT'],0,1000):null;
         if((new AffiliateClickFilter())->shouldTrack($userAgent)){
             $catalog->recordAffiliateClick((int)$product['id'],$contentId?:null,$rank?:null,isset($_GET['from'])?substr((string)$_GET['from'],0,100):null,isset($_SERVER['HTTP_REFERER'])?substr((string)$_SERVER['HTTP_REFERER'],0,2000):null,$userAgent,isset($_GET['campaign'])?substr((string)$_GET['campaign'],0,255):null);
         }
-        header('Location: '.$product['affiliate_url'],true,302);header('Referrer-Policy: no-referrer-when-downgrade');exit;
+        header('Location: '.$destination,true,302);header('Referrer-Policy: no-referrer-when-downgrade');exit;
     }
 
     if ($method === 'GET' && $path === '/health') {header('Content-Type: application/json; charset=utf-8');try{Database::connection()->query('SELECT 1');echo json_encode(['status'=>'ok','database'=>'ok'],JSON_THROW_ON_ERROR);}catch(Throwable){http_response_code(503);echo json_encode(['status'=>'degraded','database'=>'unavailable'],JSON_THROW_ON_ERROR);}exit;}

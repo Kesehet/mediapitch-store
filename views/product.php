@@ -9,6 +9,7 @@ $relatedGuides=$relatedGuides??[];
 $name = $product['display_title'] ?: $product['title'];
 $specifications = $product['specifications'] ?? [];
 $displayPrice = public_product_price($product);
+$purchaseUrl=\MediaPitch\Services\ProductLinks::destination($product);
 $amazonManagedPrice = in_array((string)($product['source'] ?? ''), ['amazon_api','hybrid'], true);
 $brandPage=null;
 if(!empty($product['brand_id'])){
@@ -65,8 +66,8 @@ $breadcrumbSchema['itemListElement'][]=['@type'=>'ListItem','position'=>count($b
             <?php if (!empty($product['best_for_label'])): ?><span class="badge"><?= e($product['best_for_label']) ?></span><?php endif; ?>
             <?php if ($product['custom_score'] !== null): ?><div class="detail-score"><strong><?= e((string) $product['custom_score']) ?>/10</strong><span>MediaPitch score</span></div><?php endif; ?>
             <?php if (!empty($product['short_description'])): ?><p class="lead"><?= e($product['short_description']) ?></p><?php endif; ?>
-            <?php if ($displayPrice !== null): ?><p class="price">₹<?= e(number_format($displayPrice, 0)) ?> <small>last recorded price</small></p><?php elseif($amazonManagedPrice && !empty($product['affiliate_url'])):?><p class="muted">Current Amazon price is available on Amazon.</p><?php endif; ?>
-            <?php if (!empty($product['affiliate_url'])): ?><a class="button" href="/go/<?= (int) $product['id'] ?>?from=product">Check Price on Amazon</a><?php endif; ?>
+            <?php if ($displayPrice !== null): ?><p class="price">₹<?= e(number_format($displayPrice, 0)) ?> <small>last recorded price</small></p><?php elseif($amazonManagedPrice && $purchaseUrl!==null):?><p class="muted">Current Amazon price is available on Amazon.</p><?php endif; ?>
+            <?php if ($purchaseUrl!==null): ?><a class="button" href="/go/<?= (int) $product['id'] ?>?from=product">Check current price</a><?php endif; ?>
             <p class="affiliate-note">We may earn a commission from qualifying purchases. Amazon controls final price, stock, shipping and returns.</p>
         </div>
     </div>

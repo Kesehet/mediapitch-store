@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use MediaPitch\Core\Database;
 use MediaPitch\Core\Html;
+use MediaPitch\Services\ProductLinks;
 
 spl_autoload_register(static function (string $class): void {
     $prefix = 'MediaPitch\\';
@@ -65,7 +66,7 @@ function editorial_html(?string $value): string
         if($id<1)continue;
         try{
             $stmt=Database::connection()->prepare(
-                'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.source,p.last_synced_at,p.affiliate_url,p.custom_score,p.best_for_label,b.name AS brand_name
+                'SELECT p.id,p.title,p.display_title,p.slug,p.main_image_url,p.price,p.currency,p.source,p.last_synced_at,p.affiliate_url,p.amazon_url,p.custom_score,p.best_for_label,b.name AS brand_name
                  FROM products p LEFT JOIN brands b ON b.id=p.brand_id WHERE p.id=:id AND p.active=1 LIMIT 1'
             );
             $stmt->execute(['id'=>$id]);
@@ -78,7 +79,7 @@ function editorial_html(?string $value): string
             $out.='<div><span class="eyebrow">Featured product</span><h3><a href="'.e(url('product/'.$product['slug'])).'">'.e($name).'</a></h3>';
             if(!empty($product['brand_name']))$out.='<p class="muted">'.e((string)$product['brand_name']).'</p>';
             if($price!==null)$out.='<p class="price">'.e((string)($product['currency']??'INR')).' '.e(number_format($price,0)).'</p>';
-            if(!empty($product['affiliate_url']))$out.='<a class="button" href="'.e(url('go/'.$id.'?from=article-embed')).'">Check Price on Amazon</a>';
+            if(ProductLinks::destination($product)!==null)$out.='<a class="button" href="'.e(url('go/'.$id.'?from=article-embed')).'">Check Price on Amazon</a>';
             $out.=' <a class="text-link" href="'.e(url('product/'.$product['slug'])).'">Product details</a></div></aside>';
         }catch(Throwable){$out.='<p class="muted">Product reference unavailable.</p>';}
     }
@@ -155,7 +156,7 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: geolocation=(), camera=(), microphone=()');
-    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com data:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self'");
 }
 
 if (session_status() !== PHP_SESSION_ACTIVE) {

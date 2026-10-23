@@ -1,19 +1,70 @@
-name: PHP syntax check
+name: PHP syntax and link regressions
 
 on:
   push:
-    branches: ['main', 'agent/**']
+    branches: ['main', 'agent/**', 'fix/**']
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  lint:
+  code-and-links:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-      - name: Lint PHP files
+          extensions: dom, libxml, mbstring
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint all PHP files
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Check browser JavaScript syntax
+        run: find public/assets -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Validate production link probe Python syntax
+        run: python3 -m py_compile tests/public-links-probe.py
       - name: SQL placeholder regression test
         run: php database/sql-placeholder-test.php
+      - name: Editorial links, CMS and public purchase CTA regressions
+        run: php tests/links-test.php
+      - name: Editor save and Amazon override JavaScript regressions
+        run: node --test tests/editor-links.test.cjs
+
+  mysql-link-roundtrip:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: local-ci-only
+          MYSQL_DATABASE: mediapitch_link_test
+          MYSQL_USER: linktest
+          MYSQL_PASSWORD: local-ci-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -plocal-ci-only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: mediapitch_link_test
+      DB_USERNAME: linktest
+      DB_PASSWORD: local-ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, dom, mbstring
+          coverage: none
+      - name: Build isolated MySQL fixture
+        run: mysql --protocol=tcp -h 127.0.0.1 -u linktest -plocal-ci-only mediapitch_link_test < database/schema.sql
+      - name: Verify CRM save, Amazon refresh and public read path
+        run: php tests/link-db-test.php

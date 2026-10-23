@@ -37,6 +37,10 @@ final class AmazonProductImporter
         if($existing){
             $overrides=(new ProductOverrides())->forProduct($existing);
             $hasOverrides=in_array(true,$overrides,true);
+            // Legacy manually edited affiliate links may not have an override flag.
+            $existingAffiliate=trim((string)($existing['affiliate_url']??''));
+            $existingAmazon=trim((string)($existing['amazon_url']??''));
+            $keepAffiliate=$overrides['affiliate_url']||($existingAffiliate!==''&&$existingAffiliate!==$existingAmazon);
             $hybrid=in_array((string)$existing['source'],['manual','hybrid'],true)||$hasOverrides;
             $update=$db->prepare(
                 'UPDATE products SET title=:title,source=:source,api_marketplace=:marketplace,
@@ -52,8 +56,8 @@ final class AmazonProductImporter
                 'features'=>$overrides['features_json']?$existing['features_json']:$features,
                 'price'=>$overrides['price']?$existing['price']:$price,
                 'currency'=>$overrides['price']?($existing['currency']?:'INR'):($currency?:($existing['currency']?:'INR')),
-                'amazon_url'=>$overrides['amazon_url']?$existing['amazon_url']:$detailUrl,
-                'affiliate_url'=>$overrides['affiliate_url']?$existing['affiliate_url']:$detailUrl,
+                'amazon_url'=>$overrides['amazon_url']?$existing['amazon_url']:($detailUrl?:$existing['amazon_url']),
+                'affiliate_url'=>$keepAffiliate?$existingAffiliate:($detailUrl?:$existing['affiliate_url']),
                 'category_id'=>$categoryId,'id'=>(int)$existing['id'],
             ]);
             return (int)$existing['id'];

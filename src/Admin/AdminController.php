@@ -183,6 +183,7 @@ final class AdminController
                 try {
                     $data=(new ProductAuthoring())->prepare($_POST,$existingId);
                     $id=$this->repo->saveProduct($data,$existingId);
+                    ProductAuthoring::persistPendingOverrides($id);
                     (new ProductGallery())->saveFromInput($id,(string)($_POST['gallery']??''));
                     if($oldProduct && !empty($oldProduct['slug']) && $oldProduct['slug']!==$data['slug']){
                         (new RedirectRepository())->upsert('/product/'.$oldProduct['slug'],'/product/'.$data['slug']);

@@ -196,7 +196,7 @@ final class AdminRepository
     public function products(): array
     {
         return Database::connection()->query(
-            'SELECT p.id, p.title, p.display_title, p.slug, p.source, p.price, p.currency, p.active, p.updated_at,
+            'SELECT p.id, p.title, p.display_title, p.slug, p.source, p.price, p.currency, p.affiliate_url, p.amazon_url, p.active, p.updated_at,
                     c.name AS category_name, b.name AS brand_name
              FROM products p LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands b ON b.id=p.brand_id
              ORDER BY p.updated_at DESC LIMIT 200'
