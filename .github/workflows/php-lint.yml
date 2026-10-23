@@ -25,6 +25,8 @@ jobs:
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
       - name: Check browser JavaScript syntax
         run: find public/assets -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Validate production link probe Python syntax
+        run: python3 -m py_compile tests/public-links-probe.py
       - name: SQL placeholder regression test
         run: php database/sql-placeholder-test.php
       - name: Editorial links, CMS and public purchase CTA regressions
