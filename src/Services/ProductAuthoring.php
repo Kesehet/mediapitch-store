@@ -62,7 +62,10 @@ final class ProductAuthoring
             $data['asin']=$asin;
         }
 
-        self::$pendingOverrides=$data['amazon_override']??[];
+        // Omitted controls must not erase existing override flags. The editor
+        // includes a marker to distinguish 'all unchecked' from 'not submitted'.
+        self::$pendingOverrides=(!empty($data['amazon_override_present'])||array_key_exists('amazon_override',$data))
+            ? ($data['amazon_override']??[]) : null;
         $data['title']=$title;$data['slug']=$slug;return $data;
     }
 
