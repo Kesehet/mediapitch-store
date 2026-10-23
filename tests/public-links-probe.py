@@ -12,15 +12,16 @@ GUIDE = "/guide/best-robot-vacuum-cleaners-india"
 class EditorialLinks(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.prose_stack = []
+        self.stack = []
         self.links = []
         self.navigation = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        inside = bool(self.prose_stack and self.prose_stack[-1])
+        inside = bool(self.stack and self.stack[-1][1])
         inside |= "prose" in attrs.get("class", "").split()
-        self.prose_stack.append(inside)
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.stack.append((tag, inside))
         if tag == "a":
             href = (attrs.get("href") or "").strip()
             if href:
@@ -33,8 +34,10 @@ class EditorialLinks(HTMLParser):
         self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
-        if self.prose_stack:
-            self.prose_stack.pop()
+        for pos in range(len(self.stack) - 1, -1, -1):
+            if self.stack[pos][0] == tag:
+                del self.stack[pos:]
+                break
 
 def fetch(path):
     target = BASE + path
